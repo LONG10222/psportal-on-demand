@@ -9,7 +9,7 @@ FRAMEWORK="$ROOT/Frameworks/PSPortalEngine.xcframework"
 }
 found=0
 while IFS= read -r -d '' header; do
-  grep -q 'MobileStart' "$header" && grep -q 'MobileStop' "$header" && grep -q 'MobileStatus' "$header" || {
+  grep -q 'MobileStart' "$header" && grep -q 'MobileStop' "$header" && grep -q 'MobileStatus' "$header" && grep -q 'MobileNodeCommand' "$header" || {
     echo "The generated mobile binding does not match the required Start/Stop/Status contract." >&2; exit 1;
   }
   binary="$(dirname "$(dirname "$header")")/PSPortalEngine"

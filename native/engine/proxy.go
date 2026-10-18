@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -283,6 +284,12 @@ func (r Request) ForwardedHeader(external bool) []byte {
 
 // Proxy handles one strict HTTP request per connection; CONNECT is a byte
 // tunnel. The bounded parser intentionally avoids net/http's lenient parsing.
+type clientRecord struct {
+	Active   uint64 `json:"active"`
+	Accepted uint64 `json:"accepted"`
+	LastSeen int64  `json:"last_seen"`
+}
+
 type Proxy struct {
 	cfg         Config
 	core        Core
@@ -296,6 +303,7 @@ type Proxy struct {
 	closing     bool
 	connections map[net.Conn]struct{}
 	wg          sync.WaitGroup
+	clients     map[string]*clientRecord
 	stats       map[string]uint64
 	resolver    ipResolver
 	dial        func(context.Context, string, string) (net.Conn, error)
@@ -303,7 +311,7 @@ type Proxy struct {
 
 func NewProxy(cfg Config, core Core) *Proxy {
 	return &Proxy{cfg: cfg, core: core, timeout: time.Duration(cfg.RequestTimeout) * time.Second,
-		allowed: map[string]bool{}, connections: map[net.Conn]struct{}{},
+		allowed: map[string]bool{}, clients: map[string]*clientRecord{}, connections: map[net.Conn]struct{}{},
 		stats:    map[string]uint64{"accepted": 0, "denied_clients": 0, "local_requests": 0, "external_requests": 0, "errors": 0, "active": 0},
 		resolver: systemResolver, dial: (&net.Dialer{}).DialContext}
 }
@@ -360,6 +368,9 @@ func (p *Proxy) Stop() error {
 	}
 	p.mu.Unlock()
 	p.wg.Wait()
+	p.mu.Lock()
+	clear(p.clients)
+	p.mu.Unlock()
 	return nil
 }
 func (p *Proxy) Status() map[string]any {
@@ -369,6 +380,27 @@ func (p *Proxy) Status() map[string]any {
 	if p.listener != nil {
 		out["listen_address"] = p.listener.Addr().String()
 	}
+	clients := make([]map[string]any, 0)
+	activeDevices := 0
+	now := time.Now().Unix()
+	keys := make([]string, 0, len(p.clients))
+	for ip, item := range p.clients {
+		if item.Active == 0 && now-item.LastSeen >= 300 {
+			delete(p.clients, ip)
+			continue
+		}
+		keys = append(keys, ip)
+	}
+	sort.Strings(keys)
+	for _, ip := range keys {
+		item := p.clients[ip]
+		if item.Active > 0 {
+			activeDevices++
+		}
+		clients = append(clients, map[string]any{"ip": ip, "active": item.Active, "accepted": item.Accepted, "last_seen": item.LastSeen})
+	}
+	out["devices"] = clients
+	out["active_devices"] = activeDevices
 	for key, value := range p.stats {
 		out[key] = value
 	}
@@ -645,8 +677,22 @@ func (p *Proxy) handle(ctx context.Context, raw net.Conn) {
 	}
 	p.stats["active"]++
 	p.stats["accepted"]++
+	item := p.clients[peer]
+	if item == nil {
+		item = &clientRecord{}
+		p.clients[peer] = item
+	}
+	item.Active++
+	item.Accepted++
+	item.LastSeen = time.Now().Unix()
 	p.mu.Unlock()
-	defer func() { p.mu.Lock(); p.stats["active"]--; p.mu.Unlock() }()
+	defer func() {
+		p.mu.Lock()
+		p.stats["active"]--
+		item.Active--
+		item.LastSeen = time.Now().Unix()
+		p.mu.Unlock()
+	}()
 	var responded atomic.Bool
 	err = p.serve(ctx, client, &responded)
 	if err == nil {

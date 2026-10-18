@@ -32,14 +32,19 @@ var errStopped = errors.New("proxy is stopping")
 var errNoHealthy = errors.New("no healthy proxy node is available")
 
 type node struct {
-	proxy   C.Proxy
-	healthy bool
+	proxy    C.Proxy
+	healthy  bool
+	delayMS  int64
+	protocol string
 }
 type embeddedCore struct {
 	cfg       Config
 	ctx       context.Context
 	cancel    context.CancelFunc
 	mu        sync.Mutex
+	controlMu sync.Mutex
+	manual    string
+	fastest   bool
 	state     string
 	closed    bool
 	nodes     []*node
@@ -150,9 +155,9 @@ func (c *embeddedCore) Status() map[string]any {
 	defer c.mu.Unlock()
 	list := make([]map[string]any, 0, len(c.nodes))
 	for _, n := range c.nodes {
-		list = append(list, map[string]any{"name": n.proxy.Name(), "healthy": n.healthy})
+		list = append(list, map[string]any{"name": n.proxy.Name(), "healthy": n.healthy, "delay_ms": n.delayMS, "protocol": n.protocol})
 	}
-	return map[string]any{"state": c.state, "active": c.active, "selected_node": c.selected, "nodes": list, "error": c.lastError}
+	return map[string]any{"state": c.state, "active": c.active, "selected_node": c.selected, "nodes": list, "error": c.lastError, "manual_node": c.manual, "auto_fastest": c.fastest}
 }
 func (c *embeddedCore) Close() {
 	c.cancel()
@@ -237,12 +242,21 @@ func (c *embeddedCore) checkHealth(ctx context.Context, nodes []*node) {
 		go func(n *node) {
 			defer wg.Done()
 			defer func() { <-sem }()
+			started := time.Now()
 			ok := probeNode(ctx, n.proxy, c.cfg)
+			delay := time.Since(started).Milliseconds()
+			if delay < 1 {
+				delay = 1
+			}
+			if !ok {
+				delay = 0
+			}
 			if ctx.Err() != nil {
 				return
 			} // A cancelled batch is not a failed node probe.
 			c.mu.Lock()
 			n.healthy = ok
+			n.delayMS = delay
 			c.mu.Unlock()
 		}(n)
 	}
@@ -264,6 +278,20 @@ func (c *embeddedCore) DialExternal(ctx context.Context, host string, port int) 
 			nodes = append(nodes, n)
 		}
 	}
+	manual, fastest := c.manual, c.fastest
+	if manual != "" {
+		filtered := nodes[:0]
+		for _, n := range nodes {
+			if n.proxy.Name() == manual {
+				filtered = append(filtered, n)
+			}
+		}
+		nodes = filtered
+	} else if fastest {
+		sort.SliceStable(nodes, func(i, j int) bool {
+			return nodes[i].delayMS > 0 && (nodes[j].delayMS == 0 || nodes[i].delayMS < nodes[j].delayMS)
+		})
+	}
 	c.mu.Unlock()
 	for _, n := range nodes {
 		for _, ip := range addrs {
@@ -284,7 +312,7 @@ func (c *embeddedCore) DialExternal(ctx context.Context, host string, port int) 
 		c.mu.Lock()
 		n.healthy = false
 		c.mu.Unlock()
-		if c.cfg.SelectionMode == "fixed" {
+		if c.cfg.SelectionMode == "fixed" || manual != "" {
 			break
 		}
 	}
@@ -424,7 +452,7 @@ func parseNodes(raw []byte) ([]*node, error) {
 		if err != nil {
 			return fail()
 		}
-		nodes = append(nodes, &node{proxy: proxy})
+		nodes = append(nodes, &node{proxy: proxy, protocol: kind})
 	}
 	if len(nodes) == 0 {
 		return nil, errors.New("subscription has no supported proxy nodes")

@@ -21,6 +21,16 @@ metadata in that immutable development package. This source revision adds the
 file-metadata/timer manifest and exact bundle/import checks; its Apple CI result
 must be recorded before treating the correction as built. See `PRIVACY-AUDIT.md`.
 
+## 2026-10-19 mobile sharing update
+
+The app now has Share, Nodes and Devices tabs with immediate Chinese/English switching. Share highlights listener state, actual device/connection counts, subscription accounting and manual Wi-Fi proxy instructions. The default port remains 10081 unless unavailable. Wi-Fi/cellular uplink detection does not pretend to prove that Personal Hotspot is enabled: an actual private bridge and explicit confirmation are still required. A quick-start interface/address/mask change stops the listener.
+
+Nodes controls only our embedded adapter pool: Load nodes explicitly downloads and tests the subscription, latency tests show successful health-request round trips, and tapping a healthy node pins new connections without fallback. Lowest-latency mode sorts healthy adapters by measured delay, retaining fallback among healthy nodes and retesting on the existing health interval (default five minutes). Failed probes never become zero-latency winners or change the selection policy. Existing connections retain their adapters. Automatic maintenance does not wake an idle pool. Policies stay in process memory across idle teardown and reset when sharing stops. Complete Clash groups/rules and other applications' controllers are not imported.
+
+Devices lists actual allowlisted source IPs, active sockets, accepted connection totals and last activity. It does not scan the LAN or collect destination browsing history. Recent records expire after five minutes and clear on Stop. Listener connections include direct LAN requests and are distinct from outbound pool leases; neither alone proves Internet success. Request-error and denied-client counters aid diagnosis.
+
+The actual simulator XCFramework was rebuilt and linked locally. XCTest: **21 total, 20 passed, one hardware-only Data Protection skip**; this includes actual bridge telemetry and command ABI, real HTTP/CONNECT, denied clients, Stop/restart and UI model checks. Shared Go engine/mobile tests passed under the race detector. Manual UI inspection verified all three tabs and hot language switching in iOS 27.0. No real subscription, encrypted public-node route, game console, physical hotspot or background-serving acceptance is claimed by these fixtures. The prior source a18d25d completed all six GitHub workflows; this update requires its own CI.
+
 ## Honest execution model
 
 - The user taps **Start** to bind one configured RFC1918 LAN IPv4 address. There
@@ -82,8 +92,9 @@ every save. Do not add the subscription to UserDefaults, state restoration,
 analytics, logs, document exports, crash reports, or backupable caches.
 
 The native adapter pool retains credentials only in process memory and disables
-Mihomo logging. The UI does not expose raw native errors, node names, or status
-JSON. It shows a secure URL field and an opaque cover while inactive. These
+Mihomo logging. The UI does not expose raw native errors or raw status JSON. Node names and
+client IPs are shown only in the corresponding local panels, marked privacy-sensitive,
+and are not saved to logs or settings. It shows a secure URL field and an opaque cover while inactive. These
 reduce accidental exposure but are not screenshot/recording protection, memory
 zeroization, or a guarantee about operating-system crash diagnostics. Forget
 removes saved settings/runtime files and clears the fields, only after stopping.

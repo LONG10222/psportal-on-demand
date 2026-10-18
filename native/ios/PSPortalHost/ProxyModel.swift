@@ -10,6 +10,15 @@ final class ProxyModel: ObservableObject {
     @Published private(set) var state = State.stopped
     @Published private(set) var message = "Enter your LAN settings, then tap Start."
     @Published private(set) var activeConnections = 0
+    @Published private(set) var activeDevices = 0
+    @Published private(set) var devices: [ConnectedDevice] = []
+    @Published private(set) var nodes: [ProxyNode] = []
+    @Published private(set) var selectedNode = ""
+    @Published private(set) var autoFastest = false
+    @Published private(set) var nodeBusy = false
+    @Published private(set) var nodeMessage = ""
+    @Published private(set) var requestErrors: UInt64 = 0
+    @Published private(set) var deniedClients: UInt64 = 0
     @Published private(set) var isActive = false
     @Published private(set) var hasSavedSettings = false
     @Published var language = "zh"
@@ -17,7 +26,7 @@ final class ProxyModel: ObservableObject {
     @Published var confirmOwnHotspot = false
     @Published private(set) var subscriptionInfo: SubscriptionAccounting?
     let network = NetworkEnvironment()
-    private var quickNetworkAddress: String?
+    private var quickNetworkLAN: LANInterface?
 
     func t(_ zh: String, _ en: String) -> String { language == "zh" ? zh : en }
     func clearSubscriptionInfo() { subscriptionInfo = nil }
@@ -71,15 +80,15 @@ final class ProxyModel: ObservableObject {
         settings.listenHost = lan.address
         settings.listenPort = String(port)
         settings.allowedClients = clients.joined(separator: ",")
-        quickNetworkAddress = lan.address
+        quickNetworkLAN = lan
         start()
-        if state == .stopped { quickNetworkAddress = nil }
+        if state == .stopped { quickNetworkLAN = nil }
     }
 
     func networkChanged() {
-        guard let address = quickNetworkAddress, canStop else { return }
-        if network.snapshot.shareableLAN(confirmOwnHotspot: confirmOwnHotspot)?.address != address {
-            quickNetworkAddress = nil
+        guard let lan = quickNetworkLAN, canStop else { return }
+        if network.snapshot.shareableLAN(confirmOwnHotspot: confirmOwnHotspot) != lan {
+            quickNetworkLAN = nil
             stop(reason: "Network changed. Listener stopped. Prepare again and update the client proxy address.")
         }
     }
@@ -94,6 +103,34 @@ final class ProxyModel: ObservableObject {
     var canStart: Bool { isActive && state == .stopped }
     var canStop: Bool { state == .starting || state == .running }
     var canEdit: Bool { state == .stopped }
+
+    var statusTitle: String {
+        switch state {
+        case .stopped: return t("已停止", "Stopped")
+        case .starting: return t("正在启动", "Starting")
+        case .stopping: return t("正在停止", "Stopping")
+        case .running: return activeDevices > 0 ? t("设备正在使用代理", "Devices connected") : t("已启动 · 等待设备接入", "Ready · waiting for devices")
+        }
+    }
+
+    func nodeAction(_ action: String, name: String = "") {
+        guard state == .running, isActive, !nodeBusy else { return }
+        nodeBusy = true
+        nodeMessage = "working"
+        let token = generation
+        engine.nodeCommand(action: action, name: name) { [weak self] success in
+            guard let self, self.generation == token else { return }
+            self.nodeBusy = false
+            self.nodeMessage = success ? "done" : "failed"
+            self.refreshStatus()
+        }
+    }
+
+    private func clearRuntime() {
+        activeConnections = 0; activeDevices = 0; devices = []; nodes = []
+        selectedNode = ""; autoFastest = false; nodeBusy = false; nodeMessage = ""
+        requestErrors = 0; deniedClients = 0
+    }
 
     init(engine: EngineController = EngineController(), store: PrivateSettingsStore = PrivateSettingsStore()) {
         self.engine = engine
@@ -123,12 +160,13 @@ final class ProxyModel: ObservableObject {
         generation += 1
         let token = generation
         state = .starting
+        clearRuntime()
         message = "Opening the LAN listener…"
         synchronizeIdleTimer()
         engine.start(json: json) { [weak self] failure in
             guard let self, self.generation == token else { return }
             if let failure {
-                self.quickNetworkAddress = nil
+                self.quickNetworkLAN = nil
                 self.state = .stopped
                 self.message = failure
                 self.restoreIdleTimer()
@@ -146,7 +184,7 @@ final class ProxyModel: ObservableObject {
     }
 
     func stop(reason: String = "Stopped. Restore the Portal's proxy setting when finished.") {
-        quickNetworkAddress = nil
+        quickNetworkLAN = nil
         restoreIdleTimer()
         guard state != .stopped else { return }
         // A finite UIKit assertion is used only to close the listener and owned
@@ -156,6 +194,7 @@ final class ProxyModel: ObservableObject {
         generation += 1
         let token = generation
         statusPending = false
+        nodeBusy = false
         state = .stopping
         message = "Closing the listener and connections…"
         engine.stop { [weak self] in
@@ -163,7 +202,7 @@ final class ProxyModel: ObservableObject {
             self.endCleanupTask()
             guard self.generation == token else { return }
             self.state = .stopped
-            self.activeConnections = 0
+            self.clearRuntime()
             self.message = reason
         }
     }
@@ -195,9 +234,17 @@ final class ProxyModel: ObservableObject {
             self.statusPending = false
             guard let status else { self.message = "Engine status is unavailable. Stop and restart if this persists."; return }
             self.message = status.summary
-            self.activeConnections = max(0, status.active)
+            self.activeConnections = max(0, status.stats?.active ?? status.active)
+            self.activeDevices = max(0, status.stats?.active_devices ?? 0)
+            self.devices = status.stats?.devices ?? []
+            self.nodes = status.nodes ?? []
+            self.selectedNode = status.manual_node.flatMap { $0.isEmpty ? nil : $0 } ?? status.selected_node ?? ""
+            self.autoFastest = status.auto_fastest ?? false
+            self.requestErrors = status.stats?.errors ?? 0
+            self.deniedClients = status.stats?.denied_clients ?? 0
             if !status.running {
                 self.state = .stopped
+                self.clearRuntime()
                 self.restoreIdleTimer()
             }
         }

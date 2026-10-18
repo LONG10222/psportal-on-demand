@@ -34,10 +34,10 @@ class SourceGuardrails(unittest.TestCase):
     def test_real_engine_abi_and_no_fallback_transport(self):
         bridge = (APP / "Bridge/PSPortalEngineBridge.m").read_text()
         self.assertIn("<PSPortalEngine/PSPortalEngine.h>", bridge)
-        for expression in ["MobileStart(configJSON, &error)", "MobileStop()", "MobileStatus()"]:
+        for expression in ["MobileStart(configJSON, &error)", "MobileStop()", "MobileStatus()", "MobileNodeCommand(command)"]:
             self.assertIn(expression, bridge)
         mobile = (NATIVE / "mobile/mobile.go").read_text()
-        for expression in ["func Start(configJSON string) error", "func Stop()", "func Status() string"]:
+        for expression in ["func Start(configJSON string) error", "func Stop()", "func Status() string", "func NodeCommand(command string) string"]:
             self.assertIn(expression, mobile)
         self.assertNotIn("#if", bridge)
         self.assertIn('NS_SWIFT_NAME(start(configJSON:))', (APP / "Bridge/PSPortalEngineBridge.h").read_text())
@@ -103,6 +103,7 @@ class SourceGuardrails(unittest.TestCase):
         self.assertRegex(code, r"BOOL MobileStart\(NSString\*.*NSError\*")
         self.assertRegex(code, r"NSString\*.*MobileStatus\(void\)")
         self.assertIn("void MobileStop(void)", code)
+        self.assertIn("MobileNodeCommand", code)
 
 
 if __name__ == "__main__":

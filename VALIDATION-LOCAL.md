@@ -62,3 +62,12 @@ xcodebuild test -project native/ios/PSPortalHost.xcodeproj \
 ```
 
 完整源码构建仍需固定的 Go/mobile 依赖、XcodeGen 与 Xcode。旧构建曾提示 `github.com/RyuaNerin/testingutil` 无许可文本；新整合的收集器按全部生产目标的真实依赖图审查，不再凭模块名推断测试用途，生产依赖缺失许可仍会失败。旧 iOS 构建不会因脚本更新自动变为重新审计过的产物；本轮没有做公开发行验收。云端结果与原始日志链接见 `GITHUB-STATUS.md`，参考记录见 `SOURCE-REFERENCE.md`。
+
+
+## 2026-10-19 iOS runtime panels
+
+- Rebuilt actual simulator-arm64 XCFramework from the current engine and gomobile binding; linked SwiftUI app on Xcode 27.0.
+- `go test -race -tags=no_easytier,no_zerotier,no_tailscale ./engine ./mobile`: passed, including five new controls/telemetry tests.
+- XCTest on dedicated iOS 27.0 simulator: 21 total, 20 passed, one hardware Data Protection skip. Real bridge tests cover device status and the command ABI without downloading a subscription.
+- Manual inspection: Share/Nodes/Devices tabs and Chinese/English switching; screenshots under `evidence/ios-*.png` show empty stopped-state panels, not live subscription or physical-device proof.
+- Subscription node routing/latency tests in Go use controlled adapters; public encrypted transport, physical hotspot and game-console behavior remain separate acceptance items. No changes to the original Clash or OS network settings.

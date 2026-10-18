@@ -6,10 +6,12 @@ protocol EngineDriver {
     func stop()
     func statusJSON() -> String
     func subscriptionInfo(url: String) -> String
+    func nodeCommand(_ command: String) -> String
 }
 
 extension EngineDriver {
     func subscriptionInfo(url: String) -> String { "{}" }
+    func nodeCommand(_ command: String) -> String { "{\"ok\":false,\"code\":\"unavailable\"}" }
 }
 
 final class EmbeddedEngineDriver: EngineDriver {
@@ -17,6 +19,7 @@ final class EmbeddedEngineDriver: EngineDriver {
     func stop() { PSPortalEngineBridge.stop() }
     func statusJSON() -> String { PSPortalEngineBridge.statusJSON() }
     func subscriptionInfo(url: String) -> String { PSPortalEngineBridge.subscriptionInfo(url: url) }
+    func nodeCommand(_ command: String) -> String { PSPortalEngineBridge.nodeCommand(command) }
 }
 
 /// Calls are serialized off the UI thread. A Stop requested during Start is
@@ -25,7 +28,21 @@ final class EngineController {
     private let queue = DispatchQueue(label: "org.psportal.host.engine", qos: .userInitiated)
     private let driver: EngineDriver
     private let infoQueue = DispatchQueue(label: "org.psportal.host.subscription-info", qos: .utility)
+    private let nodeQueue = DispatchQueue(label: "org.psportal.host.nodes", qos: .userInitiated)
     init(driver: EngineDriver = EmbeddedEngineDriver()) { self.driver = driver }
+
+    func nodeCommand(action: String, name: String, completion: @escaping @MainActor (Bool) -> Void) {
+        guard let data = try? JSONSerialization.data(withJSONObject: ["action": action, "name": name]),
+              let command = String(data: data, encoding: .utf8) else {
+            DispatchQueue.main.async { completion(false) }
+            return
+        }
+        nodeQueue.async {
+            let raw = self.driver.nodeCommand(command)
+            let result = raw.data(using: .utf8).flatMap { try? JSONDecoder().decode(NodeResult.self, from: $0) }
+            DispatchQueue.main.async { completion(result?.ok == true) }
+        }
+    }
 
     func subscriptionInfo(url: String, completion: @escaping @MainActor (SubscriptionAccounting?) -> Void) {
         infoQueue.async {
@@ -62,6 +79,11 @@ struct EngineStatus: Decodable {
     let running: Bool
     let state: String
     let active: Int
+    var stats: ListenerStats?
+    var nodes: [ProxyNode]?
+    var selected_node: String?
+    var manual_node: String?
+    var auto_fastest: Bool?
 
     var summary: String {
         guard running else { return "Stopped" }
@@ -73,6 +95,29 @@ struct EngineStatus: Decodable {
         default: return "Listening; waiting for engine status"
         }
     }
+}
+
+struct NodeResult: Decodable { let ok: Bool }
+struct ProxyNode: Decodable, Identifiable {
+    let name: String
+    let healthy: Bool
+    let delay_ms: Int?
+    let `protocol`: String?
+    var id: String { name }
+}
+struct ConnectedDevice: Decodable, Identifiable {
+    let ip: String
+    let active: Int
+    let accepted: UInt64
+    let last_seen: Int64
+    var id: String { ip }
+}
+struct ListenerStats: Decodable {
+    let active: Int
+    let active_devices: Int?
+    let devices: [ConnectedDevice]?
+    let errors: UInt64
+    let denied_clients: UInt64
 }
 
 struct SubscriptionAccounting: Decodable {
