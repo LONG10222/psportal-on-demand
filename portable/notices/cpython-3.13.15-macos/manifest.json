@@ -1,0 +1,170 @@
+{
+  "python_version": "3.13.15",
+  "upstream_tag": "v3.13.15",
+  "coverage": "Version-bound core and actual bundled external component notices; binary origin/transformation proof and installed Python/Tcl/Tk notices remain separate gates",
+  "files": [
+    {
+      "file": "CPython-history-and-component-licenses.rst",
+      "sha256": "952ac05720d7f1dcb63589b35eb0931b1442eb250230a4ad31198eddf0ad6abc",
+      "source_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/Doc/license.rst",
+      "source_sha256": "952ac05720d7f1dcb63589b35eb0931b1442eb250230a4ad31198eddf0ad6abc",
+      "extraction": "complete unchanged file"
+    },
+    {
+      "file": "CPython-LICENSE",
+      "sha256": "78b12c3a81360b357002334f0e70ea0e92eebf7a9b358805c03c48484945f3bb",
+      "source_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/LICENSE",
+      "source_sha256": "78b12c3a81360b357002334f0e70ea0e92eebf7a9b358805c03c48484945f3bb",
+      "extraction": "complete unchanged file"
+    },
+    {
+      "file": "Expat-COPYING.txt",
+      "sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87",
+      "source_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/Modules/expat/COPYING",
+      "source_sha256": "31b15de82aa19a845156169a17a5488bf597e561b2c318d159ed583139b25e87",
+      "extraction": "complete unchanged file"
+    },
+    {
+      "file": "mimalloc-copyright.txt",
+      "sha256": "3b284635d839f6d66183322102471e3d9555b684a3a4386f720817c28e641c51",
+      "source_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/Include/internal/mimalloc/mimalloc.h",
+      "source_sha256": "7c4e2fc555724fe674efbb2cfe64344fafa86f8c43d22e48263c33dd07ac7d81",
+      "extraction": "unchanged opening license comment"
+    },
+    {
+      "file": "HACL-MD5-LICENSE.txt",
+      "sha256": "998ce04fb8ad9dedb0bc1b44938f8c3dcf1089780fa105ce1c8c30fb5554d78c",
+      "source_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/Modules/_hacl/Hacl_Hash_MD5.c",
+      "source_sha256": "f71cf6a0e8f09354c2af2c785a1d36e0cba7613a589be01ca8a3d8478f4c8874",
+      "extraction": "unchanged opening license comment"
+    },
+    {
+      "file": "HACL-SHA1-LICENSE.txt",
+      "sha256": "998ce04fb8ad9dedb0bc1b44938f8c3dcf1089780fa105ce1c8c30fb5554d78c",
+      "source_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/Modules/_hacl/Hacl_Hash_SHA1.c",
+      "source_sha256": "5b29bd9951646861e0e19427be5d923a5bab7a4516824ccc068f696469195eec",
+      "extraction": "unchanged opening license comment"
+    },
+    {
+      "file": "HACL-SHA2-LICENSE.txt",
+      "sha256": "998ce04fb8ad9dedb0bc1b44938f8c3dcf1089780fa105ce1c8c30fb5554d78c",
+      "source_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/Modules/_hacl/Hacl_Hash_SHA2.c",
+      "source_sha256": "30638efb75c8b185bb09c3df6977e3f3c5d21a1e696218cf7ade6bc4d5201b31",
+      "extraction": "unchanged opening license comment"
+    },
+    {
+      "file": "HACL-SHA3-LICENSE.txt",
+      "sha256": "998ce04fb8ad9dedb0bc1b44938f8c3dcf1089780fa105ce1c8c30fb5554d78c",
+      "source_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/Modules/_hacl/Hacl_Hash_SHA3.c",
+      "source_sha256": "17c0db96d40d1849f02546d5f55428fa89b61b07748d5b5df45cec25c5f29c0f",
+      "extraction": "unchanged opening license comment"
+    },
+    {
+      "file": "HACL-lowstar_endianness.h-copyright.txt",
+      "sha256": "6b7cb4bd5441f287eeb8b745073c11bc5d2974252bec3b6d8c101ff67f918a26",
+      "source_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/Modules/_hacl/include/krml/lowstar_endianness.h",
+      "source_sha256": "3734c7942bec9a434e16df069fa45bdcb84b130f14417bc5f7bfe8546272d9f5",
+      "extraction": "unchanged opening license comment"
+    },
+    {
+      "file": "HACL-FStar_UInt_8_16_32_64.h-copyright.txt",
+      "sha256": "54079ca9757dbaa2a54053fbd9be60f77c5e06695fa997191fc141cd20d41d59",
+      "source_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/Modules/_hacl/include/krml/FStar_UInt_8_16_32_64.h",
+      "source_sha256": "65decdb74c24049aa19430462a51219250cfc65d8c162778e42df88b3142fa42",
+      "extraction": "unchanged opening license comment"
+    },
+    {
+      "file": "HACL-fstar_uint128_struct_endianness.h-copyright.txt",
+      "sha256": "6b7cb4bd5441f287eeb8b745073c11bc5d2974252bec3b6d8c101ff67f918a26",
+      "source_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/Modules/_hacl/include/krml/fstar_uint128_struct_endianness.h",
+      "source_sha256": "fe57e1bc5ce3224d106e36cb8829b5399c63a68a70b0ccd0c91d82a4565c8869",
+      "extraction": "unchanged opening license comment"
+    },
+    {
+      "file": "HACL-FStar_UInt128_Verified.h-copyright.txt",
+      "sha256": "54079ca9757dbaa2a54053fbd9be60f77c5e06695fa997191fc141cd20d41d59",
+      "source_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/Modules/_hacl/include/krml/FStar_UInt128_Verified.h",
+      "source_sha256": "455e94f24a0900deda7e6e36f4714e4253d32cea077f97e23f90c569a717bc48",
+      "extraction": "unchanged opening license comment"
+    },
+    {
+      "file": "HACL-target-copyright.txt",
+      "sha256": "6b7cb4bd5441f287eeb8b745073c11bc5d2974252bec3b6d8c101ff67f918a26",
+      "source_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/Modules/_hacl/include/krml/internal/target.h",
+      "source_sha256": "d16a59f37a1d4982626870e370889eb9d332a9ad035661b8062f549fc734d061",
+      "extraction": "unchanged opening license comment"
+    },
+    {
+      "file": "openssl-license.txt",
+      "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+      "source_url": "https://raw.githubusercontent.com/openssl/openssl/openssl-3.0.21/LICENSE.txt",
+      "source_sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+      "extraction": "complete unchanged file"
+    },
+    {
+      "file": "openssl-authors.txt",
+      "sha256": "5076ca441daef7fb35e904c2ac070880c7b3d58300a5a6aecac41e8f525f4412",
+      "source_url": "https://raw.githubusercontent.com/openssl/openssl/openssl-3.0.21/AUTHORS.md",
+      "source_sha256": "5076ca441daef7fb35e904c2ac070880c7b3d58300a5a6aecac41e8f525f4412",
+      "extraction": "complete unchanged file"
+    },
+    {
+      "file": "xz-library-notice.txt",
+      "sha256": "c4f8e14fafe458d84808a4cd8b69f94673ebe2bf8fc992291629a69ac12218f8",
+      "source_url": "https://raw.githubusercontent.com/tukaani-project/xz/v5.2.3/COPYING",
+      "source_sha256": "c4f8e14fafe458d84808a4cd8b69f94673ebe2bf8fc992291629a69ac12218f8",
+      "extraction": "complete unchanged file"
+    },
+    {
+      "file": "mpdecimal-COPYRIGHT.txt",
+      "sha256": "dba079e24a0286052f9f36a5e0b4f6cc95bc83ada657eb26bef8c0b6473f6512",
+      "source_url": "https://www.bytereef.org/software/mpdecimal/releases/mpdecimal-4.0.1.tar.gz",
+      "source_sha256": "96d33abb4bb0070c7be0fed4246cd38416188325f820468214471938545b1ac8",
+      "extraction": "unchanged mpdecimal-4.0.1/COPYRIGHT.txt archive member; archive SHA256 matches CPython Mac build recipe"
+    },
+    {
+      "file": "BLAKE2-reference-notice.txt",
+      "sha256": "a27d7169aa4b7db350c5e46da87184c4b7a8ac8e4d86dce38845fdffd789d7b5",
+      "source_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/Modules/_blake2/impl/blake2.h",
+      "source_sha256": "2f6c9d0ecf70be474f2853b52394993625a32960e0a64eae147ef97a3a5c1460",
+      "extraction": "unchanged opening license comment"
+    },
+    {
+      "file": "BLAKE2-python-notice.txt",
+      "sha256": "74baf34496c290dd3b44efca41d040893117c9c1a901c2831b629c9cf235ceb1",
+      "source_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/Modules/_blake2/blake2module.c",
+      "source_sha256": "8ff6d4d87a99d6d65def731fd93e14598a597ef921d7a26ee31f13adca21d344",
+      "extraction": "unchanged opening license comment"
+    },
+    {
+      "file": "CC0-1.0.txt",
+      "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+      "source_url": "https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/CC0-1.0.txt",
+      "source_sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+      "extraction": "complete unchanged file"
+    },
+    {
+      "file": "build-installer.py.reference.txt",
+      "sha256": "65f07863a4ccc8e44cd7902f3909f53f59e1c6e3214d328ce81459bcc867d785",
+      "source_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/Mac/BuildScript/build-installer.py",
+      "source_sha256": "65f07863a4ccc8e44cd7902f3909f53f59e1c6e3214d328ce81459bcc867d785",
+      "extraction": "complete unchanged build recipe, retained as source provenance only"
+    }
+  ],
+  "mac_build_recipe_url": "https://raw.githubusercontent.com/python/cpython/v3.13.15/Mac/BuildScript/build-installer.py",
+  "mac_build_recipe_sha256": "65f07863a4ccc8e44cd7902f3909f53f59e1c6e3214d328ce81459bcc867d785",
+  "expected_runtime": {
+    "python": "3.13.15",
+    "openssl": [
+      3,
+      0,
+      21
+    ],
+    "expat": "expat_2.8.2",
+    "libmpdec": "4.0.1",
+    "tcl": "8.6.18",
+    "tk_script": "8.6.18",
+    "unicode": "15.1.0",
+    "system_zlib": "1.2.12"
+  }
+}

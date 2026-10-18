@@ -1,7 +1,7 @@
 """Strict, scratch-only proof of PyInstaller's known Mach-O transformations.
 
 The original and packaged files are never changed. On temporary copies only,
-apply pinned PyInstaller architecture/install-name processing to the original,
+apply pinned PyInstaller architecture/install-name/signing processing to the original,
 remove signatures from both copies, and require full normalized byte equality.
 All tool commands and before/after hashes are retained as diagnostic evidence.
 """
@@ -26,6 +26,21 @@ def target_rpath(destination):
     if path.is_absolute() or '..' in path.parts or not path.name:
         raise ValueError('Transformation destination must be a safe relative path')
     return str(PurePosixPath('@loader_path', *('..' for _ in path.parent.parts)))
+
+
+def byte_difference_summary(left, right):
+    """Bounded diagnostics only; every byte remains part of the equality check."""
+    left, right = Path(left).read_bytes(), Path(right).read_bytes()
+    count, offsets = 0, []
+    for index, (a, b) in enumerate(zip(left, right)):
+        if a != b:
+            count += 1
+            if len(offsets) < 32:
+                offsets.append(index)
+    return dict(source_size=len(left), packaged_size=len(right),
+                differing_bytes_in_common_length=count,
+                first_differing_offsets=offsets,
+                trailing_size_difference=abs(len(left) - len(right)))
 
 
 def prove_macho_origin(original, packaged, destination, kind):
@@ -77,6 +92,10 @@ def prove_macho_origin(original, packaged, destination, kind):
                 osxutils.binary_to_target_arch(str(source_copy), architectures[0])
                 if kind != 'EXECUTABLE':
                     osxutils.set_dylib_dependency_paths(str(source_copy), rpath)
+                    # Match process_collected_binary exactly before stripping
+                    # signatures for comparison. Re-signing can resize/re-layout
+                    # __LINKEDIT even though executable code stays unchanged.
+                    osxutils.sign_binary(str(source_copy))
                 osxutils.remove_signature_from_binary(str(source_copy))
                 osxutils.remove_signature_from_binary(str(bundle_copy))
             finally:
@@ -87,6 +106,7 @@ def prove_macho_origin(original, packaged, destination, kind):
                 raise ValueError('Original or packaged input changed during the proof')
             evidence['verified'] = evidence['normalized_source_sha256'] == evidence['normalized_packaged_sha256']
             if not evidence['verified']:
+                evidence['byte_difference'] = byte_difference_summary(source_copy, bundle_copy)
                 evidence['error'] = 'Normalized bytes differ; origin remains unverified'
     except Exception as error:
         evidence['error'] = str(error)

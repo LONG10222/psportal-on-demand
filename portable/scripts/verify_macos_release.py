@@ -1,0 +1,256 @@
+"""Fail-closed gate for the individually reviewed macOS arm64 development app.
+
+Bind exact installed runtime origins, full-byte transformation proofs, complete
+notices and successful runtime/window checks to every shipped tar member.
+No Developer ID signing, notarization or physical Portal acceptance is claimed.
+"""
+from __future__ import annotations
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import posixpath
+import re
+import sys
+import tarfile
+
+ROOT = Path(__file__).resolve().parents[1]
+APP_EXECUTABLE = 'Contents/MacOS/PSPortalProxy'
+NATIVE_EXECUTABLE = 'Contents/MacOS/native/psportal-native'
+METHOD = 'pinned-pyinstaller-transform-and-signature-removal'
+
+
+def digest(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def require(condition, message):
+    if not condition:
+        raise ValueError(message)
+
+
+def safe_relative(value):
+    return bool(isinstance(value, str) and value and '\\' not in value and
+                not PurePosixPath(value).is_absolute() and '..' not in PurePosixPath(value).parts and
+                str(PurePosixPath(value)) == value and value != '.')
+
+
+def within_posix(value, root):
+    return bool(isinstance(value, str) and isinstance(root, str) and
+                '..' not in PurePosixPath(value).parts and '..' not in PurePosixPath(root).parts and
+                PurePosixPath(value).is_absolute() and PurePosixPath(root).is_absolute() and
+                PurePosixPath(value).is_relative_to(PurePosixPath(root)))
+
+
+def unique_records(records, label):
+    result = {}
+    for record in records:
+        path = record.get('path')
+        require(safe_relative(path) and path not in result, 'Unsafe or duplicate ' + label + ' path')
+        result[path] = record
+    return result
+
+
+def resolve_bundle_path(value, links):
+    require(safe_relative(value), 'Unsafe bundle path')
+    for _ in range(32):
+        parts = value.split('/')
+        for index in range(1, len(parts) + 1):
+            prefix = '/'.join(parts[:index])
+            if prefix in links:
+                target = links[prefix]
+                require(isinstance(target, str) and target and '\\' not in target and
+                        not PurePosixPath(target).is_absolute(), 'Unsafe absolute bundle symlink')
+                value = posixpath.normpath(posixpath.join(posixpath.dirname(prefix), target, *parts[index:]))
+                require(safe_relative(value), 'Bundle symlink escapes app')
+                break
+        else:
+            return value
+    raise ValueError('Bundle symlink cycle or excessive chain')
+
+
+def verified_origin(binary, source, source_sha, packaged, kind):
+    candidates = binary.get('origin_candidates', [])
+    if not any(item.get('source') == source and item.get('sha256') == source_sha and
+               item.get('type') == kind for item in candidates):
+        return False
+    if binary.get('origin_hash_verified') is True and binary['sha256'] == source_sha:
+        return True
+    for proof in binary.get('origin_transformation_proofs', []):
+        normalized = proof.get('normalized_source_sha256', '')
+        if (binary.get('origin_transformation_verified') is True and proof.get('verified') is True and
+            proof.get('method') == METHOD and proof.get('architecture') == 'arm64' and
+            proof.get('pyinstaller') == '6.16.0' and proof.get('source') == source and
+            proof.get('source_sha256') == source_sha and proof.get('packaged') == packaged and
+            proof.get('packaged_sha256') == binary['sha256'] and
+            re.fullmatch('[0-9a-f]{64}', normalized) and
+            proof.get('normalized_packaged_sha256') == normalized):
+            return True
+    return False
+
+
+def verify_inventory(report, reviewed):
+    require(report.get('inventory_complete') is True and not report.get('issues'), 'Runtime inventory has unresolved issues')
+    require(reviewed.get('architecture') == 'arm64' and reviewed.get('python_version') == '3.13.15' and
+            reviewed.get('pyinstaller_version') == '6.16.0', 'Unreviewed runtime manifest')
+    runtime = report['runtime']
+    require(runtime['pyinstaller'] == reviewed['pyinstaller_version'] and
+            runtime['base_prefix'] == reviewed['original_python_prefix'] and
+            runtime['python'].startswith(reviewed['python_version'] + ' '), 'Selected runtime differs from review')
+    files = unique_records(report.get('files', []), 'file')
+    binaries = unique_records(report.get('binaries', []), 'binary')
+    links = {key: value['target'] for key, value in unique_records(report.get('symlinks', []), 'symlink').items()}
+    expected_links = {key: value['target'] for key, value in unique_records(reviewed['expected_bundle_symlinks'], 'reviewed symlink').items()}
+    require(links == expected_links, 'Bundle symlink topology differs from review')
+    for path in links:
+        resolve_bundle_path(path, links)
+    require(len(binaries) == reviewed['expected_binary_path_count'] == 63 and
+            set(binaries) == set(reviewed['runtime_files']) | {APP_EXECUTABLE, NATIVE_EXECUTABLE}, 'Unexpected frozen binaries')
+    app, build = report['app'], report['build']
+    require(within_posix(app, '/') and within_posix(build, '/'), 'Invalid build evidence paths')
+    for path, binary in binaries.items():
+        require(binary.get('format') == 'Mach-O' and path in files and
+                binary['sha256'] == files[path]['sha256'] and re.fullmatch('[0-9a-f]{64}', binary['sha256']),
+                'Binary and archive file evidence disagree')
+        resolved_relative = resolve_bundle_path(path, links)
+        packaged = str(PurePosixPath(app) / resolved_relative)
+        if path in reviewed['runtime_files']:
+            expected = reviewed['runtime_files'][path]
+            require(safe_relative(expected['source_relative']) and
+                    resolved_relative == expected['resolved_bundle_path'], 'Runtime destination differs from review')
+            source = str(PurePosixPath(runtime['base_prefix']) / expected['source_relative'])
+            require(verified_origin(binary, source, expected['source_sha256'], packaged, expected['type']),
+                    'Runtime full-byte origin proof failed: ' + path)
+        elif path == APP_EXECUTABLE:
+            source = str(PurePosixPath(build) / 'PSPortalProxy')
+            require(any(verified_origin(binary, source, candidate.get('sha256'), packaged, 'EXECUTABLE')
+                        for candidate in binary.get('origin_candidates', []) if candidate.get('source') == source),
+                    'Frozen executable does not match the current build')
+        else:
+            require(binary.get('origin_hash_verified') is True and any(
+                item.get('type') == 'REVIEWED_NATIVE' and item.get('sha256') == binary['sha256']
+                for item in binary.get('origin_candidates', [])), 'Native engine has no exact build origin')
+        for item in binary.get('imports', []):
+            require(any(within_posix(item.get('resolved'), root) for root in (app, '/usr/lib', '/System/Library')),
+                    'Dependency is outside bundle and macOS system libraries: ' + str(item.get('name')))
+    return binaries, files, links
+
+
+def verify_archive(archive, files, links, companion):
+    regular = {'PSPortalProxy.app/' + path: item['sha256'] for path, item in files.items() if path not in links}
+    for path, item in files.items():
+        if path in links:
+            target = resolve_bundle_path(path, links)
+            require(target in files and target not in links and files[target]['sha256'] == item['sha256'],
+                    'Symlink file hash disagrees with its final target')
+    require(not set(regular) & set(companion), 'Companion archive path collides with app')
+    regular.update(companion)
+    expected_links = {'PSPortalProxy.app/' + path: target for path, target in links.items()}
+    seen, actual_regular, actual_links = set(), {}, {}
+    with tarfile.open(archive, 'r:gz') as stream:
+        for member in stream:
+            name = member.name.rstrip('/')
+            require(safe_relative(name) and name not in seen, 'Unsafe or duplicate tar member')
+            seen.add(name)
+            require(member.mode & 0o6000 == 0, 'Privileged archive member mode is not accepted')
+            if member.isdir():
+                require(any(path.startswith(name + '/') for path in (*regular, *expected_links)), 'Unexpected archive directory')
+            elif member.issym():
+                actual_links[name] = member.linkname
+            elif member.isfile():
+                require(name in regular, 'Uninventoried archive file: ' + name)
+                if name in ('PSPortalProxy.app/' + APP_EXECUTABLE, 'PSPortalProxy.app/' + NATIVE_EXECUTABLE):
+                    require(member.mode & 0o100, 'Archive executable lost owner execute permission')
+                app_relative = name.removeprefix('PSPortalProxy.app/')
+                if app_relative in files and 'mode' in files[app_relative]:
+                    require(member.mode & 0o777 == files[app_relative]['mode'], 'Archive file permissions changed')
+                actual_regular[name] = digest(stream.extractfile(member).read())
+            else:
+                raise ValueError('Hardlinks and special archive members are not accepted')
+    require(actual_regular == regular and actual_links == expected_links, 'Archive differs from exact tested files, notices or symlink targets')
+
+
+def companion_candidates(report):
+    result = {}
+    for item in report['license_candidates']:
+        if 'already-packaged-companion' in item['locations']:
+            require(item['source'] not in result, 'Duplicate companion notice evidence')
+            result[item['source']] = item['sha256']
+    return result
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--inventory', type=Path, default=ROOT / 'runtime-inventory/runtime-inventory.json')
+    args = parser.parse_args(argv)
+    require(sys.platform == 'darwin', 'The macOS release gate must run on the actual host')
+    report = json.loads(args.inventory.read_text(encoding='utf-8'))
+    reviewed = json.loads((ROOT / 'notices/macos-cpython-3.13.15-runtime.json').read_text(encoding='utf-8'))
+    binaries, files, links = verify_inventory(report, reviewed)
+    app = Path(report['app'])
+    require(app.resolve() == (ROOT / 'dist/PSPortalProxy.app').resolve() and
+            Path(report['build']).resolve() == (ROOT / 'build/portalproxy').resolve(), 'Unexpected app/build inventory path')
+    for path, item in files.items():
+        require((app / path).resolve().is_relative_to(app.resolve()) and
+                digest((app / path).read_bytes()) == item['sha256'], 'Inventoried app file changed')
+        item['mode'] = (app / path).stat().st_mode & 0o777
+    require(all(files[path]['mode'] & 0o100 for path in (APP_EXECUTABLE, NATIVE_EXECUTABLE)), 'Packaged executables have lost execute permission')
+    validation = json.loads((ROOT / 'release/VALIDATION.json').read_text(encoding='utf-8'))
+    require(report['source_commit'] == validation['source_commit'] == os.environ['GITHUB_SHA'], 'Evidence came from another commit')
+    require(validation['system'] == 'darwin' and validation['architecture'] == 'arm64', 'Unreviewed platform')
+    require(validation['tests_run'] >= 149 and all(validation.get(key) is True for key in (
+        'exact_cpython_runtime_notices', 'actual_external_core_tested', 'native_platform_frozen_window_smoke_tested',
+        'source_tk_gui_both_modes_tested', 'matching_bundled_native_discovery_tested')), 'Required runtime/window acceptance is missing')
+    from retain_cpython_notices import verified_supplement_files, MACOS_INSTALLED_LICENSE_SHA256, MACOS_INSTALLED_NOTICES, MACOS_COMPONENTS
+    notices = ROOT / 'dist/PSPortalProxy/licenses'
+    require(Path(report['companion_notice_directory']).resolve() == notices.resolve(), 'Unexpected companion notices')
+    retained = notices / 'cpython-3.13.15-macos'
+    source = ROOT / 'notices/cpython-3.13.15-macos'
+    for path in verified_supplement_files(source, 'darwin'):
+        require((retained / path.name).read_bytes() == path.read_bytes(), 'Full reviewed notice not retained: ' + path.name)
+    scope = json.loads((retained / 'runtime-scope.json').read_text(encoding='utf-8'))
+    require(scope['python'] == '3.13.15' and scope['platform'] == 'darwin' and
+            all(scope['components'].get(key) == value for key, value in MACOS_COMPONENTS.items()), 'Wrong exact notice/component scope')
+    require(scope['installed_python_license_sha256'] == MACOS_INSTALLED_LICENSE_SHA256 and
+            digest((notices / 'Python-LICENSE.txt').read_bytes()) == MACOS_INSTALLED_LICENSE_SHA256, 'Installed Python license changed')
+    require(report['runtime']['stdlib_components']['_lzma'].get('version') == '5.2.3', 'Actual linked liblzma version is unproven')
+    for component, expected in MACOS_INSTALLED_NOTICES.items():
+        require(scope['installed_component_notices'][component]['sha256'] == expected and
+                digest((retained / ('installed-' + component + '-license.txt')).read_bytes()) == expected,
+                'Exact installed component notice missing: ' + component)
+    native = app / 'Contents/MacOS/native'
+    require(digest((native / 'psportal-native').read_bytes()) == validation['native_binary_sha256'] and
+            digest((native / 'corresponding-source.tar.gz').read_bytes()) == validation['corresponding_source_sha256'], 'Native source/executable mismatch')
+    for path in (notices / 'PyInstaller-COPYING.txt', notices / 'PSPortal-OnDemand-LICENSE.txt',
+                 native / 'LICENSE', native / 'THIRD_PARTY_NOTICES.md', native / 'SOURCE.md', native / 'licenses/ENGINE-NOTICES.txt'):
+        require(path.stat().st_size > 100, 'Required full notice missing: ' + str(path))
+    companion = {}
+    candidate_hashes = companion_candidates(report)
+    for path in notices.rglob('*'):
+        require(not path.is_symlink(), 'Companion notices must not contain symlinks')
+        if path.is_file():
+            sha = digest(path.read_bytes())
+            require(candidate_hashes.get(str(path.resolve())) == sha, 'Companion notice differs from inventory')
+            companion['licenses/' + path.relative_to(notices).as_posix()] = sha
+    for name in ('desktop.md', 'native-acceptance.md', 'validation.md'):
+        companion[name] = digest((ROOT / 'docs' / name).read_bytes())
+    archives = list((ROOT / 'release').glob('PSPortalProxy-darwin-*.tar.gz'))
+    require(len(archives) == 1, 'Expected one exact macOS archive')
+    verify_archive(archives[0], files, links, companion)
+    result = dict(source_commit=validation['source_commit'], developer_id_signed=False, notarized=False,
+        scope='Reviewed macOS arm64 CPython3.13.15/PyInstaller6.16.0 development GUI archive only',
+        runtime_binaries_verified=len(binaries), runtime_review_source=reviewed['evidence_run'],
+        complete_versioned_notices_retained=True, matching_native_source_retained=True,
+        real_window_and_runtime_checks_passed=True, runtime_inventory_sha256=digest(args.inventory.read_bytes()),
+        archive_sha256=digest(archives[0].read_bytes()), physical_portal_or_live_subscription_tested=False)
+    release = ROOT / 'release'
+    (release / 'MACOS-RUNTIME-REVIEW.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+    outputs = sorted(path for path in release.iterdir() if path.is_file() and path.name != 'SHA256SUMS')
+    require(sum(path.stat().st_size for path in outputs) < 150 * 1024 * 1024, 'macOS release exceeds size budget')
+    (release / 'SHA256SUMS').write_text(''.join(digest(path.read_bytes()) + '  ' + path.name + '\n' for path in outputs), encoding='ascii')
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == '__main__':
+    main()

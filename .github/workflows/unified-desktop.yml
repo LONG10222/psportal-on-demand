@@ -77,8 +77,8 @@ jobs:
             python: '3.13.16'
             notice_flag: '--cpython-runtime-notices'
           - os: macos-15
-            python: '3.13'
-            notice_flag: ''
+            python: '3.13.15'
+            notice_flag: '--cpython-runtime-notices'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     env:
@@ -137,4 +137,20 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 1
-      # macOS GUI archive upload remains gated on its own exact runtime review.
+      - name: Verify exact macOS origins, full notices, symlinks and archived acceptance evidence
+        id: macos_release_gate
+        if: success() && runner.os == 'macOS'
+        run: python portable/scripts/verify_macos_release.py
+      - name: Upload audited macOS development GUI with matching source and notices
+        if: success() && runner.os == 'macOS' && steps.macos_release_gate.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: psportal-unified-macos-arm64-unsigned-${{ github.sha }}
+          path: |
+            portable/release/PSPortalProxy-darwin-*.tar.gz
+            portable/release/VALIDATION.json
+            portable/release/MACOS-RUNTIME-REVIEW.json
+            portable/release/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1

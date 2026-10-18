@@ -85,8 +85,9 @@ def main(argv=None):
     else:
         print('NOTICE: Python license file was not found; add it before redistribution.')
     if args.cpython_runtime_notices:
-        from scripts.retain_cpython_notices import retain_supplement
-        retain_supplement(root / 'notices' / 'cpython-3.13.16', notices / 'cpython-3.13.16',
+        from scripts.retain_cpython_notices import retain_supplement, supplement_name
+        supplement = supplement_name(sys.platform)
+        retain_supplement(root / 'notices' / supplement, notices / supplement,
             python_license, vcruntime_origin=Path(sys.base_prefix) / 'VCRUNTIME140.dll',
             bundled_vcruntime=folder / '_internal' / 'VCRUNTIME140.dll')
     distribution = importlib.metadata.distribution('pyinstaller')

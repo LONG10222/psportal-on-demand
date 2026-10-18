@@ -226,6 +226,16 @@ def main(argv=None):
             source = getattr(module, '__file__', None)
             if source and Path(source).is_file():
                 metadata.update(source=source, sha256=digest(Path(source)))
+            if module_name == '_lzma' and sys.platform == 'darwin':
+                try:
+                    if __package__:
+                        from .retain_cpython_notices import installed_liblzma_version
+                    else:
+                        from retain_cpython_notices import installed_liblzma_version
+                    metadata['version'] = installed_liblzma_version()
+                    metadata['version_evidence'] = 'lzma_version_string exported by installed stdlib extension'
+                except (AttributeError, OSError, ValueError) as error:
+                    metadata['version_unverified'] = str(error)
             runtime['stdlib_components'][module_name] = metadata
         except ImportError as error:
             runtime['stdlib_components'][module_name] = dict(unavailable=str(error))
