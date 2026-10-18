@@ -43,7 +43,9 @@ class CoreTests(unittest.IsolatedAsyncioTestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.cfg = dict(DEFAULTS, data_dir=self.tmp.name, backend_port=port(), api_port=port(),
             core_path=str(Path(__file__).with_name('fake_core.py').resolve()),
-            subscription_url='https://example.com/private', idle_seconds=1, wakeup_timeout=4)
+            # Hosted macOS Python may need longer for two fresh fixture processes.
+            # This remains below the app's production startup budget (45 seconds).
+            subscription_url='https://example.com/private', idle_seconds=1, wakeup_timeout=15)
         def download(url, path):
             path.write_text('proxies: []\n')
         self.patch = patch('portalproxy.core.download_subscription', download)

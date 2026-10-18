@@ -46,8 +46,16 @@ First successful native run: [39107122359](https://github.com/LONG10222/psportal
 validated Linux x64, Windows x64 and macOS ARM64 at tested PR merge commit
 `9fa54dddef1b83e9aa3dd2fb5e8229d97711aa45`. Each passed 40 top-level tests
 (203 test/subtest results), vet, module verification and the real CLI smoke test.
-Linux/macOS race checks passed; Windows race was skipped. The additional three
-architecture jobs were added afterward and need their own successful run.
+Linux/macOS race checks passed; Windows race was skipped.
+
+The expanded [run 39107706960](https://github.com/LONG10222/psportal-on-demand/actions/runs/39107706960)
+then passed on all six listed targets at PR merge commit
+`6ee51c6b9a433ccf0e6216a9b71f6834e0a9bb7b` (branch head
+`0497740cd447a76e428d54a0375a75bf443fdf54`). Each target again passed
+40 top-level tests / 203 test and subtest results, vet, module verification and
+actual CLI smoke tests. Both Linux and both macOS jobs passed race checks; both
+Windows jobs explicitly skipped the race detector. Each exact CI bundle includes
+matching source, notices, executable hashes and runtime evidence.
 
 ## iOS
 

@@ -31,7 +31,7 @@ jobs:
       - name: Install official distro runtime and virtual-display prerequisites
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates git curl python3 python3-venv python3-tk binutils xvfb xauth
+          apt-get install -y --no-install-recommends ca-certificates git curl python3 python3-venv python3-tk libpython3.13 binutils xvfb xauth
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
@@ -95,7 +95,23 @@ jobs:
       - name: Install pinned build dependency
         run: python -m pip install --disable-pip-version-check -r portable/requirements-build.txt
       - name: Build bundled native engine and execute native plus frozen dispatch tests
-        run: python portable/ci/build_dual.py
+        run: python portable/ci/build_dual.py --source-tk
+      - name: Inventory exact frozen runtime and installed notice candidates
+        if: always() && hashFiles('portable/build/portalproxy/Analysis-00.toc') != ''
+        continue-on-error: true
+        run: python portable/scripts/inventory_desktop_runtime.py --output portable/runtime-inventory
+      - name: Enforce diagnostic evidence size budget
+        id: runtime_budget
+        if: always() && hashFiles('portable/runtime-inventory/runtime-inventory.json') != ''
+        run: python -c "from pathlib import Path; n=sum(p.stat().st_size for p in Path('portable/runtime-inventory').rglob('*') if p.is_file()); print(n); assert n < 20*1024*1024"
+      - name: Upload runtime inventory for notice review only
+        if: always() && steps.runtime_budget.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: psportal-runtime-inventory-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          path: portable/runtime-inventory/**
+          if-no-files-found: error
+          retention-days: 1
       # The exact Windows/macOS Python/Tk runtime notice audits are separate.
       # These jobs validate the combined executables but do not publish them.
       # Native CLI artifacts with complete corresponding source are published

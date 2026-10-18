@@ -144,6 +144,8 @@ Windows and macOS runtime tests on both x64 and ARM64. It runs all Go tests, act
 CLI readiness/policy/stop/restart smoke tests, and Linux/macOS race checks, then
 packages the tested host binary with matching vendored source, notices and evidence.
 See `ci/README.md` for exact run provenance and verification limits. Native CI
-has passed on Linux x64, Windows x64 and macOS ARM64. The additional Linux ARM64,
-Windows ARM64 and Intel macOS jobs need their own successful run. Preparing a
-template or cross-compiling a binary is not evidence of native execution.
+has passed on all six targets: Linux x64/ARM64, Windows x64/ARM64 and macOS
+Intel/Apple Silicon. These are loopback fixture and CLI runtime checks; physical
+Portal, live provider, LAN-device, GUI, signing and notarization acceptance are
+separate. Preparing a template or cross-compiling a binary alone is not evidence
+of native execution.

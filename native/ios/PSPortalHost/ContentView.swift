@@ -5,17 +5,21 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var model: ProxyModel
     @State private var confirmForget = false
+    @State private var showLicenses = false
     private let refresh = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
     var body: some View {
         ZStack {
-            NavigationStack {
+            // Keep a single stable screen. The prior navigation-container layout
+            // hit a UIKit navigation-item ownership exception during launch.
+            VStack(spacing: 0) {
+                Text("PSPortal Host").font(.title2.bold()).padding()
                 Form {
                     Section {
                         Label("Foreground only", systemImage: "iphone")
                             .font(.headline)
                         Text("Keep this app open and the device unlocked. Switching apps or locking stops the proxy. It never restarts automatically.")
-                        Text("Development build. iOS compilation and physical-device operation have not been validated.")
+                        Text("Development build. Physical-device and real Portal operation have not been validated.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Section("Proxy") {
@@ -53,7 +57,7 @@ struct ContentView: View {
                             .accessibilityIdentifier("subscriptionURL")
                         Picker("Node selection", selection: $model.settings.selectionMode) {
                             ForEach(SelectionMode.allCases) { mode in Text(mode.title).tag(mode) }
-                        }
+                        }.pickerStyle(.menu)
                         if model.settings.selectionMode != .auto {
                             TextField("Exact node name", text: $model.settings.preferredNode)
                                 .textInputAutocapitalization(.never).autocorrectionDisabled().privacySensitive()
@@ -84,16 +88,15 @@ struct ContentView: View {
                         Text("If the Wi-Fi address changes, stop the proxy and update it here. Client isolation on some Wi-Fi networks prevents a Portal from reaching this device.")
                     }
                     Section("Open source") {
-                        NavigationLink("Licenses and build limitations") { LicensesView() }
+                        Button("Licenses and build limitations") { showLicenses = true }
                     }
                 }
-                .navigationTitle("PSPortal Host")
                 .confirmationDialog("Remove saved settings and clear all fields?", isPresented: $confirmForget, titleVisibility: .visible) {
                     Button("Forget configuration", role: .destructive, action: model.forgetSettings)
                     Button("Cancel", role: .cancel) {}
                 }
             }
-            .privacySensitive()
+            .sheet(isPresented: $showLicenses) { LicensesView() }
             // Opaque inactive-state cover reduces app-switcher disclosure. It is
             // not a guarantee against screenshots, recording, or OS snapshots.
             if !model.isActive {
@@ -115,18 +118,25 @@ struct ContentView: View {
 }
 
 private struct LicensesView: View {
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
-        List {
-            Text("This native application links Mihomo v1.19.32 and is GPL-3.0-only. The original project's MIT notice is preserved separately. No App Store compatibility or distribution approval is claimed.")
-            Text("Foreground-only development source. No VPN, Packet Tunnel, background hosting, downloaded executable, or full iOS parity is provided. HTTP/CONNECT is supported by the shared engine; a real Portal session still needs device testing.")
-            ForEach(["GPL-3.0", "THIRD-PARTY-NOTICES", "ENGINE-NOTICES", "PROJECT-MIT"], id: \.self) { name in
-                NavigationLink(name) {
-                    ScrollView {
-                        Text(licenseText(name)).font(.caption.monospaced()).padding().textSelection(.enabled)
-                    }.navigationTitle(name)
+        VStack(spacing: 0) {
+            HStack {
+                Text("Licenses").font(.title2.bold())
+                Spacer()
+                Button("Done") { dismiss() }
+            }.padding()
+            List {
+                Text("This native application links Mihomo v1.19.32 and is GPL-3.0-only. The original project's MIT notice is preserved separately. No App Store compatibility or distribution approval is claimed.")
+                Text("Foreground-only development app. No VPN, Packet Tunnel, background hosting, downloaded executable, or full iOS parity is provided. HTTP/CONNECT is supported by the shared engine; a real Portal session still needs device testing.")
+                ForEach(["GPL-3.0", "THIRD-PARTY-NOTICES", "ENGINE-NOTICES", "PROJECT-MIT"], id: \.self) { name in
+                    DisclosureGroup(name) {
+                        Text(licenseText(name)).font(.caption.monospaced()).textSelection(.enabled)
+                    }
                 }
             }
-        }.navigationTitle("Licenses")
+        }
     }
 
     private func licenseText(_ name: String) -> String {
