@@ -92,7 +92,7 @@ class ResolveTests(unittest.IsolatedAsyncioTestCase):
         malformed = [
             (socket.AF_INET,),
             (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("8.8.8.8", 80, 0)),
-            (socket.AF_UNIX, socket.SOCK_STREAM, 0, "", ("8.8.8.8", 80)),
+            (socket.AF_UNSPEC, socket.SOCK_STREAM, 0, "", ("8.8.8.8", 80)),
             (socket.AF_INET, socket.SOCK_DGRAM, 0, "", ("8.8.8.8", 80)),
             (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("::1", 80)),
             (socket.AF_INET6, socket.SOCK_STREAM, 0, "", ("fd00::1", 80, 0, 4)),
