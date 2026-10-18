@@ -22,5 +22,8 @@ start_service() {
 }
 
 stop_service() {
-    /etc/init.d/portalproxy-core stop
+    local cancellation=0
+    /usr/bin/lua /usr/libexec/portalproxy/cancel-startup.lua /tmp/portalproxy || cancellation=$?
+    /etc/init.d/portalproxy-core stop || return $?
+    return "$cancellation"
 }

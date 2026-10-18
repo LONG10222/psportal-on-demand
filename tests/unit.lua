@@ -6,8 +6,8 @@ local count = 0
 local function check(value,message) assert(value,message); count=count+1 end
 local function rejects(fn,message) local ok=pcall(fn); check(not ok,message) end
 check(config.to_yaml({},function() return '{"url":"https:\\/\\/example.com"}' end)=='{"url":"https://example.com"}','JSON slash escapes must be YAML compatible')
-for _,ip in ipairs({'10.20.0.1','172.16.0.1','172.31.255.254','192.168.50.1','127.0.0.1','169.254.1.1','100.64.0.1','100.127.255.254','::1','fd12::1','fe80::1'}) do check(p.local_ip(ip),'local '..ip) end
-for _,ip in ipairs({'172.15.0.1','172.32.0.1','100.63.0.1','100.128.0.1','203.0.113.10','2001:db8::1','example.com','fc-example.com'}) do check(not p.local_ip(ip),'public '..ip) end
+for _,ip in ipairs({'10.20.0.1','172.16.0.1','172.31.255.254','192.168.50.1','fc12::1','fd12::1'}) do check(p.local_ip(ip),'local '..ip) end
+for _,ip in ipairs({'172.15.0.1','172.32.0.1','100.63.0.1','100.128.0.1','203.0.113.10','2001:db8::1','example.com','fc-example.com','127.0.0.1','169.254.1.1','100.64.0.1','100.127.255.254','::1','fe80::1'}) do check(not p.local_ip(ip),'not LAN '..ip) end
 for _,ip in ipairs({'999.1.2.3','1.2.3','01.2.3.4','1.2.3.4.example','1.2.3.-1',''}) do check(not p.ipv4(ip),'invalid IP '..ip) end
 local r=p.parse_request('CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n')
 check(r and r.host=='example.com' and r.port==443 and r.method=='CONNECT','CONNECT parsing')
@@ -35,6 +35,20 @@ check(core['proxy-groups'][1].filter:sub(-2)=='.*','other regions remain availab
 check(core['proxy-groups'][1].filter:find('\\bHK\\b',1,true)~=nil,'word-boundary regex survives serialization')
 check(core['proxy-groups'][1]['empty-fallback']=='REJECT','empty provider fails closed')
 check(core['proxy-providers'].SUBSCRIPTION.url==options.subscription_url,'only supplied subscription')
+local rules={}; for _,rule in ipairs(core.rules) do
+    rules[rule]=true
+    check(not rule:find(',DIRECT',1,true),'backend must not route client requests directly')
+    check(not rule:find(',no-resolve',1,true),'backend must resolve before IP rejection')
+end
+check(rules['DOMAIN-SUFFIX,localhost,REJECT'],'reject localhost names in backend')
+for _,cidr in ipairs({'0.0.0.0/8','10.0.0.0/8','100.64.0.0/10','127.0.0.0/8','169.254.0.0/16',
+    '172.16.0.0/12','192.168.0.0/16','224.0.0.0/4','240.0.0.0/4'}) do
+    check(rules['IP-CIDR,'..cidr..',REJECT'],'backend rejects '..cidr)
+end
+for _,cidr in ipairs({'::/3','4000::/2','8000::/1','2001::/23','2001:db8::/32','2002::/16','3fff::/20'}) do
+    check(rules['IP-CIDR6,'..cidr..',REJECT'],'backend rejects '..cidr)
+end
+check(core.rules[#core.rules]=='MATCH,PORTAL','external fallback must follow destination rejections')
 local dns_arrays={core.dns['default-nameserver'],core.dns['proxy-server-nameserver'],core.dns['direct-nameserver'],core.dns['nameserver-policy']['subscription.example.com']}
 for i,a in ipairs(dns_arrays) do
     check(a[1]==options.local_dns,'DNS bootstrap value')

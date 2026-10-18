@@ -87,8 +87,8 @@ function M.render(options,secret,paths)
             filter='(?i)香港|🇭🇰|\\bHK\\b|Hong[ -]?Kong`(?i)日本|东京|大阪|🇯🇵|\\bJP\\b|Japan`.*',
             url=c.health_url,['expected-status']=204,interval=c.health_interval,timeout=c.health_timeout,
             ['max-failed-times']=2,lazy=false,['empty-fallback']='REJECT',['disable-udp']=true}},
-        rules={'IP-CIDR,127.0.0.0/8,DIRECT,no-resolve','IP-CIDR,10.0.0.0/8,DIRECT,no-resolve',
-            'IP-CIDR,172.16.0.0/12,DIRECT,no-resolve','IP-CIDR,192.168.0.0/16,DIRECT,no-resolve','MATCH,PORTAL'}}
+        rules=protocol.backend_reject_rules()}
+    core.rules[#core.rules+1]='MATCH,PORTAL'
     if c.routing_mark ~= 0 then core['routing-mark'] = c.routing_mark end
     local policy = {bind=c.listen_ip,port=c.listen_port,allowed_ip=c.client_ip,backend_port=c.backend_port,api_port=c.api_port,
         local_dns=c.local_dns,idle_seconds=c.idle_seconds,wakeup_timeout=c.wakeup_timeout,health_url=c.health_url,

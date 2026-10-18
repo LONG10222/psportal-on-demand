@@ -20,6 +20,10 @@ The listener allowlist is IP based, without client authentication or MAC enforce
 
 监听器依据 IP 放行，不提供客户端身份认证或 MAC 校验。仅在可信局域网使用，不做 WAN 端口转发。内部 API 绑定回环地址，并使用随机密钥。本地 root 管理员仍可读取运行凭据。按需启停不构成对路由器管理员、网络运营方或订阅商的隐私隔离。
 
+Client destinations are restricted separately: only RFC1918/ULA addresses bypass the backend; loopback, link-local, CGNAT and other special addresses are denied. Router LAN addresses remain reachable, so protect LAN management services separately. See [destination policy and compatibility limits](docs/destination-policy.md).
+
+客户端目标另有检查：仅 RFC1918/ULA 可绕过核心直连，回环、链路本地、CGNAT 等特殊地址被拒绝。路由器 LAN 地址仍可访问，管理服务需单独保护。详见[目标地址策略及兼容性限制](docs/destination-policy.md)。
+
 For a vulnerability, use the repository's private vulnerability reporting feature if available. Otherwise open an issue containing only a high-level description and ask for a private reporting channel. Do not publish an exploit containing a live subscription or another person's credentials.
 
 安全问题优先通过仓库可用的私有漏洞报告渠道提交。如果没有该入口，公开 Issue 仅描述问题类型并联系私下报告方式，不附带有效订阅或他人凭据。

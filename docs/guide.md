@@ -40,6 +40,11 @@ portalproxy restart
 
 The listener runs at boot; the core starts on demand. A complete external HTTP request or HTTPS CONNECT wakes it. Private-address requests connect directly. After 60 seconds without external client bytes, the core stops and idle external tunnels close. LAN requests and node health checks do not reset the timer.
 
+LAN bypass is limited to RFC1918 IPv4 and ULA IPv6. Loopback, link-local, CGNAT,
+mapped IPv6 and other special destinations are denied. Router RFC1918/ULA LAN
+addresses remain reachable; protect management services separately. See the
+[destination policy and compatibility limits](destination-policy.md).
+
 Portal background requests, keepalives, and failed retries also count as activity.
 
 A Mihomo `fallback` group selects Hong Kong first, Japan second, and other regions last. Nodes within each region keep their subscription order. Region matching uses node names: Chinese names, HK/JP tags, flags, Hong Kong, and Japan. Requests fail when no node is available.
@@ -91,6 +96,10 @@ Local tests:
 
 ```sh
 lua5.1 tests/unit.lua
+lua5.1 tests/access.lua
+lua5.1 tests/dns.lua
+lua5.1 tests/lifecycle.lua
+lua5.1 tests/ownership.lua
 python3 tests/packaging.py
 ```
 
@@ -102,4 +111,11 @@ sh tests/core-config.sh /path/to/mihomo
 IDLE_SECONDS=60 sh tests/router-smoke.sh
 ```
 
-Integration tests use loopback ports `21081`–`21084` and temporary procd services. They cover LAN bypass, client rejection, external wake, idle shutdown, and a second wake. Keep those ports free and run one copy at a time. `core-config.sh` parses a fixture with the real core without starting a proxy service.
+Integration tests use loopback ports `21081`–`21084` and temporary procd services.
+They check loopback destination rejection for HTTP and CONNECT, client rejection,
+external wake, idle shutdown, and a second wake. The fixture intercepts the
+external test target `1.1.1.1`; no Internet request is made. Keep those ports free
+and run one copy at a time. RFC1918/ULA LAN bypass and concurrent lifecycle
+behavior are covered by the fake-runtime regression tests; this loopback-only
+router test does not establish real LAN reachability. `core-config.sh` parses a
+fixture with the real core without starting a proxy service.
