@@ -161,17 +161,38 @@ def _linux_physical(name: str, sysfs_root: Path) -> bool:
         devices = sysfs_root.parents[1] / 'devices'
         device = (entry / 'device').resolve(strict=True)
         resolved = entry.resolve(strict=True)
+        def scalar(filename):
+            with (entry / filename).open() as stream:
+                return stream.read(33).strip()
         return (device.is_dir() and device.is_relative_to(devices)
                 and resolved.is_relative_to(devices) and not resolved.is_relative_to(devices / 'virtual')
                 and not device.is_relative_to(devices / 'virtual')
-                and (entry / 'type').read_text()[:32].strip() == '1'
-                and (entry / 'operstate').read_text()[:32].strip() == 'up')
+                and scalar('type') == '1' and scalar('operstate') == 'up')
     except (OSError, RuntimeError, ValueError):
         return False
 
 
-def parse_linux_interfaces(address_output: str, route_output: str, sysfs_root: Path = Path('/sys/class/net')) -> dict:
+def _linux_main_routing(rule_output: str):
+    # WireGuard and other VPNs can use policy tables while retaining the main
+    # table's physical default. Require ordinary routing before relying on it.
+    expected = {0: ('local', 255), 32766: ('main', 254), 32767: ('default', 253)}
+    seen = set()
+    for rule in _rows(_bounded_json(rule_output), 256):
+        priority = rule.get('priority')
+        if (not _integer(priority) or priority not in expected or priority in seen
+                or rule.get('src') != 'all' or rule.get('table') not in expected[priority]
+                or set(rule) - {'priority', 'src', 'table', 'protocol'}):
+            raise ValueError(_AMBIGUOUS)
+        seen.add(priority)
+    if not {0, 32766}.issubset(seen):
+        raise ValueError(_AMBIGUOUS)
+
+
+def parse_linux_interfaces(address_output: str, route_output: str, sysfs_root: Path = Path('/sys/class/net'),
+                           *, rule_output: str | None = None) -> dict:
     """Read iproute2 JSON plus sysfs; never infer a prefix or trust a virtual NIC."""
+    if rule_output is not None:
+        _linux_main_routing(rule_output)
     interfaces = _rows(_bounded_json(address_output), 256)
     routes = []
     for row in _rows(_bounded_json(route_output)):
@@ -246,7 +267,8 @@ def discover_lan() -> dict:
             if sys.platform == 'win32':
                 return parse_windows_interfaces(read(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', _WINDOWS_LAN_QUERY]))
             return parse_linux_interfaces(read(['ip', '-j', '-4', 'address', 'show']),
-                                          read(['ip', '-j', '-4', 'route', 'show', 'table', 'main']))
+                                          read(['ip', '-j', '-4', 'route', 'show', 'table', 'main']),
+                                          rule_output=read(['ip', '-j', '-4', 'rule', 'show']))
         except (OSError, UnicodeError, subprocess.SubprocessError):
             raise ValueError(_READ_ERROR) from None
     if sys.platform != 'darwin':

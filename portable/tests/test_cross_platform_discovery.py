@@ -105,6 +105,7 @@ class WindowsLANTests(unittest.TestCase):
         self.assertFalse(run.call_args.kwargs['shell'])
 
 
+@unittest.skipIf(os.name == "nt", "POSIX sysfs symlink fixtures; Windows adapter parser tested separately")
 class LinuxLANTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
@@ -184,14 +185,33 @@ class LinuxLANTests(unittest.TestCase):
 
     def test_discovery_only_uses_fixed_ip_json_commands(self):
         addresses, routes = linux_data()
-        outputs = [subprocess.CompletedProcess([], 0, stdout=json.dumps(value)) for value in (addresses, routes)]
+        rules = [{'priority': 0, 'src': 'all', 'table': 'local'},
+                 {'priority': 32766, 'src': 'all', 'table': 'main'},
+                 {'priority': 32767, 'src': 'all', 'table': 'default'}]
+        outputs = [subprocess.CompletedProcess([], 0, stdout=json.dumps(value)) for value in (addresses, routes, rules)]
         parser = setup.parse_linux_interfaces
         with patch.object(setup.sys, 'platform', 'linux'), patch.object(setup.subprocess, 'run', side_effect=outputs) as run, \
-             patch.object(setup, 'parse_linux_interfaces', side_effect=lambda a, b: parser(a, b, self.root)):
+             patch.object(setup, 'parse_linux_interfaces', side_effect=lambda a, b, **kw: parser(a, b, self.root, **kw)):
             self.assertEqual(setup.discover_lan()['host'], '192.168.5.12')
         self.assertEqual([call.args[0] for call in run.call_args_list],
-                         [['ip', '-j', '-4', 'address', 'show'], ['ip', '-j', '-4', 'route', 'show', 'table', 'main']])
+                         [['ip', '-j', '-4', 'address', 'show'], ['ip', '-j', '-4', 'route', 'show', 'table', 'main'],
+                          ['ip', '-j', '-4', 'rule', 'show']])
         self.assertTrue(all(call.kwargs['shell'] is False for call in run.call_args_list))
+
+    def test_policy_routed_vpn_and_unknown_rules_fail_closed(self):
+        rules = [{'priority': 0, 'src': 'all', 'table': 'local'},
+                 {'priority': 32766, 'src': 'all', 'table': 'main'},
+                 {'priority': 32767, 'src': 'all', 'table': 'default'}]
+        setup._linux_main_routing(json.dumps(rules))
+        for extra in ({'priority': 1000, 'src': 'all', 'table': 51820},
+                      {'priority': 32766, 'src': 'all', 'table': 'main'},
+                      {'priority': True, 'src': 'all', 'table': 'main'}):
+            with self.subTest(extra=extra), self.assertRaises(ValueError):
+                setup._linux_main_routing(json.dumps(rules + [extra]))
+        for change in ({'table': 51820}, {'suppress_prefixlength': 0}, {'src': '192.168.5.0/24'}, {'fwmark': '0xca6c'}):
+            modified = copy.deepcopy(rules); modified[1].update(change)
+            with self.subTest(change=change), self.assertRaises(ValueError): setup._linux_main_routing(json.dumps(modified))
+        with self.assertRaises(ValueError): setup._linux_main_routing('[]')
 
 
 class BoundedDiscoveryTests(unittest.TestCase):
@@ -286,18 +306,21 @@ class ProxyDiscoveryTests(unittest.TestCase):
 class AccountingPathTests(unittest.TestCase):
     def test_standard_paths_only(self):
         name = 'io.github.clash-verge-rev.clash-verge-rev/profiles.yaml'
-        with patch.object(Path, 'home', return_value=Path('/home/fixture')):
-            for platform, env, expected in [
-                ('darwin', {}, '/home/fixture/Library/Application Support/' + name),
-                ('win32', {'APPDATA': '/fixture/Roaming', 'LOCALAPPDATA': '/wrong/Local'}, '/fixture/Roaming/' + name),
-                ('win32', {}, None), ('win32', {'APPDATA': 'relative/path'}, None),
-                ('linux', {}, '/home/fixture/.local/share/' + name),
-                ('linux', {'XDG_DATA_HOME': '/fixture/data'}, '/fixture/data/' + name),
-                ('linux', {'XDG_DATA_HOME': 'relative'}, '/home/fixture/.local/share/' + name),
-                ('freebsd', {}, None)]:
-                with patch.dict(os.environ, env, clear=True), patch.object(existing_proxy.sys, 'platform', platform), self.subTest(platform=platform, env=env):
-                    path = existing_proxy.clash_accounting_path()
-                    self.assertEqual(str(path) if path else None, expected)
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder) / 'home'
+            roaming = Path(folder) / 'Roaming'
+            data = Path(folder) / 'data'
+            with patch.object(Path, 'home', return_value=home):
+                for platform, env, expected in [
+                    ('darwin', {}, home / 'Library/Application Support' / name),
+                    ('win32', {'APPDATA': str(roaming), 'LOCALAPPDATA': str(home / 'wrong')}, roaming / name),
+                    ('win32', {}, None), ('win32', {'APPDATA': 'relative/path'}, None),
+                    ('linux', {}, home / '.local/share' / name),
+                    ('linux', {'XDG_DATA_HOME': str(data)}, data / name),
+                    ('linux', {'XDG_DATA_HOME': 'relative'}, home / '.local/share' / name),
+                    ('freebsd', {}, None)]:
+                    with patch.dict(os.environ, env, clear=True), patch.object(existing_proxy.sys, 'platform', platform), self.subTest(platform=platform, env=env):
+                        self.assertEqual(existing_proxy.clash_accounting_path(), expected)
 
     def test_active_accounting_only_no_controller_or_cache_writes(self):
         with tempfile.TemporaryDirectory() as folder:

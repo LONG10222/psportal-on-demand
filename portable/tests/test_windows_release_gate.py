@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import zipfile
+from yaml_packaging_fixtures import add_yaml_evidence
 from scripts.verify_windows_release import verify_archive, verify_inventory, within_windows
 
 
@@ -18,11 +19,12 @@ class WindowsReleaseGateTests(unittest.TestCase):
         report = dict(inventory_complete=True, issues=[], binaries=binaries,
             files=[dict(path=b['path'],sha256=b['sha256']) for b in binaries], app='D:/app',
             runtime=dict(base_prefix='C:/Python', pyinstaller='6.16.0'))
+        add_yaml_evidence(report, 'win32')
         return report, reviewed
 
     def test_exact_reviewed_runtime_accepts_and_changed_content_fails(self):
         report, reviewed = self.fixture()
-        self.assertEqual(len(verify_inventory(report, reviewed, 'C:/Windows')),25)
+        self.assertEqual(len(verify_inventory(report, reviewed, 'C:/Windows')),26)
         report['binaries'][0]['sha256'] = 'c'*64
         with self.assertRaises(ValueError): verify_inventory(report, reviewed, 'C:/Windows')
 

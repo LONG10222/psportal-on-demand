@@ -63,4 +63,44 @@ class MetadataRetryTests(unittest.TestCase):
         run.assert_not_called()
 
 
+
+class ProductionScopeTests(unittest.TestCase):
+    @patch('licenses.network_output')
+    def test_all_release_targets_including_mobile_cgo_are_inspected(self, output):
+        import json
+        def graph(command, *, env):
+            entry=command[-1]
+            return '\n'.join(json.dumps(p) for p in [
+                dict(ImportPath='github.com/psportal/psportal/native/'+entry[2:],Module=dict(Main=True)),
+                dict(ImportPath=env['GOOS']+'/dep',Module=dict(Path='example/'+env['GOOS'],Version='v1.0.0'))])
+        output.side_effect=graph
+        required,targets=licenses.production_scope('go')
+        self.assertEqual({p for p,v in required}, {'example/'+x for x in ('linux','windows','darwin','android','ios')})
+        self.assertEqual(len(targets),10)
+        for call in output.call_args_list:
+            self.assertEqual(call.args[0][1:5],['list','-deps','-json','-tags'])
+            self.assertEqual(call.args[0][5],licenses.TAGS)
+            env=call.kwargs['env']
+            self.assertEqual(env['CGO_ENABLED'],'1' if env['GOOS'] in ('ios','android') else '0')
+
+    def test_missing_actual_license_fails_and_graph_only_exclusion_is_explicit(self):
+        actual=dict(module='example/runtime',version='v1',licenses=['LICENSE'])
+        helper=dict(module='example/helper',version='v2',licenses=[])
+        scope=licenses.missing_license_review([actual,helper],{('example/runtime','v1')},[])
+        self.assertEqual(scope['excluded_graph_only_missing_notices'][0]['module'],'example/helper')
+        with self.assertRaises(RuntimeError):
+            licenses.missing_license_review([actual,helper],{('example/helper','v2')},[])
+        with self.assertRaises(RuntimeError):
+            licenses.missing_license_review([actual],{('example/missing','v1')},[])
+
+    @patch('licenses.network_output')
+    def test_incomplete_or_failed_cross_target_graph_never_exempts_missing_modules(self, output):
+        import json
+        for data in ('', json.dumps(dict(ImportPath='github.com/psportal/psportal/native/cmd/psportal',Incomplete=True))):
+            output.return_value=data
+            with self.subTest(data=data),self.assertRaises(RuntimeError):licenses.production_scope('go')
+        output.side_effect=subprocess.CalledProcessError(1,['go'],stderr='unsupported target')
+        with self.assertRaises(subprocess.CalledProcessError):licenses.production_scope('go')
+
+
 if __name__ == '__main__': unittest.main()

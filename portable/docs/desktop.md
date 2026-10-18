@@ -63,6 +63,7 @@ Windows, from `portable` in PowerShell:
 ```powershell
 py -3.12 -m venv .venv-build
 .\.venv-build\Scripts\python.exe -m pip install -r requirements-build.txt
+.\.venv-build\Scripts\python.exe scripts/fetch_yaml_sources.py
 .\.venv-build\Scripts\python.exe build.py
 ```
 
@@ -71,10 +72,11 @@ macOS/Linux, from `portable`:
 ```sh
 python3 -m venv .venv-build
 .venv-build/bin/python -m pip install -r requirements-build.txt
+.venv-build/bin/python scripts/fetch_yaml_sources.py
 .venv-build/bin/python build.py
 ```
 
-The exact PyInstaller build dependency is pinned in `requirements-build.txt`; review and update intentionally before release. Its dependency installation requires access to the official package registry. Do not package real configuration or subscription data.
+The exact PyInstaller build dependency is pinned in `requirements-build.txt`; review and update intentionally before release. Its dependency installation requires access to the official package registry. The separate source-preparation command fetches the exact SHA-pinned public PyYAML/LibYAML source archives into the generated build cache; unchanged cache files can be reused offline. `build.py` never downloads them and fails if they are missing or modified. Do not package real configuration or subscription data.
 
 `build.py` runs the unit tests, creates a one-folder application, checks bundled imports with `--smoke-test`, then writes an archive under `release/`. This is a bundling smoke test, not real GUI or device acceptance. Test skips are not passes. The intentionally available `--skip-tests` option is only for investigating build problems.
 
