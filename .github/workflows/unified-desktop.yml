@@ -1,0 +1,159 @@
+name: Unified desktop packaged runtime
+
+on:
+  pull_request:
+    paths:
+      - 'portable/**'
+      - 'native/**'
+      - '.github/workflows/unified-desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unified-desktop-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Debian Linux unified GUI and audited archive
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    container: debian:13
+    timeout-minutes: 40
+    env:
+      GOMAXPROCS: '2'
+      GOFLAGS: '-buildvcs=false -p=2'
+      GOTOOLCHAIN: local
+      PYTHONUTF8: '1'
+    steps:
+      - name: Install official distro runtime and virtual-display prerequisites
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git curl python3 python3-venv python3-tk libpython3.13 binutils xvfb xauth
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - name: Prepare isolated build environment using distro Python
+        run: |
+          python3 -m venv "$RUNNER_TEMP/psportal-venv"
+          "$RUNNER_TEMP/psportal-venv/bin/python" -m pip install --disable-pip-version-check -r portable/requirements-build.txt
+      - name: Fetch SHA-pinned official core for external-mode fixture tests only
+        run: |
+          mkdir -p "$RUNNER_TEMP/psportal-test-core"
+          archive="$RUNNER_TEMP/psportal-test-core/mihomo.gz"
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 'https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-linux-amd64-v1.19.32.gz' --output "$archive"
+          echo "8451100836c9eda194331c2babfad490b2faf30cebc1a04b0e76fd8ac2d35d10  $archive" | sha256sum --check --strict
+          gzip --decompress --stdout "$archive" > "$RUNNER_TEMP/psportal-test-core/mihomo"
+          chmod 700 "$RUNNER_TEMP/psportal-test-core/mihomo"
+          printf 'MIHOMO_BINARY=%s\n' "$RUNNER_TEMP/psportal-test-core/mihomo" >> "$GITHUB_ENV"
+      - name: Build matching native source and GUI then run all fixture and real-window tests
+        run: '"$RUNNER_TEMP/psportal-venv/bin/python" portable/ci/build_dual.py --debian-runtime-notices --xvfb'
+      - name: Upload unsigned Linux GUI with matching source and exact runtime notices
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: psportal-unified-linux-x64-unsigned-${{ github.sha }}
+          path: |
+            portable/release/PSPortalProxy-linux-*.tar.gz
+            portable/release/VALIDATION.json
+            portable/release/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  desktop:
+    name: ${{ matrix.os }} unified packaged runtime checks
+    if: github.event.repository.private == false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            python: '3.13.16'
+            notice_flag: '--cpython-runtime-notices'
+          - os: macos-15
+            python: '3.13.15'
+            notice_flag: '--cpython-runtime-notices'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    env:
+      GOMAXPROCS: '2'
+      GOFLAGS: '-buildvcs=false -p=2'
+      GOTOOLCHAIN: local
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: ${{ matrix.python }}
+          cache: ''
+      - name: Install pinned build dependency
+        run: python -m pip install --disable-pip-version-check -r portable/requirements-build.txt
+      - name: Fetch SHA-pinned official external core for host fixture tests only
+        run: python portable/ci/fetch_test_core.py
+      - name: Build bundled native engine and execute native plus frozen dispatch tests
+        run: python portable/ci/build_dual.py --source-tk --frozen-window ${{ matrix.notice_flag }}
+      - name: Inventory exact frozen runtime and installed notice candidates
+        if: always() && hashFiles('portable/build/portalproxy/Analysis-00.toc') != ''
+        continue-on-error: true
+        run: python portable/scripts/inventory_desktop_runtime.py --output portable/runtime-inventory
+      - name: Enforce diagnostic evidence size budget
+        id: runtime_budget
+        if: always() && hashFiles('portable/runtime-inventory/runtime-inventory.json') != ''
+        run: |
+          python -c "from pathlib import Path; import shutil; d=Path('portable/runtime-inventory/final-packaging'); d.mkdir(exist_ok=True); [shutil.copy2(p,d/p.name) for p in Path('portable/release').glob('MACOS-*.json') if p.is_file()]; n=sum(p.stat().st_size for p in Path('portable/runtime-inventory').rglob('*') if p.is_file()); print(n); assert n < 20*1024*1024"
+      - name: Upload runtime inventory for notice review only
+        if: always() && steps.runtime_budget.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: psportal-runtime-inventory-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          path: portable/runtime-inventory/**
+          if-no-files-found: error
+          retention-days: 1
+      - name: Verify exact Windows runtime, complete notices and archived test evidence
+        id: windows_release_gate
+        if: success() && runner.os == 'Windows'
+        run: python portable/scripts/verify_windows_release.py
+      - name: Upload audited unsigned Windows GUI with matching source and notices
+        if: success() && runner.os == 'Windows' && steps.windows_release_gate.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: psportal-unified-windows-x64-unsigned-${{ github.sha }}
+          path: |
+            portable/release/PSPortalProxy-windows-*.zip
+            portable/release/VALIDATION.json
+            portable/release/WINDOWS-RUNTIME-REVIEW.json
+            portable/release/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      - name: Verify final macOS seal, exact origins, full notices and extracted archive acceptance
+        id: macos_release_gate
+        if: success() && runner.os == 'macOS'
+        run: python portable/scripts/verify_macos_release.py
+      - name: Upload audited macOS development GUI with matching source and notices
+        if: success() && runner.os == 'macOS' && steps.macos_release_gate.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: psportal-unified-macos-arm64-unsigned-${{ github.sha }}
+          path: |
+            portable/release/PSPortalProxy-darwin-*.tar.gz
+            portable/release/VALIDATION.json
+            portable/release/MACOS-RUNTIME-REVIEW.json
+            portable/release/MACOS-BUNDLE-SEAL.json
+            portable/release/MACOS-ARCHIVE-ACCEPTANCE.json
+            portable/release/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1

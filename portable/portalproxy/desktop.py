@@ -19,7 +19,7 @@ import threading
 import time
 from urllib.parse import parse_qsl, unquote, urlsplit
 
-from . import config
+from . import config, backend as engine_backend
 
 MAX_CONFIG_BYTES = 1024 * 1024
 MAX_LOG_LINES = 500
@@ -27,7 +27,9 @@ FIELDS = (
     ('listen_host', 'Listener IPv4 (LAN for Portal)'),
     ('listen_port', 'Portal proxy port'),
     ('allowed_clients', 'Portal IPv4 addresses (comma-separated)'),
+    ('engine_mode', 'Engine (embedded is experimental)'),
     ('core_path', 'Mihomo executable'),
+    ('native_path', 'Embedded engine executable'),
     ('subscription_url', 'HTTPS subscription URL'),
     ('subscription_file', 'Local provider file (overrides URL)'),
     ('selection_mode', 'Node selection'),
@@ -107,9 +109,7 @@ def redact_log(message: str, secrets: tuple[str, ...] = ()) -> str:
 
 
 def backend_command(path: Path) -> list[str]:
-    if getattr(sys, 'frozen', False):
-        return [sys.executable, '--backend', '--config', str(path), '--desktop-child']
-    return [sys.executable, '-u', '-m', 'portalproxy', '--config', str(path), '--desktop-child']
+    return engine_backend.external_command(path)
 
 
 class BackendProcess:
@@ -121,7 +121,10 @@ class BackendProcess:
         self.secrets: tuple[str, ...] = ()
         self.stopping_since: float | None = None
         self._signaled = False
-        atexit.register(self.stop)
+        self.launch: engine_backend.Launch | None = None
+        self.ready = False
+        self._state_lock = threading.Lock()
+        atexit.register(self._at_exit)
 
     def log(self, text: str) -> None:
         try:
@@ -130,9 +133,19 @@ class BackendProcess:
             pass
 
     def start(self, path: Path, values: dict) -> None:
-        if self.process is not None and self.process.poll() is None:
-            raise RuntimeError('The listener is already running')
+        with self._state_lock:
+            if self.process is not None and self.process.poll() is None:
+                raise RuntimeError('The listener is already running')
+            # Detach the exited owner before preparing/spawning a replacement.
+            # Buffered output from its reader must not mark the new run ready.
+            self.process = None
+            self.ready = False
+        if self.launch is not None:
+            self.launch.cleanup()
         self.secrets = secret_values(values)
+        launch = (engine_backend.prepare_launch(path, values)
+                  if values.get('engine_mode', 'external') != 'external'
+                  else engine_backend.Launch(backend_command(path)))
         kwargs = dict(
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding='utf-8', errors='replace', bufsize=1,
@@ -146,26 +159,57 @@ class BackendProcess:
             kwargs['startupinfo'] = startup
         else:
             kwargs['start_new_session'] = True
-        self.process = subprocess.Popen(backend_command(path), **kwargs)
+        try:
+            process = engine_backend.spawn(launch, **kwargs)
+        except BaseException:
+            launch.cleanup()
+            raise
+        with self._state_lock:
+            self.process = process
+        self.launch = launch
         self.stopping_since = None
         self._signaled = False
-        self.log('Listener process started. The core wakes only for external traffic.')
-        threading.Thread(target=self._read_output, args=(self.process,), daemon=True).start()
+        self.log(('Experimental embedded engine' if launch.embedded else 'External-Mihomo listener')
+                 + ' process started. Waiting for listener readiness.')
+        if launch.embedded:
+            self.log('Embedded mode supports a restricted adapter subset and public node endpoints. Unsupported nodes are ignored; fixed mode never silently falls back.')
+        threading.Thread(target=self._read_output, args=(self.process, launch, dict(values), self.secrets), daemon=True).start()
 
-    def _read_output(self, process: subprocess.Popen) -> None:
+    def _read_output(self, process: subprocess.Popen, launch=None, values=None, secrets=None) -> None:
         assert process.stdout is not None
-        with process.stdout:
-            while True:
-                line = process.stdout.readline(4097)
-                if not line:
-                    break
-                if len(line) > 4096:
-                    # Drop the entire oversized record, rather than leaking split tokens.
-                    while line and not line.endswith('\n'):
-                        line = process.stdout.readline(4097)
-                    self.log('[Oversized diagnostic omitted]')
-                    continue
-                self.log(line.rstrip())
+        def log(line):
+            # Capture this child's secrets: a quick restart must not use the
+            # replacement configuration's redaction set for old output.
+            try:
+                self.events.put_nowait(redact_log(line, self.secrets if secrets is None else secrets))
+            except queue.Full:
+                pass
+        try:
+            with process.stdout:
+                while True:
+                    line = process.stdout.readline(4097)
+                    if not line:
+                        break
+                    if len(line) > 4096:
+                        # Drop the entire oversized record, not split tokens.
+                        while line and not line.endswith('\n'):
+                            line = process.stdout.readline(4097)
+                        log('[Oversized diagnostic omitted]')
+                        continue
+                    if values is not None and engine_backend.is_ready(line.rstrip(), values):
+                        with self._state_lock:
+                            if self.process is process:
+                                self.ready = True
+                    log(line.rstrip())
+        finally:
+            if launch is not None:
+                process.wait()
+                if process.stdin is not None:
+                    try:
+                        process.stdin.close()
+                    except (OSError, ValueError):
+                        pass
+                launch.cleanup()
 
     def stop(self) -> None:
         process = self.process
@@ -186,6 +230,12 @@ class BackendProcess:
             return None
         result = process.poll()
         if result is not None:
+            with self._state_lock:
+                if self.process is process:
+                    self.process = None
+                    self.ready = False
+            if self.launch is not None:
+                self.launch.cleanup()
             return result
         if self.stopping_since is not None and not self._signaled and time.monotonic() - self.stopping_since > 10:
             self._signaled = True
@@ -195,6 +245,16 @@ class BackendProcess:
             except (OSError, ValueError):
                 self.log('Shutdown is taking longer than expected. Keep this window open.')
         return None
+
+    def _at_exit(self):
+        self.stop()
+        if self.process is not None:
+            try:
+                self.process.wait(timeout=12)
+            except subprocess.TimeoutExpired:
+                return
+        if self.launch is not None:
+            self.launch.cleanup()
 
 
 class DesktopApp:
@@ -211,8 +271,9 @@ class DesktopApp:
         self.loading = False
         self.closing = False
         self.inputs = []
+        self.engine_inputs = {}
         root.title('PS Portal On-Demand')
-        root.minsize(740, 650)
+        root.minsize(740, 750)
         root.protocol('WM_DELETE_WINDOW', self.close)
         outer = ttk.Frame(root, padding=16)
         outer.pack(fill='both', expand=True)
@@ -228,16 +289,22 @@ class DesktopApp:
             variable = tk.StringVar()
             variable.trace_add('write', self._changed)
             self.vars[key] = variable
-            if key == 'selection_mode':
-                widget = ttk.Combobox(outer, textvariable=variable, values=('auto', 'prefer', 'fixed'), state='readonly')
+            if key in ('selection_mode', 'engine_mode'):
+                choices = ('auto', 'prefer', 'fixed') if key == 'selection_mode' else ('external', 'embedded')
+                widget = ttk.Combobox(outer, textvariable=variable, values=choices, state='readonly')
             else:
                 widget = ttk.Entry(outer, textvariable=variable, show='•' if key == 'subscription_url' else '')
-            widget.grid(row=row, column=1, columnspan=1 if key in ('core_path', 'subscription_file') else 2, sticky='ew', pady=4)
-            self.inputs.append((widget, 'readonly' if key == 'selection_mode' else 'normal'))
-            if key in ('core_path', 'subscription_file'):
-                browse = ttk.Button(outer, text='Browse…', command=self.choose_core if key == 'core_path' else self.choose_provider)
+            widget.grid(row=row, column=1, columnspan=1 if key in ('core_path', 'native_path', 'subscription_file') else 2, sticky='ew', pady=4)
+            self.inputs.append((widget, 'readonly' if key in ('selection_mode', 'engine_mode') else 'normal'))
+            if key in ('core_path', 'native_path', 'backend_port', 'api_port'):
+                self.engine_inputs[key] = [widget]
+            if key in ('core_path', 'native_path', 'subscription_file'):
+                command = {'core_path': self.choose_core, 'native_path': self.choose_native, 'subscription_file': self.choose_provider}[key]
+                browse = ttk.Button(outer, text='Browse…', command=command)
                 browse.grid(row=row, column=2, padx=(8, 0))
                 self.inputs.append((browse, 'normal'))
+                if key in self.engine_inputs:
+                    self.engine_inputs[key].append(browse)
         controls_row = 3 + len(FIELDS)
         controls = ttk.Frame(outer)
         controls.grid(row=controls_row, column=0, columnspan=3, sticky='ew', pady=(12, 8))
@@ -249,16 +316,32 @@ class DesktopApp:
         self.stop_button.pack(side='left')
         self.status_var = tk.StringVar(value='Stopped')
         ttk.Label(controls, textvariable=self.status_var).pack(side='right')
-        ttk.Label(outer, text='Keep this computer awake and on the same LAN. Configure the Portal with the LAN IPv4 and proxy port above.', wraplength=680).grid(row=controls_row + 1, column=0, columnspan=3, sticky='w', pady=(0, 8))
+        self.mode_note_var = tk.StringVar()
+        ttk.Label(outer, textvariable=self.mode_note_var, wraplength=680).grid(row=controls_row + 1, column=0, columnspan=3, sticky='w', pady=(0, 8))
+        ttk.Label(outer, text='Keep this computer awake and on the same LAN. Configure the Portal with the LAN IPv4 and proxy port above.', wraplength=680).grid(row=controls_row + 2, column=0, columnspan=3, sticky='w', pady=(0, 8))
         self.log_widget = ScrolledText(outer, height=9, state='disabled', wrap='word')
-        self.log_widget.grid(row=controls_row + 2, column=0, columnspan=3, sticky='nsew')
-        outer.rowconfigure(controls_row + 2, weight=1)
+        self.log_widget.grid(row=controls_row + 3, column=0, columnspan=3, sticky='nsew')
+        outer.rowconfigure(controls_row + 3, weight=1)
         self.load()
         root.after(150, self.poll)
 
     def _changed(self, *_):
         if not self.loading:
             self.dirty = True
+            self.engine_controls()
+
+    def engine_controls(self):
+        running = self.backend.process is not None and self.backend.process.poll() is None
+        mode = self.vars['engine_mode'].get() if 'engine_mode' in self.vars else 'external'
+        for key, widgets in self.engine_inputs.items():
+            active = mode == ('embedded' if key == 'native_path' else 'external')
+            for widget in widgets:
+                widget.configure(state='normal' if active and not running else 'disabled')
+        if hasattr(self, 'mode_note_var'):
+            self.mode_note_var.set(
+                'Experimental embedded mode: restricted adapter subset, public-only node endpoints. Some subscriptions are unsupported; fixed mode never silently falls back. See desktop.md.'
+                if mode == 'embedded' else
+                'External mode: separate trusted Mihomo executable. This remains the default fallback.')
 
     def load(self):
         from tkinter import messagebox
@@ -267,7 +350,8 @@ class DesktopApp:
         except (OSError, UnicodeError, ValueError):
             messagebox.showerror('Cannot open configuration', 'The file could not be read as a JSON configuration. Choose a different file.', parent=self.root)
             self.raw = {}
-        defaults = dict(config.DEFAULTS, listen_host='', allowed_clients=[], core_path='', subscription_url='')
+        defaults = dict(config.DEFAULTS, listen_host='', allowed_clients=[], core_path='', subscription_url='',
+                        native_path=str(config.bundled_native_path() or ''))
         defaults.update(self.raw)
         self.loading = True
         for key, variable in self.vars.items():
@@ -278,6 +362,7 @@ class DesktopApp:
         self.loading = False
         self.dirty = False
         self.path_var.set(str(self.path))
+        self.engine_controls()
 
     def choose_config(self):
         from tkinter import filedialog, messagebox
@@ -299,6 +384,12 @@ class DesktopApp:
         name = filedialog.askopenfilename(title='Choose local Clash/Mihomo provider YAML', filetypes=[('YAML provider', '*.yaml *.yml'), ('All files', '*')], parent=self.root)
         if name:
             self.vars['subscription_file'].set(name)
+
+    def choose_native(self):
+        from tkinter import filedialog
+        name = filedialog.askopenfilename(title='Choose your verified PSPortal native engine executable', parent=self.root)
+        if name:
+            self.vars['native_path'].set(name)
 
     def collect(self) -> dict:
         values = dict(self.raw)
@@ -338,6 +429,8 @@ class DesktopApp:
         self.stop_button.configure(state='normal' if running else 'disabled')
         for widget, normal in self.inputs:
             widget.configure(state='disabled' if running else normal)
+        if not running:
+            self.engine_controls()
 
     def start(self):
         from tkinter import messagebox
@@ -347,8 +440,11 @@ class DesktopApp:
             return
         try:
             self.backend.start(self.path, self.raw)
-        except (OSError, RuntimeError):
-            messagebox.showerror('Cannot start listener', 'The listener process could not start. Check the application files and executable permissions.', parent=self.root)
+        except (OSError, RuntimeError, ValueError):
+            message = ('The experimental embedded engine could not start. Check its executable path, OS/CPU compatibility and permissions. No engine switch was made.'
+                       if self.raw.get('engine_mode') == 'embedded' else
+                       'The listener process could not start. Check the application files and executable permissions.')
+            messagebox.showerror('Cannot start listener', message, parent=self.root)
             return
         self.running_controls(True)
         self.status_var.set('Process running')
@@ -364,8 +460,6 @@ class DesktopApp:
                 line = self.backend.events.get_nowait()
             except queue.Empty:
                 break
-            if line.startswith('Proxy ready at ') and self.backend.stopping_since is None:
-                self.status_var.set('Listening')
             self.log_widget.configure(state='normal')
             self.log_widget.insert('end', line + '\n')
             count = int(self.log_widget.index('end-1c').split('.')[0])
@@ -373,11 +467,12 @@ class DesktopApp:
                 self.log_widget.delete('1.0', f'{count - MAX_LOG_LINES}.0')
             self.log_widget.see('end')
             self.log_widget.configure(state='disabled')
+        if self.backend.ready and self.backend.stopping_since is None:
+            self.status_var.set('Listening')
         process = self.backend.process
         if process is not None:
             result = self.backend.poll()
             if result is not None:
-                self.backend.process = None
                 self.status_var.set('Stopped' if result == 0 else 'Stopped with error')
                 self.backend.log('Listener exited.' if result == 0 else f'Listener exited with code {result}.')
                 self.running_controls(False)

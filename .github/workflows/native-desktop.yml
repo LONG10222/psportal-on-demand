@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: GPL-3.0-only
+name: Native Desktop Runtime Tests
+'on':
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'native/**'
+      - '.github/workflows/native-desktop.yml'
+permissions:
+  contents: read
+concurrency:
+  group: native-desktop-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  native-desktop:
+    # Standard public-repository runners only. No larger or private paid runners.
+    if: github.event.repository.private == false
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, windows-2025, windows-11-arm, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      GOMAXPROCS: '2'
+      GOFLAGS: '-buildvcs=false -p=2'
+      GOTOOLCHAIN: local
+      PYTHONUTF8: '1'
+    steps:
+      - name: Check out source without persisting credentials
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Set up pinned Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6, immutable commit
+        with:
+          python-version: '3.13'
+          cache: ''
+      - name: Test actual host binary and package matching source and licenses
+        run: python native/scripts/ci_desktop.py
+      - name: Upload native runtime-tested executable with corresponding source
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: psportal-native-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          path: native/dist/ci-desktop/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+      - name: Upload test diagnostics when validation fails
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: psportal-native-diagnostics-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          path: |
+            native/dist/ci-desktop/*.jsonl
+            native/dist/ci-desktop/*.txt
+          if-no-files-found: ignore
+          retention-days: 1

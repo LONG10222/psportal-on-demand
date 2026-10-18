@@ -1,111 +1,69 @@
 # PS Portal On-Demand
 
-[![CI](https://github.com/LONG10222/psportal-on-demand/actions/workflows/check.yml/badge.svg)](https://github.com/LONG10222/psportal-on-demand/actions/workflows/check.yml)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+为 PlayStation Portal 提供按需启动的 HTTP/HTTPS 代理。外网请求唤醒代理核心，空闲后关闭；局域网连接直连。
 
-[简体中文](README.zh-CN.md) | English
+[下载与安装](docs/downloads.zh-CN.md) · [路由器指南](README.zh-CN.md) · [桌面指南](portable/docs/desktop.md) · [验证记录](docs/portable-status.zh-CN.md)
 
-An on-demand proxy for PlayStation Portal on OpenWrt / iStoreOS. Starts Mihomo for external requests and stops it after 60 seconds of inactivity.
+## 功能
 
-- **On-demand core**: the listener starts at boot; external requests wake the proxy core.
-- **Automatic fallback**: uses your own subscription, preferring Hong Kong → Japan → other regions.
-- **Single client**: an IP allowlist and the Portal's manual HTTP proxy setting handle access.
-- **Independent service**: separate core and configuration, with direct LAN connections. OpenClash can remain stopped.
+- 独立运行，不依赖 OpenClash 服务，不改系统代理、DNS 或 VPN
+- 使用自己的 Clash/Mihomo 订阅，支持自动选择、首选回退和固定节点
+- 按客户端 IP 限制接入；活跃外网连接不会被空闲计时器中断
+- Windows、macOS、Linux 共用桌面界面；Android 与 iOS 使用共享原生引擎
 
-> Node preferences and the optional authenticated legacy LuCI page require target-version OpenWrt/Mihomo/LuCI acceptance. Local mocks do not establish core compatibility. See [operations and acceptance notes (Chinese)](docs/node-preferences.zh-CN.md).
+本项目处理 HTTP 和 HTTPS CONNECT，不转发任意 UDP，也不能保证 Portal 的所有流量都会使用手动代理。真实 Portal/Wi-Fi 与订阅节点仍需验收。
 
-## Quick start
+## 平台
 
-### 1. Requirements
+当前提供开发预览版，尚未发布正式 Release。
 
-- An OpenWrt / iStoreOS router with Lua 5.1, LuCI, and procd.
-- A [Mihomo binary](https://github.com/MetaCubeX/mihomo/releases) for the router's architecture. An existing OpenClash core can be reused.
-- Your own HTTPS Clash/Mihomo YAML subscription.
-- A DHCP reservation for the Portal on your main router.
+| 平台 | 可用形式 | 说明 |
+| --- | --- | --- |
+| OpenWrt / iStoreOS | Lua 服务、可选 LuCI 页面 | 原有路由器版本；需目标设备验收 |
+| Windows x64 | 桌面程序 | 无需另装 Python；未做代码签名 |
+| macOS Apple Silicon | 桌面 `.app` | 至少 macOS 13，实测 macOS 15；未做 Developer ID 签名或公证 |
+| Linux x86_64 | 桌面程序 | 实测 Debian 13；需 GLIBC_2.38 符号及图形环境 |
+| Linux / Windows / macOS | amd64、arm64 原生 CLI | 六种组合已在对应系统运行；功能仍为实验性 |
+| Android | arm64-v8a、x86_64 APK | Android 8+，开发签名；运行证据来自 x86_64 模拟器 |
+| iOS | arm64 Simulator、未签名设备构建 | 仅前台运行；设备版需自行签名与配置 |
 
-### 2. Install
+架构、运行条件和每个产物对应的提交见[下载说明](docs/downloads.zh-CN.md)。编译、模拟器测试和手机实测不等价。
 
-SSH into the OpenWrt router and run as root:
+## 快速开始
 
-```sh
-cd /tmp
-curl -fL https://github.com/LONG10222/psportal-on-demand/archive/refs/heads/main.tar.gz -o portal-source.tar.gz
-tar -xzf portal-source.tar.gz
-cd psportal-on-demand-main
-sh install.sh
-portalproxy setup
-```
+### 桌面
 
-The installer looks for an existing project binary, `/etc/openclash/core/clash_meta`, then `/usr/bin/mihomo`. To use another binary, replace the install command with:
+1. 下载并解压匹配系统的完整桌面归档。若拿到的是 `runtime`、`native-engine`、`corresponding-source` 三个小包，**解压到同一个目录**；不要混用不同版本
+2. 打开桌面程序，填写本机局域网 IPv4、Portal 的固定 IPv4、端口（默认 `10081`）和自己的 HTTPS 订阅
+3. 选择引擎：默认 `external` 使用自行准备的可信 [Mihomo](https://github.com/MetaCubeX/mihomo/releases)；实验性 `embedded` 使用随包原生引擎。两者失败时不会自动互换
+4. 保存并启动监听，等到状态显示就绪。Portal 的手动 HTTP 代理填写这台电脑的地址和端口，IP/网关/DNS 保持原有设置
 
-```sh
-sh install.sh --core /path/to/mihomo
-```
+电脑需保持运行并与 Portal 网络互通。完整解压命令、运行依赖和移动端安装见[安装说明](docs/downloads.zh-CN.md)。路由器用户直接看[OpenWrt / iStoreOS 安装](README.zh-CN.md#快速开始)，不要在桌面执行 `install.sh`。
 
-If Lua dependencies are missing:
+### 节点选择
 
-```sh
-opkg update
-opkg install lua luci-lib-nixio luci-lib-jsonc luci-lib-base libuci-lua curl ca-bundle
-```
-
-### 3. Configure
-
-Run `portalproxy setup` and follow the prompts. Replace the example addresses with your own:
-
-| Prompt | Example |
+| 模式 | 行为 |
 | --- | --- |
-| OpenWrt LAN IPv4 address | Router address `192.168.50.2` |
-| Portal reserved IPv4 address | Portal reservation `192.168.50.30` |
-| LAN DNS server | Main router `192.168.50.1` |
-| Working bootstrap DNS | `192.168.50.1` |
-| HTTP proxy port | `10081` |
-| External idle timeout | `60` |
-| HTTPS subscription URL | Your subscription; input is hidden |
-| Optional local Clash/Mihomo YAML seed file | Leave empty or enter an existing configuration path |
-| Outbound routing mark | `0` without OpenClash; see [coexistence settings](docs/guide.md#openclash) |
+| `auto` | 香港 → 日本 → 其他节点，结合健康状态选择 |
+| `prefer` | 优先指定节点，不可用时按自动顺序回退 |
+| `fixed` | 只用指定节点；名称不存在或节点不可用时失败，不换节点、不直连外网 |
 
-Setup starts the listener and enables it at boot.
+`prefer` / `fixed` 填写订阅中的**完整节点名**。桌面还可选择本地 provider 文件；非空文件路径优先于 URL。移动端使用 HTTPS 订阅。内置引擎只导入节点数据，不接受完整配置中的脚本、系统路由或任意文件引用；支持范围见[原生引擎说明](native/README.md)。
 
-On the **Portal → Wi-Fi → current network → advanced settings**:
+## 使用限制
 
-- Keep IP, gateway, and DNS on automatic.
-- Enable the manual HTTP proxy, using the OpenWrt address and the port set above.
-- For this example, use `192.168.50.2:10081`.
+只在可信局域网使用，不要把监听端口转发到公网。IP 白名单不是身份认证；订阅 URL 可能含凭据，不要贴到日志或 Issue。程序不自动放行防火墙。
 
-If no seed was imported, run `portalproxy subscription-update` before connecting. Updates are explicit, and a running core may reload the file immediately and switch routes. Viewing cached status never wakes the core.
+Android 需要用户主动启动前台服务；关屏短时测试通过不代表 Doze 或所有手机省电策略均可用。iOS 切到后台会停止代理，不提供后台常驻承诺。真实手机、Portal 和公网加密节点端到端验证仍有缺口，详见[验证记录](docs/portable-status.zh-CN.md)。
 
-## Commands
+## 文档与开发
 
-```sh
-portalproxy status     # Show service status
-portalproxy setup      # Edit configuration
-portalproxy check      # Validate configuration
-portalproxy restart    # Restart the service
-portalproxy stop       # Stop the service
-portalproxy disable    # Stop and disable at boot
-portalproxy enable     # Start and enable at boot
-```
+- [路由器配置、OpenClash 共存与排障](docs/guide.zh-CN.md) · [English router guide](docs/router-readme.en.md)
+- [节点偏好与 LuCI](docs/node-preferences.zh-CN.md)
+- [桌面源码运行与测试](portable/README.md)
+- [原生引擎与构建](native/README.md) · [Android](native/android/README.md) · [iOS](native/ios/README.md)
+- [安全说明](SECURITY.md) · [GitHub Actions](https://github.com/LONG10222/psportal-on-demand/actions)
 
-Configuration: `/etc/config/portalproxy`. After editing, run `portalproxy check` and `portalproxy restart`.
+## 许可证
 
-## Update and uninstall
-
-Download the new source, run `sh install.sh`, then `portalproxy restart`. Existing configuration is retained; upgrade backups are stored in `/etc/portalproxy-backups/`.
-
-```sh
-sh uninstall.sh          # Uninstall, keep configuration
-sh uninstall.sh --purge  # Uninstall and remove configuration
-```
-
-Disable the Portal's manual proxy setting after uninstalling.
-
-## Documentation
-
-- [Configuration, OpenClash, troubleshooting, and tests](docs/guide.md)
-- [Changelog](CHANGELOG.md)
-- [Security and diagnostics](SECURITY.md)
-
-## License
-
-[MIT](LICENSE). The proxy core is provided by [Mihomo](https://github.com/MetaCubeX/mihomo) under its upstream license.
+原有路由器代码与桌面包装层使用 [MIT](LICENSE)。链接 Mihomo 的原生引擎使用 [GPL-3.0-only](native/LICENSE)，依赖遵循各自许可证。分发原生程序时，请保留同版本完整对应源码、vendor 依赖和许可证；不要只转发二进制。

@@ -53,6 +53,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         config = load(args.config)
+        if config['engine_mode'] == 'embedded':
+            from pathlib import Path
+            from .backend import run_native
+            return run_native(Path(args.config), config, check=args.check, desktop_child=args.desktop_child)
         if args.check:
             print('Configuration is valid.', flush=True)
             return 0

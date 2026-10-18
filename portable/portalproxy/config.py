@@ -1,22 +1,47 @@
 """Portable configuration, independent of UCI, procd and system proxy settings."""
 import ipaddress
 import json
+import os
 import re
+import sys
+import unicodedata
 from pathlib import Path
 from urllib.parse import urlsplit
 
 DEFAULTS = dict(listen_port=10081, backend_port=10082, api_port=10090,
     idle_seconds=60, wakeup_timeout=45, request_timeout=30, max_connections=128,
     selection_mode='auto', preferred_node='', health_url='https://www.gstatic.com/generate_204',
-    health_interval=300, health_timeout=5000)
+    health_interval=300, health_timeout=5000, engine_mode='external')
+
+
+def bundled_native_path():
+    """Look only inside this app's bundle, never search PATH or download a core."""
+    name = 'psportal-native.exe' if sys.platform == 'win32' else 'psportal-native'
+    if not getattr(sys, 'frozen', False):
+        return None
+    roots = [Path(sys.executable).resolve().parent]
+    if getattr(sys, '_MEIPASS', None):
+        roots.append(Path(sys._MEIPASS))
+    for root in roots:
+        candidate = root / 'native' / name
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 def load(path):
     with open(path, encoding='utf-8') as stream:
         raw = json.load(stream)
+    return validate(raw, path)
+
+
+def validate(raw, path):
+    """Validate without network access or executing either engine."""
     if not isinstance(raw, dict):
         raise ValueError('Configuration must be an object')
     cfg = dict(DEFAULTS, **raw)
+    if cfg['engine_mode'] not in ('external', 'embedded'):
+        raise ValueError('engine_mode must be external or embedded')
     for key in ('listen_port', 'backend_port', 'api_port'):
         if type(cfg[key]) is not int or not 1024 <= cfg[key] <= 65535:
             raise ValueError(key + ' must be an unprivileged TCP port')
@@ -52,11 +77,16 @@ def load(path):
     if cfg['selection_mode'] != 'auto' and not cfg['preferred_node']:
         raise ValueError('preferred_node is required for prefer/fixed mode')
     seed = cfg.get('subscription_file')
-    if seed is not None:
+    if seed not in (None, ''):
+        if not isinstance(seed, str):
+            raise ValueError('subscription_file must be an existing absolute file no larger than 10 MiB')
         seed = Path(seed).expanduser()
         if not seed.is_absolute() or not seed.is_file() or seed.stat().st_size > 10 * 1024 * 1024:
             raise ValueError('subscription_file must be an existing absolute file no larger than 10 MiB')
         cfg['subscription_file'] = str(seed)
+    else:
+        seed = None
+        cfg.pop('subscription_file', None)
     for key in (('health_url',) if seed else ('subscription_url', 'health_url')):
         value = cfg.get(key)
         try:
@@ -69,12 +99,51 @@ def load(path):
             valid = False
         if not valid:
             raise ValueError(key + ' must be an HTTPS URL without userinfo or fragment')
-    core = Path(cfg.get('core_path', '')).expanduser()
-    if not core.is_absolute() or not core.is_file():
-        raise ValueError('core_path must be an absolute path to an existing Mihomo executable')
-    cfg['core_path'] = str(core)
+    if cfg['engine_mode'] == 'external':
+        core = Path(cfg.get('core_path', '')).expanduser()
+        if not core.is_absolute() or not core.is_file():
+            raise ValueError('core_path must be an absolute path to an existing Mihomo executable')
+        cfg['core_path'] = str(core)
+    else:
+        _validate_embedded(cfg, bool(seed))
     cfg['data_dir'] = str(Path(cfg.get('data_dir', Path(path).resolve().parent / 'runtime')).expanduser().resolve())
     return cfg
+
+
+def _validate_embedded(cfg, has_local_provider):
+    # Match the native schema's tighter limits without changing the established
+    # external-Mihomo fallback. Native --check remains the authoritative check.
+    for key in ('idle_seconds', 'wakeup_timeout', 'request_timeout', 'health_interval', 'health_timeout', 'max_connections'):
+        if type(cfg[key]) is not int:
+            raise ValueError(key + ' must be an integer for the embedded engine')
+    clients = cfg['allowed_clients']
+    if len(clients) > 256 or len(set(clients)) != len(clients):
+        raise ValueError('Embedded engine requires at most 256 unique allowed_clients')
+    if cfg['max_connections'] > 4096:
+        raise ValueError('Embedded max_connections must not exceed 4096')
+    name = cfg['preferred_node']
+    if (len(name.encode('utf-8')) > 256 or name.strip() != name
+            or any(unicodedata.category(c) in ('Cc', 'Cf') for c in name)
+            or re.sub(r'[\s_-]', '', name).lower() in ('rematch', 'passrule')):
+        raise ValueError('Invalid preferred_node for the embedded engine')
+    from .policy import destination
+    for key in (('health_url',) if has_local_provider else ('subscription_url', 'health_url')):
+        value = cfg[key]
+        url = urlsplit(value)
+        if (len(value.encode('utf-8')) > 8192 or url.port not in (None, 443)
+                or any(c.isspace() or unicodedata.category(c) == 'Cc' for c in value)
+                or destination(url.hostname) not in ('external', 'name')):
+            raise ValueError(key + ' must be a public HTTPS URL on port 443 for the embedded engine')
+    value = cfg.get('native_path') or bundled_native_path()
+    if not isinstance(value, (str, Path)):
+        raise ValueError('native_path must identify an existing PSPortal native executable')
+    native = Path(value).expanduser()
+    if sys.platform == 'win32' and native.suffix.lower() != '.exe':
+        raise ValueError('native_path must identify a native Windows .exe, not a script')
+    if (not native.is_absolute() or not native.is_file()
+            or (os.name != 'nt' and not os.access(native, os.X_OK))):
+        raise ValueError('native_path must be an absolute path to an executable PSPortal native engine')
+    cfg['native_path'] = str(native)
 
 
 def render(cfg, secret):

@@ -1,0 +1,537 @@
+{
+  "schema_version": 1,
+  "scope": "Exact observed macOS arm64 CPython3.13.15/PyInstaller6.16.0 origins only; candidate manifest pending strict transformed-origin proof",
+  "distribution_approved": false,
+  "evidence_run": "https://github.com/LONG10222/psportal-on-demand/actions/runs/39109675559",
+  "evidence_artifact_id": 12130400767,
+  "evidence_artifact_sha256": "8b04c8903869cd568dfc17ed73d6a9767ff632a9ec5f7f59de2a0b10c07f8356",
+  "python_version": "3.13.15",
+  "pyinstaller_version": "6.16.0",
+  "architecture": "arm64",
+  "original_python_prefix": "/Library/Frameworks/Python.framework/Versions/3.13",
+  "expected_binary_path_count": 64,
+  "runtime_files": {
+    "Contents/Frameworks/Python": {
+      "source_relative": "Python",
+      "source_sha256": "6f249c800ff9b7f29207d6c95186784a43db1cfa3383527a6ef4b45a3115a715",
+      "type": "BINARY",
+      "resolved_bundle_path": "Contents/Frameworks/Python.framework/Versions/3.13/Python",
+      "reference_packaged_sha256": "bd4a282949edb1300a602cfa02b8a850fad987f64ad73d75f9d7b137590af67b"
+    },
+    "Contents/Frameworks/Python.framework/Python": {
+      "source_relative": "Python",
+      "source_sha256": "6f249c800ff9b7f29207d6c95186784a43db1cfa3383527a6ef4b45a3115a715",
+      "type": "BINARY",
+      "resolved_bundle_path": "Contents/Frameworks/Python.framework/Versions/3.13/Python",
+      "reference_packaged_sha256": "bd4a282949edb1300a602cfa02b8a850fad987f64ad73d75f9d7b137590af67b"
+    },
+    "Contents/Frameworks/Python.framework/Versions/3.13/Python": {
+      "source_relative": "Python",
+      "source_sha256": "6f249c800ff9b7f29207d6c95186784a43db1cfa3383527a6ef4b45a3115a715",
+      "type": "BINARY",
+      "resolved_bundle_path": "Contents/Frameworks/Python.framework/Versions/3.13/Python",
+      "reference_packaged_sha256": "bd4a282949edb1300a602cfa02b8a850fad987f64ad73d75f9d7b137590af67b"
+    },
+    "Contents/Frameworks/Tcl": {
+      "source_relative": "Frameworks/Tcl.framework/Tcl",
+      "source_sha256": "6d6f08f63dc2f5e8f4be8c9be1ebf268d3a569c64408bf34cfb16c80b4c08f6f",
+      "type": "BINARY",
+      "resolved_bundle_path": "Contents/Frameworks/Tcl",
+      "reference_packaged_sha256": "579d7bbae75d56569ebdb7cff8ce21bc5906256148a2963e9b682bd06c42683e"
+    },
+    "Contents/Frameworks/Tk": {
+      "source_relative": "Frameworks/Tk.framework/Tk",
+      "source_sha256": "f546968c4c4d9175d7e8a4f710043b90f9ca63baad13a1e2f40568b4fedd7d0e",
+      "type": "BINARY",
+      "resolved_bundle_path": "Contents/Frameworks/Tk",
+      "reference_packaged_sha256": "cbb9ad0b42ead414ea992c12ff0eb6644d8c00b5ac5cc6d9ad21b61bb194db66"
+    },
+    "Contents/Frameworks/libcrypto.3.dylib": {
+      "source_relative": "lib/libcrypto.3.dylib",
+      "source_sha256": "fc0f2f371a6a030a0aba6deb378d0cc173db18d99361524e3737176484d1af24",
+      "type": "BINARY",
+      "resolved_bundle_path": "Contents/Frameworks/libcrypto.3.dylib",
+      "reference_packaged_sha256": "2bc706b50b8f4104a83bad33f00bc74631cbac341147dfced6259501f311b07b"
+    },
+    "Contents/Frameworks/libssl.3.dylib": {
+      "source_relative": "lib/libssl.3.dylib",
+      "source_sha256": "35534366a0ee006b05f7b85071e2627be2338dc9f40e40992b9c41bb6b55d0c4",
+      "type": "BINARY",
+      "resolved_bundle_path": "Contents/Frameworks/libssl.3.dylib",
+      "reference_packaged_sha256": "7ede9db4a766b12d1aca30a3b4391dc84209747b7009842e91f6118c9a877256"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_asyncio.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_asyncio.cpython-313-darwin.so",
+      "source_sha256": "29df117765c9dde2139ce30dae1f5d2670e51b20e97291d1c34823f1065740f1",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_asyncio.cpython-313-darwin.so",
+      "reference_packaged_sha256": "d474ba5db65535d37d11517e6ab0b743cd90bfeb92c6cb167e899be1b30ed70b"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_bisect.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_bisect.cpython-313-darwin.so",
+      "source_sha256": "76ac5f88f63928a4ebe5698d5b27b6ccccdc22353057d73152c0ba30e9cbaf76",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_bisect.cpython-313-darwin.so",
+      "reference_packaged_sha256": "9d361cda31ad9527e906b605addc821748a34bb051b2c7c7d4ca4617c94048c3"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_blake2.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_blake2.cpython-313-darwin.so",
+      "source_sha256": "9d15349745f2337e8d925e6b8507b4b243ababca7d72704296a10ac34a1eae47",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_blake2.cpython-313-darwin.so",
+      "reference_packaged_sha256": "78e2862c3a1362aed17ddc7d651063dad131b31baf3a603033b5cfc4cbf79f3f"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_bz2.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_bz2.cpython-313-darwin.so",
+      "source_sha256": "f06cddf1612060df4b2061277052511cabfef12b3280d510c669c83cab0c1504",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_bz2.cpython-313-darwin.so",
+      "reference_packaged_sha256": "c217326b6723119c04c4787bd0cc4e379a030a5b97d6f9b6ff2153eca6243be7"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_codecs_cn.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_codecs_cn.cpython-313-darwin.so",
+      "source_sha256": "4bac735e7d56f77900147e5971c4de6a6cb8a2abcf10f6ecce87da94ffe47e6a",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_codecs_cn.cpython-313-darwin.so",
+      "reference_packaged_sha256": "2eb55aea03aa948a9d1688a9724f34987d9aa315c22305f60785813f8adf85ad"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_codecs_hk.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_codecs_hk.cpython-313-darwin.so",
+      "source_sha256": "2e88a9a82571990c0f1f7cee09c33919032093bb964cca8bb1a143cb7854a495",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_codecs_hk.cpython-313-darwin.so",
+      "reference_packaged_sha256": "405c95a5cac3126774f9ac14f7d34ce1e74b4685867fd971e91c5ba0560e77e9"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_codecs_iso2022.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_codecs_iso2022.cpython-313-darwin.so",
+      "source_sha256": "0edb34c406ee3433383ca39505ccca130cdf65d6a97c3669ea468ada4c99161e",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_codecs_iso2022.cpython-313-darwin.so",
+      "reference_packaged_sha256": "4552ff0831ac46e3b297e760ad326b37d86baf9e10d733f90374c1f13186d647"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_codecs_jp.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_codecs_jp.cpython-313-darwin.so",
+      "source_sha256": "86ff719b94fc35cfacd1ad2910b98a9615ab3891b3244af2b77d2a4ec7fa1b31",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_codecs_jp.cpython-313-darwin.so",
+      "reference_packaged_sha256": "c62adeac7e7d9ef8285bfb93f7e39dd107d0adb7f499af672efeacf948dd8c11"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_codecs_kr.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_codecs_kr.cpython-313-darwin.so",
+      "source_sha256": "d51e98352a2163297287db9eb658be4ddf6fd58b82507845b9a62de8929c5b4c",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_codecs_kr.cpython-313-darwin.so",
+      "reference_packaged_sha256": "db7a3ab8a883e2b3553cefe7c931879539b4cad6d37dc6b5e8260b79ee3ed709"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_codecs_tw.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_codecs_tw.cpython-313-darwin.so",
+      "source_sha256": "3f272a3ddc33de0a127127f0b4562290a28dfc426b38487518d6870a5226a992",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_codecs_tw.cpython-313-darwin.so",
+      "reference_packaged_sha256": "23cc1556c3c54475ea14f14f32e2bbb1f167259a4d961a504115c9375e71f9a6"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_contextvars.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_contextvars.cpython-313-darwin.so",
+      "source_sha256": "45881e590f6c4152b295ce8a45b37eca25b59161224ccda3590c867d6b50e553",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_contextvars.cpython-313-darwin.so",
+      "reference_packaged_sha256": "19d209fb4edd283a0694f69f277e75d31c1af5343de0ea45b828e9c508c84f32"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_csv.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_csv.cpython-313-darwin.so",
+      "source_sha256": "5fc2980b7651c88d125d0d4d2fdd757a04523da35f0060e4711eacc584ef8ae8",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_csv.cpython-313-darwin.so",
+      "reference_packaged_sha256": "d8f58cb5786961743b4c2ca0c059a979fdf3ececa6360920d8dacc04d083adb0"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_ctypes.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_ctypes.cpython-313-darwin.so",
+      "source_sha256": "26622ae25072978ee53a20b83bb44d886631b65b07c72e70f04e7cf46838bd87",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_ctypes.cpython-313-darwin.so",
+      "reference_packaged_sha256": "03aab09d29ca3d432d4aee970fbe9f575d238584147b324463d8b2d5bc964951"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_datetime.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_datetime.cpython-313-darwin.so",
+      "source_sha256": "291690f135ae173087f4a9b035c6225bc2f77c35ff3bbfb20c9c6e7c28375351",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_datetime.cpython-313-darwin.so",
+      "reference_packaged_sha256": "c2d2e6ace6ac1dfa1447b29a7f31ea6973c42681676010e85f29f010d325b3d7"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_decimal.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_decimal.cpython-313-darwin.so",
+      "source_sha256": "0c1b3ac38a476672ab40aaddbb28ac6d8719092744412f00dea1e10b7e9f6940",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_decimal.cpython-313-darwin.so",
+      "reference_packaged_sha256": "81166b1ce450c87176bc9e9bd3e0f775ed489ed7c13772b9533bc26a51c720a7"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_hashlib.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_hashlib.cpython-313-darwin.so",
+      "source_sha256": "20e011632e6574f4372ba372e9751d5954d9986fd1477b4e89997ede64c96121",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_hashlib.cpython-313-darwin.so",
+      "reference_packaged_sha256": "1e61e95f9c21e6ad219b33044f58d8a5bd92cd5bf5a83e66fe6555dc5367627b"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_heapq.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_heapq.cpython-313-darwin.so",
+      "source_sha256": "060a08ee1f33b6fbe40debcd9dda19eb1d02c150402eff35f8dd646faae7ab4f",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_heapq.cpython-313-darwin.so",
+      "reference_packaged_sha256": "324d686917f990a0bd5c739305e4c0c1596da231024e33c684583704861ed822"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_json.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_json.cpython-313-darwin.so",
+      "source_sha256": "dd75ec3cb53bdd4acb17722bc774c0d1e6d82c11073d8cca6ff1fb042d6f6a90",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_json.cpython-313-darwin.so",
+      "reference_packaged_sha256": "458a6b3f215c3ebaffba680a92f1ba03f84df8ac2e47c8d9a2fa227b272a945b"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_lzma.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_lzma.cpython-313-darwin.so",
+      "source_sha256": "39a264cf3f6a374f3893afee30ce9e59e37cc22adfea0b1e16b4eb97f41115b9",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_lzma.cpython-313-darwin.so",
+      "reference_packaged_sha256": "65059b9d0cdd93947d776afe4228e3206e5e166121565062053cfd25898b26b7"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_md5.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_md5.cpython-313-darwin.so",
+      "source_sha256": "9bca26c6601ea23f30f37f8f0b4a054b59bc433381ab9604713f8d7ed28b6358",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_md5.cpython-313-darwin.so",
+      "reference_packaged_sha256": "099a4de89f689f5e1411fc5a8fc7d3d1dc2c6d2406bfae7c7cff65a575ae0367"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_multibytecodec.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_multibytecodec.cpython-313-darwin.so",
+      "source_sha256": "e4df7d9cc937468a6eddbf9d8b2ea787ef39fea61886250a562a398c9aa3a40d",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_multibytecodec.cpython-313-darwin.so",
+      "reference_packaged_sha256": "7f3ad81d600cd60a1f16feb863f4a86068dce487f50c6bb628c65ee3537f12fd"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_multiprocessing.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_multiprocessing.cpython-313-darwin.so",
+      "source_sha256": "8ede103311bf068a22251966135b3f17b247e1e28d7aed7c3880b12533519694",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_multiprocessing.cpython-313-darwin.so",
+      "reference_packaged_sha256": "f561df865d0703fe258fccc85c87fe4b2940ff8c787f342947f50897591eb430"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_opcode.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_opcode.cpython-313-darwin.so",
+      "source_sha256": "c7251bc686808fb456b33d1624aba6f79ec4fac30787d40112ecb29098a891b1",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_opcode.cpython-313-darwin.so",
+      "reference_packaged_sha256": "8ad87c67870b08a01697d6f2f95083995a4c9772262d9b23f83884dafa6cee2a"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_pickle.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_pickle.cpython-313-darwin.so",
+      "source_sha256": "1530b7eca76fdffcde73ae617bbabeccb649ab1eb8af9b83c091e01774f9adbc",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_pickle.cpython-313-darwin.so",
+      "reference_packaged_sha256": "8c74cb565b27ba7aa6d7e3a97323cc1681814bbdaa0273d595c7d6fc5bd1a672"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_posixshmem.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_posixshmem.cpython-313-darwin.so",
+      "source_sha256": "4b3576f70b064077a68845a5bdcce9edb9060d144f819ef2c0cedb673faef39b",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_posixshmem.cpython-313-darwin.so",
+      "reference_packaged_sha256": "576a58fdf98e6ccd49e573cd737bcdea40305dd9fec830ec07fce28445da70a6"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_posixsubprocess.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_posixsubprocess.cpython-313-darwin.so",
+      "source_sha256": "792bcc99125b0f7bbe7fdaebe28df1df85f66855e6d702a63e63e6f534b244f1",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_posixsubprocess.cpython-313-darwin.so",
+      "reference_packaged_sha256": "d0525a4ab520a41988e13d55be3b9fb1ef2997d7ea264728ccf5254e58f02fdd"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_queue.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_queue.cpython-313-darwin.so",
+      "source_sha256": "7ee3e5ec6e033a2659d4dbcba2a90fd9d7f2280097396e61084455442577757c",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_queue.cpython-313-darwin.so",
+      "reference_packaged_sha256": "8ed1ed2d59a191de569f8fbb3f4788a90da31790421c5d4e0ca31e6d7c9e46ba"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_random.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_random.cpython-313-darwin.so",
+      "source_sha256": "7a4ae4643734d93d480d6c040770cbb94ad3e0ca2b144f6c8ff0019815778103",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_random.cpython-313-darwin.so",
+      "reference_packaged_sha256": "efd809c1c572f3c44f2bd5d23bcfbbb24459f2647919b762e53a349e47e0cb10"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_scproxy.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_scproxy.cpython-313-darwin.so",
+      "source_sha256": "df78f2c1f2667d9c8561401e74851562bfa4ec739e08524a39df040b79f037f4",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_scproxy.cpython-313-darwin.so",
+      "reference_packaged_sha256": "5bb92e3546cf617dfffb7973f82aeb2fa9cffefa0fb4d9531738a470821562bd"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_sha1.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_sha1.cpython-313-darwin.so",
+      "source_sha256": "3a7bd9bdc2c8a98e922c3ea646e27ada21e569189418b777ed667229f6e296c1",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_sha1.cpython-313-darwin.so",
+      "reference_packaged_sha256": "941fb7d11786db58294d0c3a76f265a0a8adb1044464bc82f4243bfd8e658095"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_sha2.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_sha2.cpython-313-darwin.so",
+      "source_sha256": "ba599bb3d21f6c7e84ea7d253b46314fb51e6e9af3d8e2301c48b1d1a6c62108",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_sha2.cpython-313-darwin.so",
+      "reference_packaged_sha256": "5d53ecbf831508bae3508762b01e497b851a24bef7521d10d32b47777b898409"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_sha3.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_sha3.cpython-313-darwin.so",
+      "source_sha256": "12020be73d280175dbdbd8ba48cc97a49c217e4a99af8958bbc5828eac5c2d4f",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_sha3.cpython-313-darwin.so",
+      "reference_packaged_sha256": "36ca18dbb5163c8ca989f7605a537f7f508434efc5bb1c51182fcf2c80b7d63e"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_socket.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_socket.cpython-313-darwin.so",
+      "source_sha256": "276c9bf7f3e71d6194a0a91fd1ad47ca859491e43ff33c6c7e3dd69a5c2d9ec6",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_socket.cpython-313-darwin.so",
+      "reference_packaged_sha256": "6b2a5ec76b56bd46788eec28dc72a40768483d8ac19567c550f3b2a8ccc25eeb"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_ssl.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_ssl.cpython-313-darwin.so",
+      "source_sha256": "a46ddbf007f887689000ee497ac3841d5843e8b6df41a0266b0b2acc96f71814",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_ssl.cpython-313-darwin.so",
+      "reference_packaged_sha256": "beb185f5582223426a7384406abdbaffa0d3d1dd9d3bf002fd90caab8f604846"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_statistics.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_statistics.cpython-313-darwin.so",
+      "source_sha256": "c6807b9c234e037e0d1691f37fdf08bc295c3adaf6373fb339251c9ee36344b3",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_statistics.cpython-313-darwin.so",
+      "reference_packaged_sha256": "415c12d6faeff77db97bc00b746bda153d8afae16df12c7bbd75abcb21f855af"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_struct.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_struct.cpython-313-darwin.so",
+      "source_sha256": "6e0975f088349ee35d5663285dc65a8b5e320e2a04bd686011ebede703461315",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_struct.cpython-313-darwin.so",
+      "reference_packaged_sha256": "ce3a82a30be7a63cb65298524aa27e618ef2dcba4849efe23bc9b5a0ebfd2271"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/_tkinter.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/_tkinter.cpython-313-darwin.so",
+      "source_sha256": "3e70eb8f94b5f9d1f0da4a5e83801ca7ed48b306d5a16551c7a2bdce2a06b2b3",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/_tkinter.cpython-313-darwin.so",
+      "reference_packaged_sha256": "2ac164d07471e30830722cb002d9fea6d19202142908c3478caf2964311e2a12"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/array.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/array.cpython-313-darwin.so",
+      "source_sha256": "1e0c92fc53aedfe2db6ce5ede91df74e521c16ce5f2fe5c274dea0ad7923b94f",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/array.cpython-313-darwin.so",
+      "reference_packaged_sha256": "829e6940c7b188352adc5ed99b1ffe6558ea8574bc145a66b4fd26f5d950cf1e"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/binascii.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/binascii.cpython-313-darwin.so",
+      "source_sha256": "99b21f6318ce7d05d4debf08d213be3442c86ece7381672ed5782327b21993b3",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/binascii.cpython-313-darwin.so",
+      "reference_packaged_sha256": "26a37306773f597aa187729546b2a1fdd7bf55e48493ff80f65c0414b2809d1f"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/fcntl.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/fcntl.cpython-313-darwin.so",
+      "source_sha256": "c84407fd42fda18d7d685af0451f937787640521ce07145207df457c9d61ad41",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/fcntl.cpython-313-darwin.so",
+      "reference_packaged_sha256": "352c065336071ffb8ac9b9753e68165a603410a79973922b2ed9d2e5f85c3260"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/grp.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/grp.cpython-313-darwin.so",
+      "source_sha256": "9e738ab135424b2285cd324f1f4c2b6f146208dcecfdb7ddc3d52269f3bf522d",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/grp.cpython-313-darwin.so",
+      "reference_packaged_sha256": "8f2c329db5765c9fca852daa0d3b7447be5d0ba7810d40f58d0cb254dc8ee5b7"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/math.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/math.cpython-313-darwin.so",
+      "source_sha256": "0806ea855e35a048a1528533842883cd165d22970dcae152b52bf67e8656d578",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/math.cpython-313-darwin.so",
+      "reference_packaged_sha256": "524053cbbc3cc838b03c27a2f903679971f1a413ebcad95163d8702dcac8c469"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/mmap.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/mmap.cpython-313-darwin.so",
+      "source_sha256": "0e8304ee728703ab6c02352591657c2ebfc4355a3c0c5dd3a0a06f7f7e4cfcea",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/mmap.cpython-313-darwin.so",
+      "reference_packaged_sha256": "78dde6ff057480fba65fbda02e984d9aec81e4823f1c1ca47dd09960929939a4"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/pyexpat.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/pyexpat.cpython-313-darwin.so",
+      "source_sha256": "831ab5dddb22bb3c428a4502c4c0cab53321e983211339529ae908b7912712cf",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/pyexpat.cpython-313-darwin.so",
+      "reference_packaged_sha256": "63cb5735a409dfe4b994fca5b7666ffcea6eeabf43b2d87d23d1873a5f33e6f9"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/resource.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/resource.cpython-313-darwin.so",
+      "source_sha256": "d663be5cd027997ec21bda52183d1a883a2bc0e9cb23df78b486b0ae6e02bf4c",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/resource.cpython-313-darwin.so",
+      "reference_packaged_sha256": "2159a9281318d8707eef7bc836a9e68ef5a33c8217590df3cc01cb976406801c"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/select.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/select.cpython-313-darwin.so",
+      "source_sha256": "dfb3dff4a7d6fe4c45a6bf0358d4a6ed2a1e14876d16eeab82982b9623e70ed5",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/select.cpython-313-darwin.so",
+      "reference_packaged_sha256": "e2e83a90dca2b982daabc5610fe33f50915750e80c89b09c5c3ec42746e07857"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/termios.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/termios.cpython-313-darwin.so",
+      "source_sha256": "cdcfddfaaee43a006e414c55b16c38cd4b7e91070c7442031357fc0a542ae35b",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/termios.cpython-313-darwin.so",
+      "reference_packaged_sha256": "ae753e8d2c2daffba6e2b9be6f318121678be30f02fc1c7e840018ce4baa62ce"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/unicodedata.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/unicodedata.cpython-313-darwin.so",
+      "source_sha256": "5f0ab51f6d3cf2a3079070cab29430efbd583bed548508c150fc355d6e8325e3",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/unicodedata.cpython-313-darwin.so",
+      "reference_packaged_sha256": "a02731ce9abe602c7d1387a6cd74cbe546f7cae547589af5487fa7b2d05bb311"
+    },
+    "Contents/Frameworks/python3__dot__13/lib-dynload/zlib.cpython-313-darwin.so": {
+      "source_relative": "lib/python3.13/lib-dynload/zlib.cpython-313-darwin.so",
+      "source_sha256": "3fd746fed056d794afa4781b14ac3262269894f967b90047270aa12ba6bd1e2a",
+      "type": "EXTENSION",
+      "resolved_bundle_path": "Contents/Frameworks/python3__dot__13/lib-dynload/zlib.cpython-313-darwin.so",
+      "reference_packaged_sha256": "32e554563c24f05e7f549ac26af9777cca0ba17c1ba9d9db238bd6a320395e49"
+    },
+    "Contents/Resources/Python": {
+      "source_relative": "Python",
+      "source_sha256": "6f249c800ff9b7f29207d6c95186784a43db1cfa3383527a6ef4b45a3115a715",
+      "type": "BINARY",
+      "resolved_bundle_path": "Contents/Frameworks/Python.framework/Versions/3.13/Python",
+      "reference_packaged_sha256": "bd4a282949edb1300a602cfa02b8a850fad987f64ad73d75f9d7b137590af67b"
+    },
+    "Contents/Resources/Tcl": {
+      "source_relative": "Frameworks/Tcl.framework/Tcl",
+      "source_sha256": "6d6f08f63dc2f5e8f4be8c9be1ebf268d3a569c64408bf34cfb16c80b4c08f6f",
+      "type": "BINARY",
+      "resolved_bundle_path": "Contents/Frameworks/Tcl",
+      "reference_packaged_sha256": "579d7bbae75d56569ebdb7cff8ce21bc5906256148a2963e9b682bd06c42683e"
+    },
+    "Contents/Resources/Tk": {
+      "source_relative": "Frameworks/Tk.framework/Tk",
+      "source_sha256": "f546968c4c4d9175d7e8a4f710043b90f9ca63baad13a1e2f40568b4fedd7d0e",
+      "type": "BINARY",
+      "resolved_bundle_path": "Contents/Frameworks/Tk",
+      "reference_packaged_sha256": "cbb9ad0b42ead414ea992c12ff0eb6644d8c00b5ac5cc6d9ad21b61bb194db66"
+    },
+    "Contents/Resources/libcrypto.3.dylib": {
+      "source_relative": "lib/libcrypto.3.dylib",
+      "source_sha256": "fc0f2f371a6a030a0aba6deb378d0cc173db18d99361524e3737176484d1af24",
+      "type": "BINARY",
+      "resolved_bundle_path": "Contents/Frameworks/libcrypto.3.dylib",
+      "reference_packaged_sha256": "2bc706b50b8f4104a83bad33f00bc74631cbac341147dfced6259501f311b07b"
+    },
+    "Contents/Resources/libssl.3.dylib": {
+      "source_relative": "lib/libssl.3.dylib",
+      "source_sha256": "35534366a0ee006b05f7b85071e2627be2338dc9f40e40992b9c41bb6b55d0c4",
+      "type": "BINARY",
+      "resolved_bundle_path": "Contents/Frameworks/libssl.3.dylib",
+      "reference_packaged_sha256": "7ede9db4a766b12d1aca30a3b4391dc84209747b7009842e91f6118c9a877256"
+    }
+  },
+  "expected_bundle_symlinks": [
+    {
+      "path": "Contents/Frameworks/Python",
+      "target": "Python.framework/Versions/3.13/Python"
+    },
+    {
+      "path": "Contents/Frameworks/Python.framework/Python",
+      "target": "Versions/Current/Python"
+    },
+    {
+      "path": "Contents/Frameworks/Python.framework/Resources",
+      "target": "Versions/Current/Resources"
+    },
+    {
+      "path": "Contents/Frameworks/Python.framework/Versions/Current",
+      "target": "3.13"
+    },
+    {
+      "path": "Contents/Frameworks/_tcl_data",
+      "target": "../Resources/_tcl_data"
+    },
+    {
+      "path": "Contents/Frameworks/_tk_data",
+      "target": "../Resources/_tk_data"
+    },
+    {
+      "path": "Contents/Frameworks/base_library.zip",
+      "target": "../Resources/base_library.zip"
+    },
+    {
+      "path": "Contents/Frameworks/python3.13",
+      "target": "python3__dot__13"
+    },
+    {
+      "path": "Contents/Frameworks/tcl8",
+      "target": "../Resources/tcl8"
+    },
+    {
+      "path": "Contents/MacOS/native",
+      "target": "../Resources/native"
+    },
+    {
+      "path": "Contents/Resources/Python",
+      "target": "Python.framework/Versions/3.13/Python"
+    },
+    {
+      "path": "Contents/Resources/Python.framework",
+      "target": "../Frameworks/Python.framework"
+    },
+    {
+      "path": "Contents/Resources/Tcl",
+      "target": "../Frameworks/Tcl"
+    },
+    {
+      "path": "Contents/Resources/Tk",
+      "target": "../Frameworks/Tk"
+    },
+    {
+      "path": "Contents/Resources/libcrypto.3.dylib",
+      "target": "../Frameworks/libcrypto.3.dylib"
+    },
+    {
+      "path": "Contents/Resources/libssl.3.dylib",
+      "target": "../Frameworks/libssl.3.dylib"
+    },
+    {
+      "path": "Contents/Resources/native/psportal-native",
+      "target": "../../MacOS/psportal-native"
+    },
+    {
+      "path": "Contents/Resources/python3.13",
+      "target": "../Frameworks/python3.13"
+    }
+  ],
+  "installed_notice_hashes": {
+    "Python": "78b12c3a81360b357002334f0e70ea0e92eebf7a9b358805c03c48484945f3bb",
+    "CPython-components": "952ac05720d7f1dcb63589b35eb0931b1442eb250230a4ad31198eddf0ad6abc",
+    "Tcl": "c0a69a2bfd757361ec7e6143973b103c90409316b49e9c88db26ad6388e79f16",
+    "Tk": "2cde822b93ca16ae535c954b7dfe658b4ad10df2a193628d1b358f1765e8b198"
+  },
+  "observed_components": {
+    "openssl": [
+      3,
+      0,
+      21
+    ],
+    "zlib": "1.2.12",
+    "libmpdec": "4.0.1",
+    "expat": "expat_2.8.2",
+    "tcl": "8.6.18",
+    "tk_script": "8.6.18",
+    "unicode": "15.1.0"
+  },
+  "liblzma_version_evidence_pending": "Exact installer recipe specifies5.2.3; actual installed extension lzma_version_string query must confirm before release",
+  "layout_revision": "Final native helper in MacOS; matching source and notices in Resources; exact compatibility aliases"
+}

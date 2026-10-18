@@ -1,5 +1,7 @@
 # Native acceptance checklist
 
+> Historical initial local snapshot and acceptance plan. The measurements below are preserved for that revision; statements about unrun platforms are not the current project status. See the [current platform validation record](../../docs/portable-status.zh-CN.md) and [artifact-specific downloads](../../docs/downloads.zh-CN.md).
+
 Status: this is a test plan. No row is a claim of native acceptance. Record date, commit/source digest, OS version, CPU architecture, Python and PyInstaller versions, Mihomo version/digest, test outcome and sanitized evidence for every build.
 
 ## Build matrix

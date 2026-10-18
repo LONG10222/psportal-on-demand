@@ -1,0 +1,58 @@
+plugins { id 'com.android.application' }
+
+// Opt-in standalone per-ABI APKs for smaller development downloads. The default
+// remains the universal unsigned artifact used by the ordinary CI pipeline.
+def splitAbis = providers.gradleProperty('psportalAbiSplits').map { it.toBoolean() }.getOrElse(false)
+
+android {
+    namespace 'org.psportal.host'
+    compileSdk 36
+    buildToolsVersion '35.0.0'
+    ndkVersion '30.0.16248370'
+    defaultConfig {
+        applicationId 'org.psportal.host'
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName '0.1.0-dev'
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    buildTypes {
+        // Both variants are unsigned. A build never creates a signing identity.
+        debug { signingConfig = null }
+        release { signingConfig = null; minifyEnabled false }
+    }
+    splits {
+        abi {
+            enable splitAbis
+            reset()
+            include 'arm64-v8a', 'x86_64'
+            universalApk false
+        }
+    }
+    packaging { jniLibs { useLegacyPackaging = false } }
+    lint { abortOnError true; checkReleaseBuilds true }
+}
+
+def engineAar = file('libs/psportal-engine.aar')
+tasks.register('verifyEmbeddedEngine') {
+    doLast {
+        if (!engineAar.isFile()) {
+            throw new GradleException('Missing real native engine: build ../mobile as documented in README.md, then place psportal-engine.aar in app/libs. No placeholder engine is provided.')
+        }
+        if (!file('src/main/assets/licenses/ENGINE-NOTICES.txt').isFile()) {
+            throw new GradleException('Missing embedded dependency licenses: run native/scripts/mobile.sh android, which generates ENGINE-NOTICES.txt with the real AAR')
+        }
+        def aar = new java.util.zip.ZipFile(engineAar)
+        try {
+            if (aar.getEntry('classes.jar') == null || aar.getEntry('jni/arm64-v8a/libgojni.so') == null) {
+                throw new GradleException('Engine AAR must contain its real gomobile classes and arm64-v8a/libgojni.so')
+            }
+        } finally { aar.close() }
+    }
+}
+tasks.named('preBuild').configure { dependsOn('verifyEmbeddedEngine') }
+dependencies { implementation files(engineAar) }
