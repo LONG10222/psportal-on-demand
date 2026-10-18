@@ -17,7 +17,7 @@ def main():
     parser.add_argument('--skip-licenses',action='store_true',help='reuse already generated dist/licenses notices')
     args=parser.parse_args()
     host_os={'Linux':'linux','Windows':'windows','Darwin':'darwin'}.get(platform.system(),'linux')
-    host_arch={'x86_64':'amd64','AMD64':'amd64','aarch64':'arm64','arm64':'arm64'}.get(platform.machine(),'amd64')
+    host_arch={'x86_64':'amd64','AMD64':'amd64','ARM64':'arm64','aarch64':'arm64','arm64':'arm64'}.get(platform.machine(),'amd64')
     targets=TARGETS if args.all else args.target or [f'{host_os}/{host_arch}']
     dist=ROOT/'dist'; dist.mkdir(exist_ok=True)
     (dist/'go.mod').write_text('module psportal.local/build-artifacts\n\ngo 1.26.0\n')

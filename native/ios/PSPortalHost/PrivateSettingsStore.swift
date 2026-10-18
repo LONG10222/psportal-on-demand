@@ -48,7 +48,7 @@ final class PrivateSettingsStore {
     private func prepareDirectory(_ original: URL) throws {
         try manager.createDirectory(at: original, withIntermediateDirectories: true,
                                     attributes: [.protectionKey: FileProtectionType.complete, .posixPermissions: 0o700])
-        try manager.setAttributes([.protectionKey: FileProtectionType.complete, .posixPermissions: 0o700], atPath: original.path)
+        try manager.setAttributes([.protectionKey: FileProtectionType.complete, .posixPermissions: 0o700], ofItemAtPath: original.path)
         var url = original
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
@@ -56,7 +56,7 @@ final class PrivateSettingsStore {
     }
 
     private func protectFile(_ original: URL) throws {
-        try manager.setAttributes([.protectionKey: FileProtectionType.complete, .posixPermissions: 0o600], atPath: original.path)
+        try manager.setAttributes([.protectionKey: FileProtectionType.complete, .posixPermissions: 0o600], ofItemAtPath: original.path)
         var url = original
         var values = URLResourceValues()
         values.isExcludedFromBackup = true

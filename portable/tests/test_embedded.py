@@ -140,9 +140,9 @@ class EmbeddedDispatchTests(unittest.TestCase):
         binary = folder / filename
         binary.write_text('bundled fixture'); binary.chmod(0o700)
         with patch.object(sys, 'frozen', True, create=True), patch.object(sys, 'executable', str(folder.parent / 'PSPortalProxy')):
-            self.assertEqual(config.bundled_native_path(), binary)
+            self.assertEqual(config.bundled_native_path(), binary.resolve())
             checked = config.validate(dict(self.cfg, native_path=''), self.path)
-            self.assertEqual(checked['native_path'], str(binary))
+            self.assertEqual(checked['native_path'], str(binary.resolve()))
         with patch.object(sys, 'frozen', False, create=True):
             self.assertIsNone(config.bundled_native_path())
 
@@ -453,6 +453,9 @@ os._exit(0)
     @unittest.skipUnless(os.environ.get('PSPORTAL_DUAL_BINARY'), 'Set PSPORTAL_DUAL_BINARY to rebuilt desktop package')
     def test_frozen_cli_dispatch_native_and_eof(self):
         executable = os.environ['PSPORTAL_DUAL_BINARY']
+        # The packaged GUI must find its own bundled native executable without
+        # depending on the build machine's separate native distribution path.
+        self.path.write_text(json.dumps(dict(self.cfg, native_path='')), encoding='utf-8')
         command = [executable, '--backend', '--config', str(self.path)]
         checked = subprocess.run(command + ['--check'], capture_output=True, text=True, timeout=20)
         self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)

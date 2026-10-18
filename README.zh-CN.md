@@ -14,6 +14,12 @@ PS Portal 的 OpenWrt / iStoreOS 按需代理。访问外网时启动 Mihomo，�
 
 > 第二阶段仍需固定版本 Mihomo/OpenWrt/LuCI 实机验收，详见[节点偏好与验收](docs/node-preferences.zh-CN.md)。
 
+## 桌面与移动端开发版
+
+下面的路由器版本保持独立。Linux、Windows、macOS 请看[桌面使用说明](portable/docs/desktop.md)；共享原生引擎和移动端请看 [native/README.md](native/README.md)。不要在桌面系统执行路由器安装脚本。
+
+桌面默认使用独立 Mihomo，也可在同一界面选择实验性的内置共享引擎。Android 由前台服务运行；iOS 只能前台托管。请先看[当前验证结果与平台限制](docs/portable-status.zh-CN.md)。原生引擎遵循 GPL-3.0，原路由器与包装界面遵循 MIT；分发原生二进制须附带完整对应源码。
+
 ## 快速开始
 
 ### 1. 准备

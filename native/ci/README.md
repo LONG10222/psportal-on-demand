@@ -9,15 +9,18 @@ not modify an existing release workflow.
 `native-desktop.yml.example` uses standard public-repository runners:
 
 - `ubuntu-24.04`: Linux x64
+- `ubuntu-24.04-arm`: Linux ARM64
 - `windows-2025`: Windows x64
+- `windows-11-arm`: Windows ARM64
 - `macos-15`: macOS Apple Silicon
+- `macos-15-intel`: Intel macOS
 
 Runner labels and their architectures are documented by
 [GitHub](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 The actual host architecture and operating-system version are recorded in each
-artifact's `VALIDATION.json`. Linux ARM64, Windows ARM64 and Intel macOS are not
-runtime-tested by this three-runner template; existing cross-built files must not
-be described as runtime-tested on the strength of these jobs.
+artifact's `VALIDATION.json`. All six supported desktop OS/architecture targets
+are represented. A platform is runtime-tested only when its own job succeeds;
+existing cross-built files do not inherit another architecture's test result.
 
 Each job runs module verification, every Go test, `go vet`, and an actual host-built
 CLI smoke test. Linux/macOS also run the engine race detector. Windows uses the
@@ -38,6 +41,13 @@ credentials, skip private repositories, and use one-day artifact retention with 
 200 MiB success-artifact budget. They use no larger runners or paid services. The
 workflow must actually complete before a platform can be called runtime-tested;
 a valid YAML template or successful cross-compilation is insufficient.
+
+First successful native run: [39107122359](https://github.com/LONG10222/psportal-on-demand/actions/runs/39107122359)
+validated Linux x64, Windows x64 and macOS ARM64 at tested PR merge commit
+`9fa54dddef1b83e9aa3dd2fb5e8229d97711aa45`. Each passed 40 top-level tests
+(203 test/subtest results), vet, module verification and the real CLI smoke test.
+Linux/macOS race checks passed; Windows race was skipped. The additional three
+architecture jobs were added afterward and need their own successful run.
 
 ## iOS
 

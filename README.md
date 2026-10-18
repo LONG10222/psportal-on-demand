@@ -14,6 +14,12 @@ An on-demand proxy for PlayStation Portal on OpenWrt / iStoreOS. Starts Mihomo f
 
 > Node preferences and the optional authenticated legacy LuCI page require target-version OpenWrt/Mihomo/LuCI acceptance. Local mocks do not establish core compatibility. See [operations and acceptance notes (Chinese)](docs/node-preferences.zh-CN.md).
 
+## Desktop and mobile development builds
+
+The original router implementation below is unchanged. For Linux, Windows and macOS, use the [desktop app](portable/docs/desktop.md); the optional shared native engine and mobile hosts are documented in [native/README.md](native/README.md). Do not run the router install script on a desktop.
+
+The default desktop engine launches a separate Mihomo. Experimental embedded mode uses the same UI and a restricted shared Go/Mihomo engine. Android hosts that engine in a foreground service; iOS supports foreground hosting only. See [current validation and platform gates](docs/portable-status.zh-CN.md). Native engine code is GPL-3.0; the original router/wrapper remains MIT. Complete corresponding source must accompany native binaries.
+
 ## Quick start
 
 ### 1. Requirements

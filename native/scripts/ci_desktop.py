@@ -32,7 +32,7 @@ def main():
     # Prevent the generated licenses/vendor sources being scanned as local Go packages.
     (ROOT / 'dist' / 'go.mod').write_text('module psportal.local/build-artifacts\n\ngo 1.26.0\n', encoding='utf-8')
     system = {'Linux': 'linux', 'Windows': 'windows', 'Darwin': 'darwin'}[platform.system()]
-    arch = {'x86_64': 'amd64', 'AMD64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}[platform.machine()]
+    arch = {'x86_64': 'amd64', 'AMD64': 'amd64', 'ARM64': 'arm64', 'aarch64': 'arm64', 'arm64': 'arm64'}[platform.machine()]
     go = os.environ.get('GO', 'go')
     run([go, 'mod', 'download'])
     run([go, 'mod', 'verify'], 'module-verify.txt')

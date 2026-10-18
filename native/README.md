@@ -139,10 +139,11 @@ execution after app suspension. No remote dashboard substitute is used.
 
 ## Native platform CI
 
-`ci/native-desktop.yml.example` is an inactive template for native Linux x64,
-Windows x64 and macOS Apple Silicon runtime tests. It runs all Go tests, actual
+`ci/native-desktop.yml.example` is an inactive template for native Linux,
+Windows and macOS runtime tests on both x64 and ARM64. It runs all Go tests, actual
 CLI readiness/policy/stop/restart smoke tests, and Linux/macOS race checks, then
 packages the tested host binary with matching vendored source, notices and evidence.
-See `ci/README.md`. Preparing the template does not mean these remote jobs have
-run. The local Linux executable has been run-tested; other existing desktop
-artifacts remain cross-compiled until their native CI jobs succeed.
+See `ci/README.md` for exact run provenance and verification limits. Native CI
+has passed on Linux x64, Windows x64 and macOS ARM64. The additional Linux ARM64,
+Windows ARM64 and Intel macOS jobs need their own successful run. Preparing a
+template or cross-compiling a binary is not evidence of native execution.
