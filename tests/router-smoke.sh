@@ -25,24 +25,27 @@ state() { jsonfilter -i "$TMP/run/status.json" -e "@.$1"; }
 i=0
 while [ ! -s "$TMP/run/status.json" ]; do i=$((i+1));[ "$i" -lt 40 ];sleep 1;done
 [ "$(state core_running)" = false ]
-curl -sS --max-time 4 --noproxy '' -x http://127.0.0.1:21081 http://127.0.0.1:21084/ | grep -q 'LAN fixture'
-curl -sS --max-time 4 --noproxy '' --proxytunnel -x http://127.0.0.1:21081 http://127.0.0.1:21084/ | grep -q 'LAN fixture'
+# Loopback services must not be reachable through either HTTP or CONNECT.
+code="$(curl -sS --max-time 4 --noproxy '' -x http://127.0.0.1:21081 -o /dev/null -w '%{http_code}' http://127.0.0.1:21084/)"
+[ "$code" = 403 ]
+curl -sS --max-time 4 --noproxy '' --proxytunnel -x http://127.0.0.1:21081 http://127.0.0.1:21084/ >/dev/null 2>&1 && { echo 'Unexpected loopback CONNECT accepted' >&2;exit 1; }
 [ "$(state core_running)" = false ]
-curl -sS --max-time 4 --interface 127.0.0.2 --noproxy '' -x http://127.0.0.1:21081 http://203.0.113.20/ >/dev/null 2>&1 && { echo 'Unexpected client accepted' >&2;exit 1; }
+curl -sS --max-time 4 --interface 127.0.0.2 --noproxy '' -x http://127.0.0.1:21081 http://1.1.1.1/ >/dev/null 2>&1 && { echo 'Unexpected client accepted' >&2;exit 1; }
 sleep 1
 [ "$(state core_running)" = false ]
-code="$(curl -sS --max-time 15 --noproxy '' -x http://127.0.0.1:21081 -o /dev/null -w '%{http_code}' http://203.0.113.20/)"
+code="$(curl -sS --max-time 15 --noproxy '' -x http://127.0.0.1:21081 -o /dev/null -w '%{http_code}' http://1.1.1.1/)"
 [ "$code" = 204 ] && [ "$(state core_running)" = true ]
 i=0
 while [ "$i" -lt $((IDLE_SECONDS+7)) ]; do
-    curl -sS --max-time 4 --noproxy '' -x http://127.0.0.1:21081 http://127.0.0.1:21084/ | grep -q 'LAN fixture'
+    code="$(curl -sS --max-time 4 --noproxy '' -x http://127.0.0.1:21081 -o /dev/null -w '%{http_code}' http://127.0.0.1:21084/)"
+    [ "$code" = 403 ]
     [ "$(state core_running)" != false ] || break
     i=$((i+1));sleep 1
 done
 [ "$(state core_running)" = false ]
 [ "$(state counters.external_requests)" = 1 ]
 [ "$(state counters.denied_clients)" = 1 ]
-code="$(curl -sS --max-time 15 --noproxy '' -x http://127.0.0.1:21081 -o /dev/null -w '%{http_code}' http://203.0.113.20/)"
+code="$(curl -sS --max-time 15 --noproxy '' -x http://127.0.0.1:21081 -o /dev/null -w '%{http_code}' http://1.1.1.1/)"
 [ "$code" = 204 ] && [ "$(state core_running)" = true ]
 [ "$(state counters.starts)" = 2 ]
-echo 'PASS: LAN HTTP/CONNECT bypass, client rejection, external wake, idle shutdown, second wake.'
+echo 'PASS: loopback HTTP/CONNECT denial, client rejection, external wake, idle shutdown, second wake. LAN concurrency is covered by tests/lifecycle.lua.'

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Keep the listener responsive during core startup with a bounded readiness worker and queued external requests.
+- Start the idle budget after readiness; retry failed startup and backend connection attempts without dropping LAN sessions.
+- Deny loopback and special-use destinations, validate numeric/IPv6 authorities, and prevent backend DNS resolution from selecting private DIRECT routes.
+- Preserve explicit RFC1918/ULA LAN access; document removed CGNAT/link-local compatibility and router-LAN management exposure.
+- Add isolated listener, lifecycle, destination, and DNS regression coverage. Real OpenWrt/Mihomo acceptance remains a separate deployment check.
+
 ## 0.1.0
 
 - Initial public source release with an explicit, single-client HTTP proxy listener.

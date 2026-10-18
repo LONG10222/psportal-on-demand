@@ -6,6 +6,9 @@ local sys = require 'luci.sys'
 local directory = arg[0]:match('^(.*)/') or '.'
 package.path = directory .. '/?.lua;' .. package.path
 local protocol = require 'protocol'
+local lifecycle = require 'lifecycle'
+local dns = require 'dns'
+local ownership = require 'startup_owner'
 local policy_path = assert(arg[1], 'policy required')
 local cfg = assert(json.parse(assert(fs.readfile(policy_path))), 'Invalid policy')
 n.umask('077')
@@ -17,6 +20,8 @@ local IN, OUT, ERR, HUP = n.poll_flags('in'), n.poll_flags('out'), n.poll_flags(
 local band = n.bit.band
 local sessions, cache = {}, {}
 local core_on, last_external, last_save = false, 0, 0
+local life = lifecycle.new(cfg.wakeup_timeout or 12, cfg.idle_seconds)
+local startup_pid, startup_killed, startup_generation, generation, server
 local counters = {external_requests=0, local_requests=0, denied_clients=0, starts=0, idle_stops=0}
 local function now() return n.sysinfo().uptime end
 local function log(msg)
@@ -35,7 +40,7 @@ local function save(reason)
         if not s.dead and s.kind == 'local' then lan=lan+1 end
     end
     local t = {launcher_pid=n.getpid(), core_running=core_on and core_pid()~=nil,
-        core_pid=core_on and core_pid() or nil, idle_timeout=cfg.idle_seconds,
+        core_pid=core_on and core_pid() or nil, core_starting=startup_pid~=nil, idle_timeout=cfg.idle_seconds,
         idle_seconds=core_on and math.max(0,now()-last_external) or 0,
         external_connections=ext, local_connections=lan, reason=reason,
         counters=counters, allowed_ip=cfg.allowed_ip, port=cfg.port}
@@ -49,10 +54,19 @@ local function close_session(s)
     if s.c then s.c:close() end
     if s.u then s.u:close() end
 end
+local function kill_startup()
+    if not startup_pid then return end
+    -- The readiness worker owns a process group, including its service shell.
+    n.kill(-startup_pid,n.const.SIGKILL)
+    n.kill(startup_pid,n.const.SIGKILL)
+    startup_killed=true
+end
 local function stop_core(reason)
+    kill_startup()
     for _,s in ipairs(sessions) do if s.kind=='external' then close_session(s) end end
     sys.call(cfg.core_service..' stop >/dev/null 2>&1')
     core_on=false
+    lifecycle.complete(life,now(),false)
     if reason=='idle' then counters.idle_stops=counters.idle_stops+1 end
     log('core_off reason='..reason..' external_idle_seconds='..tostring(last_external>0 and now()-last_external or 0))
     save(reason)
@@ -61,6 +75,7 @@ local function api_get(path)
     local f=io.open(cfg.api_header,'r'); if not f then return nil end
     local auth=f:read('*l'); f:close()
     local s=n.socket('inet','stream')
+    if not s then return nil end
     if not s:connect('127.0.0.1',cfg.api_port) then s:close(); return nil end
     s:send('GET '..path..' HTTP/1.1\r\nHost: localhost\r\n'..auth..'\r\nConnection: close\r\n\r\n')
     s:setblocking(false)
@@ -97,95 +112,135 @@ local function route_ready()
     local h=p and p.extra and p.extra[cfg.health_url]
     return h and h.alive and h.history and #h.history>0 and h.history[#h.history].delay>0
 end
-local function wake_core()
+-- This function runs only in the readiness child. It may block on procd/API.
+local function await_core(owner)
+    if not ownership.valid(cfg,owner) then return false end
     local cold=not core_pid()
-    if cold then
-        if sys.call(cfg.core_service..' start >/dev/null 2>&1')~=0 then return nil end
-        counters.starts=counters.starts+1
-        log('core_start external_request')
-    end
-    core_on=true
-    last_external=now()
+    if cold and sys.call(cfg.core_service..' start >/dev/null 2>&1')~=0 then return false end
     local deadline=now()+(cfg.wakeup_timeout or 12)
-    while now()<=deadline do
+    while now()<deadline do
+        if not ownership.valid(cfg,owner) then return false end
         local s=n.socket('inet','stream')
-        if s:connect('127.0.0.1',cfg.backend_port) then
-            if not cold or route_ready() then s:setblocking(false); save('active'); return s end
+        local connected=s and s:connect('127.0.0.1',cfg.backend_port)
+        if s then s:close() end
+        if connected and route_ready() then return ownership.valid(cfg,owner) end
+        n.nanosleep(0,100000000)
+    end
+    return false
+end
+local function launch_startup()
+    local owner=generation
+    if not ownership.valid(cfg,owner) then return false end
+    local pid=n.fork()
+    if not pid then return false end
+    if pid==0 then
+        if not n.setsid() or not ownership.register(cfg,owner) then os.exit(1) end
+        -- Never keep listener/client descriptors alive in a worker.
+        if server then server:close() end
+        for _,s in ipairs(sessions) do
+            if s.c then s.c:close() end
+            if s.u then s.u:close() end
         end
-        s:close(); n.nanosleep(0,100000000)
+        local ok,ready=pcall(await_core,owner)
+        os.exit(ok and ready and 0 or 1)
     end
-    save('core_start_failed')
-    return nil
+    startup_pid=pid; startup_killed=false; startup_generation=owner
+    counters.starts=counters.starts+1
+    log('core_start external_request')
+    return true
 end
-local local_ip = protocol.local_ip
 local function word(v) return string.char(math.floor(v/256)%256,v%256) end
-local function u16(s,p) local a,b=s:byte(p,p+1); if not b then return nil end; return a*256+b end
-local function skip_name(s,p)
-    for _=1,128 do
-        local l=s:byte(p); if not l then return nil end
-        if l==0 then return p+1 end
-        if l>=192 then return p+2 end
-        if l>63 then return nil end
-        p=p+1+l
-    end
-end
 local function resolve_private(host)
-    local hit=cache[host]; if hit and hit.until_at>now() then return hit.ip end
+    local hit=cache[host]; if hit and hit.until_at>now() then return hit.ip,hit.denied end
     if not host:match('^[%w%.%-]+$') or #host>253 then return nil end
     local q=''
     for label in host:gmatch('[^.]+') do if #label>63 then return nil end; q=q..string.char(#label)..label end
     local id=math.random(1,65535)
-    local packet=word(id)..word(256)..word(1)..word(0)..word(0)..word(0)..q..'\0'..word(1)..word(1)
-    local s=n.socket('inet','dgram'); s:setblocking(false)
+    local question=q..'\0'..word(1)..word(1)
+    local packet=word(id)..word(256)..word(1)..word(0)..word(0)..word(0)..question
+    local s=n.socket('inet','dgram'); if not s then return nil end
+    s:setblocking(false)
     s:sendto(packet,cfg.local_dns,53)
     local fds={{fd=s,events=IN}}; local count=n.poll(fds,200)
     local data,peer,port
     if count and count>0 then data,peer,port=s:recvfrom(4096) end
     s:close()
-    local chosen=nil
-    if data and peer==cfg.local_dns and port==53 and u16(data,1)==id then
-        local p=13
-        for _=1,(u16(data,5) or 0) do p=skip_name(data,p); if not p then break end; p=p+4 end
-        if p then
-            local has_public=false
-            for _=1,math.min(u16(data,7) or 0,64) do
-                p=skip_name(data,p); if not p then break end
-                local typ,len=u16(data,p),u16(data,p+8); if not len then break end
-                p=p+10
-                if typ==1 and len==4 and #data>=p+3 then
-                    local ip=table.concat({data:byte(p,p+3)},'.')
-                    if local_ip(ip) then chosen=chosen or ip else has_public=true end
-                end
-                p=p+len
-            end
-            if has_public then chosen=nil end
-        end
+    local chosen,denied=nil,false
+    if data and peer==cfg.local_dns and port==53 then
+        chosen,denied=dns.parse_response(data,id,question)
     end
     local size=0; for _ in pairs(cache) do size=size+1 end
     if size>256 then cache={} end
-    cache[host]={ip=chosen,until_at=now()+60}
-    return chosen
+    cache[host]={ip=chosen,denied=denied,until_at=now()+60}
+    return chosen,denied
 end
 local parse_request = protocol.parse_request
 local function error_reply(s,code)
+    if s.kind=='external' and s.connecting and not startup_pid then lifecycle.complete(life,now(),false) end
     if s.u then s.u:close(); s.u=nil end
-    s.connecting=false; s.header=nil
+    s.connecting=false; s.waiting=false; s.header=nil
     s.reply='HTTP/1.1 '..code..'\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'
     s.c2u=''; s.u2c=s.reply; s.close_after_write=true; s.c_eof=true; s.u_eof=true
+end
+local function connect_backend(s)
+    s.waiting=false
+    s.u=n.socket('inet','stream')
+    if not s.u then error_reply(s,'503 Service Unavailable'); return end
+    s.u:setblocking(false)
+    local ok,err=s.u:connect('127.0.0.1',cfg.backend_port)
+    if not ok and err~=n.const.EINPROGRESS and err~=n.const.EAGAIN then
+        lifecycle.complete(life,now(),false)
+        error_reply(s,'503 Service Unavailable'); return
+    end
+    s.connecting=not ok; s.connect_deadline=now()+5
+    last_external=now(); lifecycle.active(life,last_external)
+end
+local function advance_startup()
+    if not startup_pid then return end
+    if lifecycle.expired(life,now()) and not startup_killed then
+        kill_startup()
+        for _,s in ipairs(sessions) do if s.waiting and not s.dead then error_reply(s,'503 Service Unavailable') end end
+    end
+    local pid,status,code=n.waitpid(startup_pid,'nohang')
+    if pid==0 then return end
+    if not pid and status==n.const.EINTR then return end
+    -- ECHILD or another wait failure is terminal, never strand pending clients.
+    local ready=pid and not startup_killed and status=='exited' and code==0
+    if pid and status=='signaled' and not startup_killed then
+        -- Retire a surviving service shell when the readiness leader died.
+        n.kill(-startup_pid,n.const.SIGKILL)
+    end
+    ownership.clear(cfg,startup_generation,startup_pid)
+    startup_pid=nil; startup_killed=false; startup_generation=nil
+    lifecycle.complete(life,now(),ready)
+    core_on=true -- Even a failed start may have left a core running: idle cleanup still applies.
+    last_external=now()
+    for _,s in ipairs(sessions) do
+        if s.waiting and not s.dead then
+            if ready then connect_backend(s) else error_reply(s,'503 Service Unavailable') end
+        end
+    end
+    save(ready and 'active' or 'core_start_failed')
 end
 local function start_request(s)
     local a,b=s.header:find('\r\n\r\n',1,true); if not a then return end
     local header,rest=s.header:sub(1,b),s.header:sub(b+1)
     local r=parse_request(header)
     if not r then error_reply(s,'400 Bad Request'); return end
-    local ip
-    local literal=r.host:match('^%d+%.%d+%.%d+%.%d+$') or r.host:find(':',1,true)
-    if literal then if local_ip(r.host) then ip=r.host end else ip=resolve_private(r.host) end
+    local ip,denied
+    local route=protocol.destination(r.host)
+    if route=='deny' then error_reply(s,'403 Forbidden'); return end
+    local literal=route~='name'
+    if route=='local' then ip=r.host
+    elseif not literal then ip,denied=resolve_private(r.host) end
+    if denied then error_reply(s,'403 Forbidden'); return end
     local local_name=not r.host:find('.',1,true) or r.host:match('%.lan$') or r.host:match('%.local$')
     if local_name and not literal and not ip then error_reply(s,'502 Bad Gateway'); return end
     if ip then
         s.kind='local'; counters.local_requests=counters.local_requests+1
-        s.u=n.socket(ip:find(':',1,true) and 'inet6' or 'inet','stream'); s.u:setblocking(false)
+        s.u=n.socket(ip:find(':',1,true) and 'inet6' or 'inet','stream')
+        if not s.u then error_reply(s,'502 Bad Gateway'); return end
+        s.u:setblocking(false)
         local ok,err=s.u:connect(ip,r.port)
         if not ok and err~=n.const.EINPROGRESS and err~=n.const.EAGAIN then error_reply(s,'502 Bad Gateway'); return end
         s.connecting=not ok; s.connect_deadline=now()+5
@@ -197,14 +252,20 @@ local function start_request(s)
         end
     else
         s.kind='external'; counters.external_requests=counters.external_requests+1
-        last_external=now(); s.u=wake_core()
-        if not s.u then error_reply(s,'503 Service Unavailable'); return end
         s.c2u=header..rest
+        if startup_killed then error_reply(s,'503 Service Unavailable'); return end
+        local action=startup_pid and 'wait' or lifecycle.request(life,now())
+        if action=='ready' then connect_backend(s) else
+            s.waiting=true
+            if action=='start' and not launch_startup() then
+                lifecycle.complete(life,now(),false); error_reply(s,'503 Service Unavailable')
+            end
+        end
     end
     s.header=nil
     save('request')
 end
-local function activity(s,count) if s.kind=='external' and count and count>0 then last_external=now() end end
+local function activity(s,count) if s.kind=='external' and count and count>0 then last_external=now(); lifecycle.active(life,last_external) end end
 local function write_side(s,side)
     local sock=side=='c' and s.c or s.u
     local key=side=='c' and 'u2c' or 'c2u'
@@ -226,14 +287,21 @@ local function read_side(s,side)
     elseif err~=n.const.EAGAIN and err~=n.const.EWOULDBLOCK then close_session(s) end
 end
 local function main()
+    ownership.cancel(cfg)
     sys.call(cfg.core_service..' stop >/dev/null 2>&1')
     core_on=false
-    local server=assert(n.bind(cfg.bind,cfg.port,'inet','stream'))
+    generation=assert(ownership.begin(cfg),'Cannot establish startup ownership')
+    server=assert(n.bind(cfg.bind,cfg.port,'inet','stream'))
     assert(server:listen(32)); assert(server:setblocking(false))
     log('listener_ready core_off'); save('waiting')
     local loop_count=0
     while true do
-        if core_on and now()-last_external>=cfg.idle_seconds then stop_core('idle') end
+        advance_startup()
+        local pending=false
+        for _,s in ipairs(sessions) do
+            if not s.dead and s.kind=='external' and (s.waiting or s.connecting) then pending=true; break end
+        end
+        if core_on and not startup_pid and lifecycle.should_stop(life,now(),pending) then stop_core('idle') end
         local fds={{fd=server,events=IN,listener=true}}
         local alive={}
         for _,s in ipairs(sessions) do
@@ -294,7 +362,7 @@ local function main()
                 end
             end
         end
-        if now()-last_save>=5 then save(core_on and 'active' or 'waiting') end
+        if now()-last_save>=5 then save(startup_pid and 'starting' or (core_on and 'active' or 'waiting')) end
         loop_count=loop_count+1
         if loop_count%240==0 then
             for _,name in ipairs({'events.log'}) do

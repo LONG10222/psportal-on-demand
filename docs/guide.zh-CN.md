@@ -40,6 +40,8 @@ portalproxy restart
 
 监听器开机运行，核心按需启动。完整的外网 HTTP 请求或 HTTPS CONNECT 会触发启动；私有地址请求直接连接。外网客户端会话连续 60 秒没有数据收发，核心关闭，空闲外网长连接断开。局域网请求和节点健康检查不刷新空闲时间。
 
+局域网直连只允许 RFC1918 IPv4 和 ULA IPv6。回环、链路本地、CGNAT、IPv4 映射 IPv6 等特殊地址被拒绝。路由器自身的 RFC1918/ULA LAN 地址仍可访问，管理服务需单独保护。详见[目标地址策略及兼容性限制](destination-policy.md)。
+
 Portal 的后台请求、保活和失败重试也会触发启动或延长运行时间。
 
 节点使用 Mihomo `fallback` 组：香港优先，其次日本，最后其他地区；同地区保留订阅顺序。地区来自节点名称，识别中文名称、HK/JP 标签、旗帜、Hong Kong 和 Japan。所有节点不可用时，请求失败。
@@ -91,6 +93,10 @@ cat /tmp/portalproxy/events.log
 
 ```sh
 lua5.1 tests/unit.lua
+lua5.1 tests/access.lua
+lua5.1 tests/dns.lua
+lua5.1 tests/lifecycle.lua
+lua5.1 tests/ownership.lua
 python3 tests/packaging.py
 ```
 
@@ -102,4 +108,4 @@ sh tests/core-config.sh /path/to/mihomo
 IDLE_SECONDS=60 sh tests/router-smoke.sh
 ```
 
-集成测试使用回环端口 `21081`–`21084` 和临时 procd 服务，验证局域网直连、客户端限制、外网唤醒、空闲关闭及再次唤醒。端口需空闲，测试不要并行运行。`core-config.sh` 用真实核心解析示例配置，不启动代理服务。
+集成测试使用回环端口 `21081`–`21084` 和临时 procd 服务，验证回环 HTTP/CONNECT 目标被拒绝、客户端限制、外网唤醒、空闲关闭及再次唤醒。模拟后端会拦截外网测试目标 `1.1.1.1`，不发出互联网请求。端口需空闲，测试不要并行运行。RFC1918/ULA 直连和并发启停由模拟运行环境回归测试覆盖；纯回环测试不能证明真实局域网可达。`core-config.sh` 用真实核心解析示例配置，不启动代理服务。

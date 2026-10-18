@@ -20,7 +20,7 @@ write(d..'/policy.json',json.stringify({bind='127.0.0.1',port=21081,allowed_ip='
     core_name=core_name,core_service=d..'/'..core_name,run_dir=d..'/run',health_url=health}))
 local function service(name,command,stop)
     local script='#!/bin/sh /etc/rc.common\nSTART=99\nSTOP=10\nUSE_PROCD=1\nstart_service() {\n procd_open_instance main\n procd_set_param command '..command..'\n procd_set_param term_timeout 2\n procd_set_param stdout 1\n procd_set_param stderr 1\n procd_close_instance\n}\n'
-    if stop then script=script..'stop_service() {\n '..shell(stop)..' stop\n}\n' end
+    if stop then script=script..'stop_service() {\n local cancellation=0\n /usr/bin/lua '..shell(base..'/src/cancel-startup.lua')..' '..shell(d..'/run')..' || cancellation=$?\n '..shell(stop)..' stop || return $?\n return "$cancellation"\n}\n' end
     write(d..'/'..name,script)
 end
 service(core_name,'/usr/bin/lua '..shell(base..'/tests/fixture.lua')..' core '..shell(d..'/fixture.json'))

@@ -12,6 +12,11 @@ jobs:
       - name: Install Lua
         run: sudo apt-get update && sudo apt-get install -y lua5.1
       - name: Protocol and configuration tests
-        run: lua5.1 tests/unit.lua
+        run: |
+          lua5.1 tests/unit.lua
+          lua5.1 tests/access.lua
+          lua5.1 tests/dns.lua
+          lua5.1 tests/ownership.lua
+          lua5.1 tests/lifecycle.lua
       - name: Installer and repository checks
         run: python3 tests/packaging.py
