@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: GPL-3.0-only
+name: PSPortalHost
+options:
+  minimumXcodeGenVersion: 2.43.0
+  bundleIdPrefix: org.psportal
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CLANG_ENABLE_MODULES: YES
+    CODE_SIGNING_ALLOWED: NO
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  PSPortalHost:
+    type: application
+    platform: iOS
+    sources:
+      - path: PSPortalHost
+        excludes:
+          - Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.psportal.host.foreground
+        INFOPLIST_FILE: PSPortalHost/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_OBJC_BRIDGING_HEADER: PSPortalHost/Bridge/PSPortalHost-Bridging-Header.h
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        OTHER_LDFLAGS: ["$(inherited)", "-ObjC"]
+    dependencies:
+      - framework: Frameworks/PSPortalEngine.xcframework
+        embed: false
+        link: true
+      - sdk: libresolv.tbd
+      - sdk: Security.framework
+    preBuildScripts:
+      - name: Verify real embedded engine and notices
+        script: bash "${SRCROOT}/scripts/verify-build-inputs.sh"
+        shell: /bin/bash
+        basedOnDependencyAnalysis: false
+        showEnvVars: false
+    scheme:
+      testTargets: [PSPortalHostTests]
+  PSPortalHostTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [PSPortalHostTests]
+    dependencies:
+      - target: PSPortalHost
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.psportal.host.foreground.tests
+        GENERATE_INFOPLIST_FILE: YES
+

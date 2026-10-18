@@ -1,0 +1,17 @@
+{
+  "listen_host": "192.168.1.10",
+  "listen_port": 10081,
+  "allowed_clients": ["192.168.1.50"],
+  "subscription_url": "https://your-provider.example/subscription",
+  "selection_mode": "auto",
+  "preferred_node": "",
+  "backend_port": 10082,
+  "api_port": 10090,
+  "idle_seconds": 60,
+  "wakeup_timeout": 45,
+  "request_timeout": 30,
+  "max_connections": 128,
+  "health_url": "https://www.gstatic.com/generate_204",
+  "health_interval": 300,
+  "health_timeout": 5000
+}

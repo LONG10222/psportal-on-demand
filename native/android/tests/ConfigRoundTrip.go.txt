@@ -1,0 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
+package main
+import("os";"fmt";"github.com/psportal/psportal/native/engine")
+func main(){ b,e:=os.ReadFile(os.Args[1]);if e!=nil{panic(e)};c,e:=engine.ParseConfig(string(b));if e!=nil{panic(e)};if c.PreferredNode!="香港 A" || c.AllowedClients[0]!="192.168.1.30"{panic("roundtrip mismatch")};fmt.Println("PASS: Android-generated config accepted by real Go engine.ParseConfig") }

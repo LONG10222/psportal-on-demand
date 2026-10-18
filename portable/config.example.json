@@ -2,6 +2,7 @@
   "listen_host": "192.168.1.2",
   "listen_port": 10081,
   "allowed_clients": ["192.168.1.30"],
+  "engine_mode": "external",
   "core_path": "/absolute/path/to/mihomo",
   "subscription_url": "https://your-provider.example/subscription",
   "selection_mode": "auto",

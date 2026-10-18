@@ -1,0 +1,20 @@
+# Generated releases and vendored corresponding-source staging
+/dist/
+/vendor/
+# Local credentials/configuration are never repository inputs
+/config.json
+/runtime/
+*.keystore
+*.jks
+*.p12
+*.mobileprovision
+# Task-local SDK/tool/build products
+/android/.gradle/
+/android/.tools/
+/android/local.properties
+/android/app/build/
+/android/app/libs/*.aar
+/android/app/libs/*.jar
+/ios/.tools/
+/ios/Frameworks/*.xcframework/
+/ios/build/

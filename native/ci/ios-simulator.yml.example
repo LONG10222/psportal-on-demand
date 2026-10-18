@@ -1,0 +1,70 @@
+# Inactive template. After review, copy to .github/workflows/ios-simulator.yml.
+# SPDX-License-Identifier: GPL-3.0-only
+name: Native iOS Simulator
+'on':
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'native/engine/**'
+      - 'native/mobile/**'
+      - 'native/ios/**'
+      - 'native/scripts/**'
+      - 'native/ci/ios-simulator.yml.example'
+      - 'native/go.mod'
+      - 'native/go.sum'
+      - '.github/workflows/ios-simulator.yml'
+permissions:
+  contents: read
+concurrency:
+  group: ios-simulator-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  ios-simulator:
+    # Standard public-repository runner only. No larger or private paid runner.
+    if: github.event.repository.private == false
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      # Existing runner Xcode, no xcode-select mutation or license acceptance.
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+      GOMAXPROCS: '2'
+      GOFLAGS: '-p=2'
+      GOTOOLCHAIN: local
+    steps:
+      - name: Check out source without persisting credentials
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Set up pinned Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - name: Verify existing Apple SDK
+        run: |
+          test -d "$DEVELOPER_DIR"
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-path
+      - name: Install checksum-pinned official XcodeGen locally
+        run: bash native/ios/scripts/install-xcodegen-ci.sh
+      - name: Build actual engine, compile simulator app, run XCTest and package source
+        run: bash native/ios/scripts/ci-simulator.sh
+      - name: Upload simulator app with matching source and licenses
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: psportal-ios-simulator-${{ github.sha }}
+          path: native/dist/ios-simulator/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+      - name: Prepare size-bounded diagnostics
+        if: always()
+        run: python3 native/ios/scripts/collect-ci-diagnostics.py
+      - name: Upload build and test diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: psportal-ios-simulator-diagnostics-${{ github.sha }}
+          path: native/ios/build/diagnostics
+          if-no-files-found: ignore
+          retention-days: 1

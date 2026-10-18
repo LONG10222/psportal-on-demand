@@ -4,10 +4,18 @@ Independent LAN HTTP/HTTPS-CONNECT proxy for Windows, macOS and Linux. The origi
 OpenWrt files are unchanged. This is **not a UDP/game-streaming relay** and does
 not install a VPN or alter the host's system proxy, firewall, DNS or autostart.
 
+The same desktop app now has an experimental `embedded` engine option alongside
+the default `external` Python/separate-Mihomo fallback. Choose the shared native
+engine executable in the window; no binary is downloaded and no failure silently
+switches engines. Existing configurations remain external unless explicitly
+changed. See [engine selection and compatibility limits](docs/desktop.md#choose-an-engine-in-the-same-app).
+
 ## Run from source
 
 Requires Python 3.10+ and a separately obtained, trusted Mihomo executable for your
-OS/CPU. The backend uses Python's standard library only; the desktop UI uses
+OS/CPU in default external mode. Embedded mode instead needs the matching shared
+native executable, configured as `native_path` with `engine_mode: embedded`.
+The fallback backend uses Python's standard library only; the desktop UI uses
 Tkinter (included in official Python Windows/macOS distributions, often a separate
 package on Linux).
 
@@ -30,6 +38,11 @@ is not cryptographic authentication. The listener rejects wildcard binds. A loca
 testing and is not reachable from a Portal. Loopback destinations remain denied.
 
 ## Behavior
+
+The process/controller details below describe default external mode. Embedded
+mode keeps the listener but wakes and idles adapters inside its single native
+process; it has no separate core/controller sockets. Its protocol and safety
+limits are documented in the desktop guide.
 
 The listener remains ready without a core. External requests serialize a single
 owned Mihomo startup; established external connections prevent idle shutdown.
@@ -72,6 +85,13 @@ Real Mihomo v1.19.32 has additionally passed HTTP/CONNECT, exact fixed-node
 selection and active/idle lifecycle tests against a controlled loopback upstream.
 This is not an Internet subscription or physical Portal test. Run it explicitly
 with `MIHOMO_BINARY=/trusted/path/mihomo python -m unittest discover -s tests -p test_real_core.py`.
+
+Opt-in desktop/native dispatch and clean-shutdown checks use
+`PSPORTAL_NATIVE_BINARY=/trusted/path/psportal python -m unittest discover -s tests -p test_embedded.py -v`.
+Set `PSPORTAL_DUAL_BINARY` to a rebuilt packaged desktop executable to include
+the frozen embedded CLI test. These checks exercise actual native config/readiness,
+restricted destinations, empty local-provider failure, stdin EOF and restart;
+they do not establish real-node traffic, GUI appearance or device compatibility.
 
 Native packaging/build instructions are under `packaging/` and `docs/`. Do not call
 this a completed four-platform release. Remaining release gates include real

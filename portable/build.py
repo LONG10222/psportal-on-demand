@@ -17,7 +17,22 @@ import sys
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--skip-tests', action='store_true', help='Build without tests; not suitable for release acceptance')
+    parser.add_argument('--debian-runtime-notices', action='store_true', help='Audit exact distro Python3.13/Tk8.6 ELF and retain installed Debian notices')
+    parser.add_argument('--native-engine', type=Path, help='Bundle a reviewed native psportal executable as an experimental option')
+    parser.add_argument('--native-source', type=Path, help='Matching complete native source+vendor archive; required with --native-engine')
     args = parser.parse_args(argv)
+    if args.debian_runtime_notices and (not sys.platform.startswith('linux') or Path(sys.base_prefix) != Path('/usr')):
+        parser.error('--debian-runtime-notices requires the distro /usr Linux Python used for this build')
+    if bool(args.native_engine) != bool(args.native_source):
+        parser.error('--native-engine and --native-source must be supplied together')
+    if args.native_engine:
+        args.native_engine = args.native_engine.resolve()
+        args.native_source = args.native_source.resolve()
+        if not args.native_engine.is_file() or not args.native_source.is_file():
+            parser.error('Native executable and corresponding-source archive must exist')
+        for name in ('LICENSE', 'THIRD_PARTY_NOTICES.md', 'SOURCE.md', 'licenses'):
+            if not (args.native_engine.parent / name).exists():
+                parser.error('Native release is missing its required license/source notices: ' + name)
     root = Path(__file__).resolve().parent
     if importlib.util.find_spec('PyInstaller') is None:
         parser.error('PyInstaller is missing. Install requirements-build.txt in a local build virtualenv first.')
@@ -39,6 +54,16 @@ def main(argv=None):
     folder = root / 'dist' / 'PSPortalProxy'
     executable = folder / ('PSPortalProxy.exe' if sys.platform == 'win32' else 'PSPortalProxy')
     subprocess.run([str(executable), '--smoke-test'], check=True, timeout=30)
+    if args.native_engine:
+        native_folder = (root / 'dist' / 'PSPortalProxy.app' / 'Contents' / 'MacOS' / 'native') if sys.platform == 'darwin' else folder / 'native'
+        native_folder.mkdir(parents=True, exist_ok=True)
+        filename = 'psportal-native.exe' if sys.platform == 'win32' else 'psportal-native'
+        shutil.copy2(args.native_engine, native_folder / filename)
+        shutil.copy2(args.native_source, native_folder / 'corresponding-source.tar.gz')
+        for name in ('LICENSE', 'THIRD_PARTY_NOTICES.md', 'SOURCE.md', 'README.md', 'config.example.json'):
+            shutil.copy2(args.native_engine.parent / name, native_folder / name)
+        shutil.copytree(args.native_engine.parent / 'licenses', native_folder / 'licenses', dirs_exist_ok=True)
+        (native_folder / 'README.txt').write_text('Experimental embedded engine. Default external mode is unchanged.\nComplete corresponding source: corresponding-source.tar.gz\nNative engine license: GPL-3.0-only. See LICENSE and licenses/.\n', encoding='utf-8')
     notices = folder / 'licenses'
     notices.mkdir(exist_ok=True)
     shutil.copy2(root.parent / 'LICENSE', notices / 'PSPortal-OnDemand-LICENSE.txt')
@@ -57,6 +82,8 @@ def main(argv=None):
         if str(item).endswith('COPYING.txt'):
             shutil.copy2(distribution.locate_file(item), notices / 'PyInstaller-COPYING.txt')
             break
+    if args.debian_runtime_notices:
+        subprocess.run([sys.executable, str(root / 'scripts' / 'audit_linux_runtime.py'), str(folder)], check=True)
     if (root / 'docs' / 'validation.md').is_file():
         shutil.copy2(root / 'docs' / 'validation.md', folder / 'validation.md')
     release = root / 'release'
