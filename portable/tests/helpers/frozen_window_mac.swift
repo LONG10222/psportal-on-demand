@@ -12,6 +12,20 @@ func fail(_ message: String) -> Never {
 }
 
 let arguments = CommandLine.arguments
+if arguments.count == 3 && arguments[1] == "find-app" {
+    let bundle = URL(fileURLWithPath: arguments[2]).resolvingSymlinksInPath().standardizedFileURL
+    let executable = bundle.appendingPathComponent("Contents/MacOS/PSPortalProxy")
+        .resolvingSymlinksInPath().standardizedFileURL
+    // This query discloses only PIDs whose bundle and executable both match
+    // the test's unique extracted app path. It never reads another app title.
+    let pids = NSWorkspace.shared.runningApplications.filter {
+        $0.bundleURL?.resolvingSymlinksInPath().standardizedFileURL == bundle &&
+        $0.executableURL?.resolvingSymlinksInPath().standardizedFileURL == executable
+    }.map { $0.processIdentifier }
+    let data = try JSONSerialization.data(withJSONObject: ["pids": pids], options: [.sortedKeys])
+    print(String(data: data, encoding: .utf8)!)
+    exit(0)
+}
 guard arguments.count == 4,
       ["inspect", "quit"].contains(arguments[1]),
       let pid = Int32(arguments[2]), pid > 0 else {

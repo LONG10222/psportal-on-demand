@@ -17,7 +17,12 @@ import tarfile
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_EXECUTABLE = 'Contents/MacOS/PSPortalProxy'
-NATIVE_EXECUTABLE = 'Contents/MacOS/native/psportal-native'
+NATIVE_EXECUTABLE = 'Contents/MacOS/psportal-native'
+NATIVE_RESOURCE_ALIAS = 'Contents/Resources/native/psportal-native'
+NATIVE_COMPATIBILITY_LINKS = {
+    'Contents/MacOS/native': '../Resources/native',
+    NATIVE_RESOURCE_ALIAS: '../../MacOS/psportal-native',
+}
 METHOD = 'pinned-pyinstaller-transform-and-signature-removal'
 
 
@@ -102,11 +107,15 @@ def verify_inventory(report, reviewed):
     binaries = unique_records(report.get('binaries', []), 'binary')
     links = {key: value['target'] for key, value in unique_records(report.get('symlinks', []), 'symlink').items()}
     expected_links = {key: value['target'] for key, value in unique_records(reviewed['expected_bundle_symlinks'], 'reviewed symlink').items()}
-    require(links == expected_links, 'Bundle symlink topology differs from review')
+    require(links == expected_links and all(links.get(path) == target for path, target in NATIVE_COMPATIBILITY_LINKS.items()),
+            'Bundle symlink topology differs from review')
     for path in links:
         resolve_bundle_path(path, links)
-    require(len(binaries) == reviewed['expected_binary_path_count'] == 63 and
-            set(binaries) == set(reviewed['runtime_files']) | {APP_EXECUTABLE, NATIVE_EXECUTABLE}, 'Unexpected frozen binaries')
+    require(len(binaries) == reviewed['expected_binary_path_count'] == 64 and
+            set(binaries) == set(reviewed['runtime_files']) | {APP_EXECUTABLE, NATIVE_EXECUTABLE, NATIVE_RESOURCE_ALIAS}, 'Unexpected frozen binaries')
+    require(binaries[NATIVE_EXECUTABLE]['sha256'] == binaries[NATIVE_RESOURCE_ALIAS]['sha256'] and
+            resolve_bundle_path(NATIVE_RESOURCE_ALIAS, links) == NATIVE_EXECUTABLE,
+            'Native resource alias differs from the actual code helper')
     app, build = report['app'], report['build']
     require(within_posix(app, '/') and within_posix(build, '/'), 'Invalid build evidence paths')
     for path, binary in binaries.items():
@@ -178,6 +187,60 @@ def verify_archive(archive, files, links, companion, directories=None):
         require(actual_directories == directories, 'Archive differs from tested directory set')
 
 
+def verify_final_seal(report, binaries, files, links, validation, seal, acceptance,
+                      archive_path, archive_sha256, seal_sha256, archive_tree_sha256):
+    """Cross-bind actual seal/extracted launch receipts to this inventoried artifact."""
+    app = report['app']
+    commit = validation['source_commit']
+    require(seal.get('source_commit') == acceptance.get('source_commit') == commit and
+            seal.get('schema_version') == acceptance.get('schema_version') == 1,
+            'Final seal/acceptance evidence is from another source revision')
+    require(seal.get('app') == app and all(seal.get(key) is True for key in (
+            'passed', 'final_deep_strict_verified', 'nested_strict_verified')) and
+            seal.get('signing_identity') == 'ad-hoc' and seal.get('deep_signing_used') is False and
+            seal.get('developer_id') is False and seal.get('notarized') is False,
+            'Final outer-only ad-hoc seal or strict nested verification is missing')
+    nested = {resolve_bundle_path(path, links): item['sha256'] for path, item in binaries.items()
+              if path != APP_EXECUTABLE}
+    require(seal.get('nested_macho_before') == seal.get('nested_macho_after') == nested,
+            'Final signing changed or omitted nested Mach-O code')
+    main_sha = binaries[APP_EXECUTABLE]['sha256']
+    envelope_sha = files['Contents/_CodeSignature/CodeResources']['sha256']
+    require(seal.get('main_sha256_after') == main_sha and
+            seal.get('code_resources_sha256') == envelope_sha and
+            re.fullmatch('[0-9a-f]{64}', seal.get('main_sha256_before', '')) and
+            seal.get('native_sha256') == binaries[NATIVE_EXECUTABLE]['sha256'] == validation['native_binary_sha256'] and
+            seal.get('native_aliases') == NATIVE_COMPATIBILITY_LINKS and
+            seal.get('native_resource_envelope_entry') == 'MacOS/psportal-native',
+            'Final seal is not bound to the exact inventoried app and native helper')
+    def succeeded(evidence, argv, minimum=1):
+        return sum(item.get('argv') == argv and item.get('returncode') == 0
+                   for item in evidence.get('commands', [])) >= minimum
+    signing = [item for item in seal.get('commands', []) if '--sign' in item.get('argv', [])]
+    require(len(signing) == 1 and signing[0].get('returncode') == 0 and
+            signing[0]['argv'] == ['/usr/bin/codesign', '--force', '--sign', '-', '--timestamp=none', app],
+            'Unexpected signing command or identity')
+    require(succeeded(seal, ['/usr/bin/codesign', '--verify', '--deep', '--strict', '--verbose=2', app]) and
+            all(succeeded(seal, ['/usr/bin/codesign', '--verify', '--strict', '--verbose=2',
+                 str(PurePosixPath(app) / path)]) for path in {*nested, APP_EXECUTABLE}),
+            'Successful exact-app/nested codesign command evidence is missing')
+    extracted_app = str(PurePosixPath(report['build']).parent / 'final-macos-archive/PSPortalProxy.app')
+    require(all(acceptance.get(key) is True for key in (
+            'passed', 'extracted_deep_strict_verified', 'launchservices_window_verified')) and
+            acceptance.get('archive') == str(archive_path) and acceptance.get('archive_sha256') == archive_sha256 and
+            acceptance.get('bundle_seal_sha256') == seal_sha256 and acceptance.get('app') == extracted_app and
+            acceptance.get('extracted_tree_sha256') == archive_tree_sha256,
+            'Extracted archive acceptance is missing or bound to another archive')
+    require(acceptance.get('nested_macho_sha256') == nested and acceptance.get('main_sha256') == main_sha and
+            acceptance.get('code_resources_sha256') == envelope_sha and
+            acceptance.get('launchservices_receipt') == dict(app=extracted_app, visible=True, normal_quit=True,
+                                                            no_listener=True, open_exitcode=0),
+            'Extracted app or actual LaunchServices receipt differs from this sealed build')
+    require(succeeded(acceptance, ['/usr/bin/codesign', '--verify', '--deep', '--strict', '--verbose=2',
+                                  extracted_app], minimum=2),
+            'Extracted app was not strictly verified before and after launch')
+
+
 def companion_candidates(report):
     result = {}
     for item in report['license_candidates']:
@@ -208,7 +271,8 @@ def main(argv=None):
     require(validation['system'] == 'darwin' and validation['architecture'] == 'arm64', 'Unreviewed platform')
     require(validation['tests_run'] >= 149 and all(validation.get(key) is True for key in (
         'exact_cpython_runtime_notices', 'actual_external_core_tested', 'native_platform_frozen_window_smoke_tested',
-        'source_tk_gui_both_modes_tested', 'matching_bundled_native_discovery_tested')), 'Required runtime/window acceptance is missing')
+        'source_tk_gui_both_modes_tested', 'matching_bundled_native_discovery_tested',
+        'final_macos_archive_acceptance_tested')), 'Required runtime/window acceptance is missing')
     from retain_cpython_notices import verified_supplement_files, MACOS_INSTALLED_LICENSE_SHA256, MACOS_INSTALLED_NOTICES, MACOS_COMPONENTS
     notices = ROOT / 'dist/PSPortalProxy/licenses'
     require(Path(report['companion_notice_directory']).resolve() == notices.resolve(), 'Unexpected companion notices')
@@ -226,7 +290,7 @@ def main(argv=None):
         require(scope['installed_component_notices'][component]['sha256'] == expected and
                 digest((retained / ('installed-' + component + '-license.txt')).read_bytes()) == expected,
                 'Exact installed component notice missing: ' + component)
-    native = app / 'Contents/MacOS/native'
+    native = app / 'Contents/Resources/native'
     require(digest((native / 'psportal-native').read_bytes()) == validation['native_binary_sha256'] and
             digest((native / 'corresponding-source.tar.gz').read_bytes()) == validation['corresponding_source_sha256'], 'Native source/executable mismatch')
     for path in (notices / 'PyInstaller-COPYING.txt', notices / 'PSPortal-OnDemand-LICENSE.txt',
@@ -249,12 +313,24 @@ def main(argv=None):
         directories.update(prefix + '/' + path.relative_to(root).as_posix() for path in root.rglob('*')
                            if path.is_dir() and not path.is_symlink())
     verify_archive(archives[0], files, links, companion, directories)
+    from verify_macos_archive import archive_records
+    archive_tree = archive_records(archives[0])
+    archive_tree_sha256 = digest(json.dumps(archive_tree, sort_keys=True, separators=(',', ':')).encode())
+    seal_path = ROOT / 'release/MACOS-BUNDLE-SEAL.json'
+    acceptance_path = ROOT / 'release/MACOS-ARCHIVE-ACCEPTANCE.json'
+    seal = json.loads(seal_path.read_text(encoding='utf-8'))
+    acceptance = json.loads(acceptance_path.read_text(encoding='utf-8'))
+    verify_final_seal(report, binaries, files, links, validation, seal, acceptance,
+                      archives[0], digest(archives[0].read_bytes()), digest(seal_path.read_bytes()), archive_tree_sha256)
     result = dict(source_commit=validation['source_commit'], developer_id_signed=False, notarized=False,
         scope='Reviewed macOS arm64 CPython3.13.15/PyInstaller6.16.0 development GUI archive only',
         runtime_binaries_verified=len(binaries), archive_directories_verified=len(directories),
         runtime_review_source=reviewed['evidence_run'],
         complete_versioned_notices_retained=True, matching_native_source_retained=True,
-        real_window_and_runtime_checks_passed=True, runtime_inventory_sha256=digest(args.inventory.read_bytes()),
+        real_window_and_runtime_checks_passed=True, final_adhoc_seal_deep_strict_verified=True,
+        nested_native_and_runtime_bytes_preserved=True, extracted_archive_launchservices_verified=True,
+        bundle_seal_sha256=digest(seal_path.read_bytes()), archive_acceptance_sha256=digest(acceptance_path.read_bytes()),
+        runtime_inventory_sha256=digest(args.inventory.read_bytes()),
         archive_sha256=digest(archives[0].read_bytes()), physical_portal_or_live_subscription_tested=False)
     release = ROOT / 'release'
     (release / 'MACOS-RUNTIME-REVIEW.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')

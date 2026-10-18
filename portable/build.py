@@ -62,7 +62,7 @@ def main(argv=None):
     executable = folder / ('PSPortalProxy.exe' if sys.platform == 'win32' else 'PSPortalProxy')
     subprocess.run([str(executable), '--smoke-test'], check=True, timeout=30)
     if args.native_engine:
-        native_folder = (root / 'dist' / 'PSPortalProxy.app' / 'Contents' / 'MacOS' / 'native') if sys.platform == 'darwin' else folder / 'native'
+        native_folder = (root / 'dist' / 'PSPortalProxy.app' / 'Contents' / 'Resources' / 'native') if sys.platform == 'darwin' else folder / 'native'
         native_folder.mkdir(parents=True, exist_ok=True)
         filename = 'psportal-native.exe' if sys.platform == 'win32' else 'psportal-native'
         shutil.copy2(args.native_engine, native_folder / filename)
@@ -103,6 +103,9 @@ def main(argv=None):
     release.mkdir(exist_ok=True)
     name = 'PSPortalProxy-' + platform.system().lower() + '-' + platform.machine().lower()
     if sys.platform == 'darwin':
+        from scripts.macos_bundle_finalize import finalize_bundle, sha256
+        finalize_bundle(root / 'dist' / 'PSPortalProxy.app', release / 'MACOS-BUNDLE-SEAL.json',
+                        sha256(args.native_engine) if args.native_engine else None)
         # Preserve the .app bundle's symlinks and executable modes.
         archive = release / (name + '.tar.gz')
         import tarfile

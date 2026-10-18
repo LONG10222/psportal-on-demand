@@ -6,8 +6,8 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
-from scripts.verify_macos_release import (APP_EXECUTABLE, NATIVE_EXECUTABLE, METHOD,
-    companion_candidates, resolve_bundle_path, verify_archive, verify_inventory, within_posix)
+from scripts.verify_macos_release import (APP_EXECUTABLE, NATIVE_EXECUTABLE, NATIVE_RESOURCE_ALIAS, NATIVE_COMPATIBILITY_LINKS, METHOD,
+    companion_candidates, resolve_bundle_path, verify_archive, verify_inventory, verify_final_seal, within_posix)
 
 
 class MacOSReleaseGateTests(unittest.TestCase):
@@ -15,7 +15,7 @@ class MacOSReleaseGateTests(unittest.TestCase):
         runtime_files = {f'Contents/Frameworks/lib{i}.dylib': dict(source_relative=f'lib/lib{i}.dylib',
             source_sha256='a'*64, type='BINARY', resolved_bundle_path=f'Contents/Frameworks/lib{i}.dylib') for i in range(61)}
         reviewed = dict(architecture='arm64', python_version='3.13.15', pyinstaller_version='6.16.0',
-            original_python_prefix='/Python', expected_binary_path_count=63, expected_bundle_symlinks=[], runtime_files=runtime_files)
+            original_python_prefix='/Python', expected_binary_path_count=64, expected_bundle_symlinks=[dict(path=k,target=v) for k,v in NATIVE_COMPATIBILITY_LINKS.items()], runtime_files=runtime_files)
         binaries = []
         for path, item in runtime_files.items():
             source='/Python/' + item['source_relative']
@@ -29,14 +29,15 @@ class MacOSReleaseGateTests(unittest.TestCase):
             origin_candidates=[dict(source='/build/PSPortalProxy',sha256='d'*64,type='EXECUTABLE')],imports=[]))
         binaries.append(dict(path=NATIVE_EXECUTABLE,format='Mach-O',sha256='e'*64,origin_hash_verified=True,
             origin_candidates=[dict(source='/native/dist/psportal',sha256='e'*64,type='REVIEWED_NATIVE')],imports=[]))
+        binaries.append(dict(binaries[-1], path=NATIVE_RESOURCE_ALIAS))
         report = dict(inventory_complete=True, issues=[], app='/app', build='/build', binaries=binaries,
-            files=[dict(path=b['path'],sha256=b['sha256']) for b in binaries], symlinks=[],
+            files=[dict(path=b['path'],sha256=b['sha256']) for b in binaries], symlinks=copy.deepcopy(reviewed['expected_bundle_symlinks']),
             runtime=dict(python='3.13.15 (exact)',pyinstaller='6.16.0',base_prefix='/Python'))
         return report,reviewed
 
     def test_full_byte_proof_accepts_and_changed_regions_fail(self):
         report,reviewed=self.fixture()
-        self.assertEqual(len(verify_inventory(report,reviewed)[0]),63)
+        self.assertEqual(len(verify_inventory(report,reviewed)[0]),64)
         report['binaries'][0]['origin_transformation_proofs'][0]['normalized_packaged_sha256']='f'*64
         with self.assertRaises(ValueError):verify_inventory(report,reviewed)
 
@@ -142,3 +143,68 @@ class MacOSReleaseGateTests(unittest.TestCase):
                 else:
                     with self.subTest(mutation=mutation),self.assertRaises(ValueError):
                         verify_archive(archive,{'file':dict(sha256=sha)}, {}, {}, expected)
+
+    def test_native_alias_and_real_helper_require_identical_bytes_and_exact_layout(self):
+        for mutation in ('hash', 'alias', 'directory'):
+            report,reviewed=self.fixture()
+            if mutation=='hash':
+                for item in report['binaries']+report['files']:
+                    if item['path']==NATIVE_RESOURCE_ALIAS:item['sha256']='f'*64
+            else:
+                path=NATIVE_RESOURCE_ALIAS if mutation=='alias' else 'Contents/MacOS/native'
+                for item in report['symlinks']:
+                    if item['path']==path:item['target']='../Frameworks'
+                reviewed['expected_bundle_symlinks']=copy.deepcopy(report['symlinks'])
+            with self.subTest(mutation=mutation),self.assertRaises(ValueError):verify_inventory(report,reviewed)
+
+    def seal_fixture(self):
+        report,reviewed=self.fixture()
+        binaries,files,links=verify_inventory(report,reviewed)
+        files['Contents/_CodeSignature/CodeResources']=dict(sha256='9'*64)
+        nested={resolve_bundle_path(path,links):item['sha256'] for path,item in binaries.items() if path!=APP_EXECUTABLE}
+        success=lambda argv:dict(argv=argv,returncode=0)
+        seal=dict(schema_version=1,source_commit='commit',app='/app',passed=True,
+            final_deep_strict_verified=True,nested_strict_verified=True,signing_identity='ad-hoc',
+            developer_id=False,notarized=False,deep_signing_used=False,nested_macho_before=nested,
+            nested_macho_after=copy.deepcopy(nested),main_sha256_before='8'*64,main_sha256_after='d'*64,
+            code_resources_sha256='9'*64,native_sha256='e'*64,native_aliases=NATIVE_COMPATIBILITY_LINKS,
+            native_resource_envelope_entry='MacOS/psportal-native',commands=[
+                success(['/usr/bin/codesign','--force','--sign','-','--timestamp=none','/app']),
+                success(['/usr/bin/codesign','--verify','--deep','--strict','--verbose=2','/app'])]+
+                [success(['/usr/bin/codesign','--verify','--strict','--verbose=2','/app/'+path])
+                 for path in {*nested,APP_EXECUTABLE}])
+        extracted='/final-macos-archive/PSPortalProxy.app'
+        acceptance=dict(schema_version=1,source_commit='commit',passed=True,
+            extracted_deep_strict_verified=True,launchservices_window_verified=True,
+            archive='/release/app.tar.gz',archive_sha256='1'*64,bundle_seal_sha256='2'*64,
+            app=extracted,extracted_tree_sha256='3'*64,nested_macho_sha256=nested,main_sha256='d'*64,
+            code_resources_sha256='9'*64,launchservices_receipt=dict(app=extracted,visible=True,
+                normal_quit=True,no_listener=True,open_exitcode=0),commands=[
+                success(['/usr/bin/codesign','--verify','--deep','--strict','--verbose=2',extracted])]*2)
+        args=[report,binaries,files,links,dict(source_commit='commit',native_binary_sha256='e'*64),
+              seal,acceptance,Path('/release/app.tar.gz'),'1'*64,'2'*64,'3'*64]
+        return args
+
+    def test_final_seal_and_extracted_launch_are_bound_to_exact_artifact(self):
+        verify_final_seal(*self.seal_fixture())
+        for target,key,value in ((5,'source_commit','other'),(5,'passed',False),
+                (5,'nested_macho_before',{}),(5,'main_sha256_after','f'*64),
+                (5,'native_sha256','f'*64),(5,'code_resources_sha256','f'*64),
+                (5,'deep_signing_used',True),(5,'native_aliases',{}),
+                (6,'archive_sha256','f'*64),(6,'bundle_seal_sha256','f'*64),
+                (6,'extracted_tree_sha256','f'*64),(6,'nested_macho_sha256',{}),
+                (6,'launchservices_receipt',{}),(6,'launchservices_window_verified',False),
+                (6,'app','/another/PSPortalProxy.app')):
+            args=self.seal_fixture();args[target][key]=value
+            with self.subTest(key=key),self.assertRaises(ValueError):verify_final_seal(*args)
+
+    def test_final_seal_requires_exact_outer_signing_and_both_postarchive_checks(self):
+        for mutation in ('identity','deep-sign','nested-missing','nested-failed','archive-once','archive-failed'):
+            args=self.seal_fixture();seal,acceptance=args[5:7]
+            if mutation=='identity':seal['commands'][0]['argv'][3]='developer-key'
+            elif mutation=='deep-sign':seal['commands'][0]['argv'].insert(1,'--deep')
+            elif mutation=='nested-missing':seal['commands'].pop()
+            elif mutation=='nested-failed':seal['commands'][-1]['returncode']=1
+            elif mutation=='archive-once':acceptance['commands'].pop()
+            else:acceptance['commands'][0]['returncode']=1
+            with self.subTest(mutation=mutation),self.assertRaises(ValueError):verify_final_seal(*args)

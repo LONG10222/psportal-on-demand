@@ -75,6 +75,12 @@ def main():
     skips = re.search(r'OK \(skipped=(\d+)\)', tested.stdout)
     assert count, 'Test runner did not report its count'
     release = PORTABLE / 'release'
+    if system == 'darwin':
+        archives = list(release.glob('PSPortalProxy-darwin-*.tar.gz'))
+        assert len(archives) == 1, 'Expected one final macOS archive'
+        run([sys.executable, PORTABLE / 'scripts/verify_macos_archive.py',
+             '--archive', archives[0], '--output', PORTABLE / 'build/final-macos-archive',
+             '--evidence', release / 'MACOS-ARCHIVE-ACCEPTANCE.json'], env=env)
     evidence = dict(source_commit=os.environ.get('GITHUB_SHA', ''), system=system, architecture=arch,
         platform=platform.platform(), python=sys.version, native_binary_sha256=hashlib.sha256(native.read_bytes()).hexdigest(),
         corresponding_source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
@@ -85,7 +91,9 @@ def main():
         source_tk_gui_both_modes_tested=args.source_tk or args.xvfb,
         matching_bundled_native_discovery_tested=True,
         exact_cpython_runtime_notices=args.cpython_runtime_notices,
-        exact_debian_runtime_notices=args.debian_runtime_notices, signed_or_notarized=False,
+        exact_debian_runtime_notices=args.debian_runtime_notices,
+        final_macos_archive_acceptance_tested=system == 'darwin',
+        developer_id_signed=False, notarized=False,
         live_subscription_or_physical_portal_tested=False)
     if args.debian_runtime_notices:
         manifest = PORTABLE / 'dist/PSPortalProxy/licenses/debian/runtime-manifest.json'

@@ -9,7 +9,7 @@
   "pyinstaller_version": "6.16.0",
   "architecture": "arm64",
   "original_python_prefix": "/Library/Frameworks/Python.framework/Versions/3.13",
-  "expected_binary_path_count": 63,
+  "expected_binary_path_count": 64,
   "runtime_files": {
     "Contents/Frameworks/Python": {
       "source_relative": "Python",
@@ -477,6 +477,10 @@
       "target": "../Resources/tcl8"
     },
     {
+      "path": "Contents/MacOS/native",
+      "target": "../Resources/native"
+    },
+    {
       "path": "Contents/Resources/Python",
       "target": "Python.framework/Versions/3.13/Python"
     },
@@ -499,6 +503,10 @@
     {
       "path": "Contents/Resources/libssl.3.dylib",
       "target": "../Frameworks/libssl.3.dylib"
+    },
+    {
+      "path": "Contents/Resources/native/psportal-native",
+      "target": "../../MacOS/psportal-native"
     },
     {
       "path": "Contents/Resources/python3.13",
@@ -524,5 +532,6 @@
     "tk_script": "8.6.18",
     "unicode": "15.1.0"
   },
-  "liblzma_version_evidence_pending": "Exact installer recipe specifies5.2.3; actual installed extension lzma_version_string query must confirm before release"
+  "liblzma_version_evidence_pending": "Exact installer recipe specifies5.2.3; actual installed extension lzma_version_string query must confirm before release",
+  "layout_revision": "Final native helper in MacOS; matching source and notices in Resources; exact compatibility aliases"
 }

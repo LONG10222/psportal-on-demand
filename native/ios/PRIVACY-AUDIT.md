@@ -59,6 +59,25 @@ The manifest is included in each content-hash list. Full Apple build/runtime
 validation of this correction is pending its next CI run; only then does the
 new source/app pair supersede the prior package for this resource requirement.
 
+## Final archive and signature boundary
+
+CI also extracts the completed Simulator/device ZIPs, verifies their content
+manifests, compares every app member's bytes and Unix permission modes with the
+built app, and checks that corresponding source remains beside the app. It
+rejects unexpected nested frameworks/dylibs, which would need their own audit.
+The framework is currently statically linked. It records both `codesign
+--display --verbose=4` and `codesign --verify --strict --verbose=4` outcomes on
+the extracted apps. Nonzero unsigned/unsealed outcomes are recorded as such,
+not described as successful signature verification. No identity signing is
+performed. Device code signatures/profiles are forbidden by the gate.
+
+The Simulator linker may create an executable code signature despite
+`CODE_SIGNING_ALLOWED=NO`; that alone is not a bundle resource seal or trusted
+distribution signing. The exact archive-extracted Simulator app is installed,
+launched, checked alive and screenshotted after these checks. It remains a
+development-only Simulator build. A passing resource/launch gate does not turn
+an unsigned device app into an installable one.
+
 ## Integrated encrypted-node lifecycle boundary
 
 The shipped gomobile API exposes only Start/Stop/Status. It directly constructs

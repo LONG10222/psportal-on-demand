@@ -123,10 +123,7 @@ cp -R "$NATIVE/dist/licenses" "$STAGING/licenses"
 python3 - "$STAGING" <<'PY_HASH'
 import hashlib,pathlib,sys
 root=pathlib.Path(sys.argv[1])
-paths=[root/'psportal-native-corresponding-source.tar.gz',root/'PSPortalHost.app/PSPortalHost']
-paths += sorted((root/'licenses').rglob('*'))
-paths += sorted((root/'PSPortalHost.app').rglob('*.txt'))
-paths += sorted((root/'PSPortalHost.app').rglob('*.xcprivacy'))
+paths=sorted(p for p in root.rglob('*') if p.is_file() and p != root/'CONTENT-SHA256SUMS')
 (root/'CONTENT-SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.relative_to(root).as_posix()+'\n' for p in paths if p.is_file()))
 PY_HASH
 ditto -c -k --keepParent "$STAGING" "$OUTPUT/$PACKAGE.zip"
@@ -145,10 +142,7 @@ cp -R "$STAGING/licenses" "$DEVICE_STAGING/licenses"
 python3 - "$DEVICE_STAGING" <<'PY_DEVICE_HASH'
 import hashlib,pathlib,sys
 root=pathlib.Path(sys.argv[1])
-paths=[root/'psportal-native-corresponding-source.tar.gz',root/'PSPortalHost.app/PSPortalHost']
-paths += sorted((root/'licenses').rglob('*'))
-paths += sorted((root/'PSPortalHost.app').rglob('*.txt'))
-paths += sorted((root/'PSPortalHost.app').rglob('*.xcprivacy'))
+paths=sorted(p for p in root.rglob('*') if p.is_file() and p != root/'CONTENT-SHA256SUMS')
 (root/'CONTENT-SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.relative_to(root).as_posix()+'\n' for p in paths if p.is_file()))
 PY_DEVICE_HASH
 ditto -c -k --keepParent "$DEVICE_STAGING" "$OUTPUT/$DEVICE_PACKAGE.zip"
@@ -159,6 +153,45 @@ print(f'Combined simulator/device artifact size: {size} bytes (maximum 200 MiB)'
 assert size <= 200*1024*1024, 'Artifact exceeds bounded storage budget; not uploaded'
 PY_SIZE
 (cd "$OUTPUT" && shasum -a 256 "$PACKAGE.zip" "$DEVICE_PACKAGE.zip" > SHA256SUMS)
+
+# Verify and run the final archive, not only its pre-packaging build directory.
+# No signing identity is created or used. Simulator may have a linker-generated
+# code signature without a full bundle resource seal; record the actual result.
+EXTRACTED="$ROOT/build/final-archive-audit"
+mkdir -p "$EXTRACTED"
+ditto -x -k "$OUTPUT/$PACKAGE.zip" "$EXTRACTED"
+ditto -x -k "$OUTPUT/$DEVICE_PACKAGE.zip" "$EXTRACTED"
+FINAL_APP="$EXTRACTED/$PACKAGE/PSPortalHost.app"
+FINAL_DEVICE_APP="$EXTRACTED/$DEVICE_PACKAGE/PSPortalHost.app"
+python3 "$ROOT/scripts/audit-final-package.py" "$EXTRACTED/$PACKAGE" "$APP" | tee "$LOGS/final-simulator-package-audit.log"
+python3 "$ROOT/scripts/audit-final-package.py" "$EXTRACTED/$DEVICE_PACKAGE" "$DEVICE_APP" | tee "$LOGS/final-device-package-audit.log"
+python3 "$ROOT/scripts/audit-app-resources.py" "$FINAL_APP" "$FINAL_DEVICE_APP" | tee "$LOGS/final-privacy-resource-audit.log"
+for KIND in simulator device; do
+  if [[ "$KIND" == simulator ]]; then AUDIT_APP="$FINAL_APP"; else AUDIT_APP="$FINAL_DEVICE_APP"; fi
+  {
+    printf 'Final extracted %s app; CODE_SIGNING_ALLOWED=NO.\n' "$KIND"
+    if /usr/bin/codesign --display --verbose=4 "$AUDIT_APP"; then
+      printf 'codesign display exit status: 0\n'
+    else
+      RESULT=$?; printf 'codesign display exit status: %s\n' "$RESULT"
+    fi
+    if /usr/bin/codesign --verify --strict --verbose=4 "$AUDIT_APP"; then
+      printf 'codesign strict verification exit status: 0\n'
+    else
+      RESULT=$?; printf 'codesign strict verification exit status: %s\n' "$RESULT"
+      printf 'Verification did not pass. Intentional unsigned/unsealed development packaging is not distribution-signing proof.\n'
+    fi
+  } > "$LOGS/final-$KIND-codesign.log" 2>&1
+done
+xcrun simctl bootstatus "$SIMULATOR_ID" -b
+xcrun simctl install "$SIMULATOR_ID" "$FINAL_APP"
+FINAL_LAUNCH="$(xcrun simctl launch --terminate-running-process "$SIMULATOR_ID" org.psportal.host.foreground)"
+printf '%s\n' "$FINAL_LAUNCH" | tee "$LOGS/final-archive-launch.log"
+FINAL_PID="${FINAL_LAUNCH##*: }"
+sleep 3
+kill -0 "$FINAL_PID"
+# The delivered screenshot now depicts the exact archive-extracted app.
+xcrun simctl io "$SIMULATOR_ID" screenshot --type=png "$LOGS/simulator-app.png"
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
   {
     printf '### iOS Simulator source build\n\n'
@@ -166,6 +199,7 @@ if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
     printf -- '- Native Go fixture tests and the Xcode test command passed; see the test result bundle for individual tests/skips\n'
     printf -- '- Separate unsigned iPhoneOS ARM64 app compiled and linked; not installed or run on hardware\n'
     printf -- '- Downloads include apps, GPL/dependency notices, matching source+vendor archives and content/ZIP SHA-256 manifests\n'
+    printf -- '- Final ZIPs were extracted and content/app bytes/modes/resources rechecked; exact extracted Simulator app installed and launched. Actual unsigned/linker-signature codesign outcomes are in diagnostics\n'
     printf -- '- Simulator runtime evidence only. Physical iPhone/iPad and Portal validation remain open\n'
   } >> "$GITHUB_STEP_SUMMARY"
 fi
