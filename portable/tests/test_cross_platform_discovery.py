@@ -286,7 +286,9 @@ class ProxyDiscoveryTests(unittest.TestCase):
                  ({'http_proxy': 'http://name:password@localhost:7897'}, None),
                  ({'HTTP_PROXY': 'localhost:7897', 'REQUEST_METHOD': 'GET'}, None)]
         for env, expected in cases:
-            with patch.dict(os.environ, env, clear=True), patch.object(existing_proxy.sys, 'platform', 'linux'), \
+            # A Linux environment is case-sensitive even when this fixture runs
+            # on Windows, whose real os.environ folds these two keys together.
+            with patch.object(existing_proxy.os, 'environ', dict(env)), patch.object(existing_proxy.sys, 'platform', 'linux'), \
                  patch.object(existing_proxy.subprocess, 'run') as run, self.subTest(env=env):
                 info = existing_proxy.detect_system_proxy()
                 self.assertEqual(info['port'] if info else None, expected); run.assert_not_called()

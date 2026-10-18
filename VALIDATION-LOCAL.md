@@ -4,7 +4,7 @@
 
 | 检查 | 结果 | 证据 |
 |---|---|---|
-| portable 全量回归，启用 Tk、真实 Mihomo 与原 native 可执行文件 | 244 项：235 通过、9 跳过 | `evidence/desktop-tests.log` |
+| portable 全量回归，启用 Tk、真实 Mihomo 与原 native 可执行文件 | 247 项：238 通过、9 跳过 | `evidence/desktop-tests.log` |
 | 当前 native Go engine/mobile 源码 | engine 测试通过；mobile 包无独立测试 | `evidence/native-tests.log` |
 | iPhone 17 / iOS 27.0 Simulator XCTest | 19 项：18 通过、1 跳过 | `evidence/ios-tests.log` |
 | 最终 iOS 界面构建 | BUILD SUCCEEDED | `evidence/ios-build.log` |
@@ -23,6 +23,8 @@
 - 节点控制：真实 Mihomo 与两个可控延迟的本机 HTTP 上游，验证组名/节点名中的斜杠及国旗字符、手动切换、最低延迟选择、周期重测、手动退出自动、全部测速失败保留原选择、核心回收后恢复手动选择，以及后台任务不唤醒已休眠核心。修复生成 JSON 中 emoji 代理组正则被 YAML 解析器拒绝的问题。
 - 窗口与 IPC：真实 Tk → 独立子进程 → 真实 Mihomo → 受控本机上游，通过界面加载并切换节点；实际建立 CONNECT 后设备数与首页状态改变，语言热切换不改 PID，关闭连接后回到等待状态，偏好设置落盘。联动模式的节点按钮禁用，命令层也拒绝控制现有 Clash。
 - GitHub 整合：纳入 Windows/Linux 只读接口识别、系统代理识别与精确 PyYAML/LibYAML 来源和许可证校验。修复 sysfs 比较中未规范化的路径，新增符号链接根路径回归；没有放开虚拟接口限制。JSON 订阅先严格解析再转为 Unicode 运行副本，支持标准代理对形式的国旗字符，原文件不变。native 许可证范围脚本的 9 项单元测试通过。
+- HTTPS 运行环境：本机搬迁的 Python 默认 CA 数量为 0；仅在 macOS、无自定义证书路径且无已加载根证书时补载系统 `/etc/ssl/cert.pem`，保持 `CERT_REQUIRED` 和域名校验。三项证书回归通过，另用公开 PyPI 元数据实际完成 66,402 字节的 TLS 校验下载；没有使用用户订阅。精确 PyYAML wheel 审查及两份源归档 SHA 校验也在本机通过。
+- Windows 云端测试修复：模拟 Linux 的大小写敏感环境使用普通映射，避免 Windows `os.environ` 本身合并大小写；原始许可证通过 Git 属性保留 LF 字节，未放宽字节相等或完整性校验。
 - Clash 缓存：按官方 v2.5.8 文件格式只读提取当前订阅名称及套餐统计，真实本机界面已显示；单元测试验证不输出 URL/令牌，原文件字节不变。标记“缓存、只读、非实时”。
 - iOS 真实 XCFramework：实际 socket 的 HTTP、CONNECT、访问来源拒绝、Stop 关闭连接及重启测试通过。这里只证明受控私网直连传输，不等于真实外网加密节点验收。
 - iOS 网络逻辑：Wi-Fi/有线/蜂窝分类；蜂窝不会单独证明热点开启；必须有真实私网 bridge 且用户确认；按实际掩码生成名单。语言/主题热切换不重启引擎、不丢失设置。

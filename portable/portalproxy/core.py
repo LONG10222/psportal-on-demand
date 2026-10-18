@@ -86,7 +86,8 @@ def download_subscription(url, destination):
                     except OSError as exc:
                         last = exc
                 raise last or OSError('No subscription address available')
-        connection = PinnedHTTPS(host, port, timeout=5, context=ssl.create_default_context())
+        from .tls import verified_context
+        connection = PinnedHTTPS(host, port, timeout=5, context=verified_context())
         path = parsed.path or '/'
         if parsed.query:
             path += '?' + parsed.query

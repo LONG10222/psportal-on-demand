@@ -57,6 +57,7 @@ class DownloadTests(unittest.TestCase):
     def transport(self, wire, addresses=('8.8.8.8',)):
         raw = FakeSocket(wire)
         context = Mock()
+        context.cert_store_stats.return_value = {'x509_ca': 1}
         context.wrap_socket.return_value = raw
         with patch('portalproxy.core.socket.getaddrinfo', return_value=[self.answer(a) for a in addresses]) as dns, \
                 patch('portalproxy.core.socket.create_connection', return_value=raw) as connect, \

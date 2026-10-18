@@ -6,7 +6,7 @@
 
 - `main` 仍为 `5abe7274`；PR #4 远端基线为 `49a8467`，当时没有新增讨论或评审评论。
 - `feat/cross-platform-ui-parity` 新增三次提交，最新 `0980a75`：需求与状态文档、Windows/Linux 只读发现、PyYAML/LibYAML 完整来源与打包审计。其轻量 [checks](https://github.com/LONG10222/psportal-on-demand/actions/runs/39144794753) 通过，但该检查只覆盖原路由器与仓库检查，不能证明桌面发行包通过。
-- 已在自己的分支整合上述源码，没有修改另一对话的工作目录。整合回归发现并修复 sysfs 非规范化路径比较；补测 JSON 中转义的国旗字符。最新本机结果：244 项中 235 通过、9 跳过。
+- 已在自己的分支整合上述源码，没有修改另一对话的工作目录。整合回归发现并修复 sysfs 非规范化路径比较；补测 JSON 中转义的国旗字符。最新本机结果：247 项中 238 通过、9 跳过。
 
 ## 原基线的云端结果
 
@@ -36,6 +36,12 @@
 
 ## 本轮云端验证
 
-整合版本将在同一功能分支更新后触发新的 PR 检查。旧成功、失败记录不会被当成本轮代码的验证结果；最新状态见 [PR #4 checks](https://github.com/LONG10222/psportal-on-demand/pull/4/checks)。
+整合提交 `326345f` 已实际触发新检查：
+
+- [Portable desktop builds](https://github.com/LONG10222/psportal-on-demand/actions/runs/39147526423)：Linux 和 macOS 作业通过；Windows 在两项新测试处失败，分别是用真实 Windows 环境模拟 Linux 时丢失大小写冲突，以及旧许可证文件被 Git 改成 CRLF。
+- [Unified desktop packaged runtime](https://github.com/LONG10222/psportal-on-demand/actions/runs/39147526429)：Linux 的完整归档、来源与许可证审计已通过；其他目标在该检查快照时尚未完成。
+- Windows 两项错误已修复：使用独立环境映射建模 Linux；通过 Git 属性保留原始许可证字节，没有放宽校验。另补齐 macOS 搬迁 Python 的系统 CA 回退并实际验证公开 HTTPS 下载，未禁用证书校验。
+
+以上是精确提交的检查快照。后续修复更新会触发新一轮检查，旧结果不会作为最新代码的证明；实时状态见 [PR #4 checks](https://github.com/LONG10222/psportal-on-demand/pull/4/checks)。
 
 后续优化优先级：先确认新的三平台归档门禁，再验收真实手机／游戏机的连接和网络切换，最后扩展移动端实时设备与节点面板。游戏 UDP、iPhone 后台常驻和真实热点仍是独立验收项。
