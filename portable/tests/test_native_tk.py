@@ -146,6 +146,11 @@ class NativeTkWindowTests(unittest.TestCase):
                         process.terminate()
                         process.wait(timeout=10)
                     app.backend.poll()
+            # Tcl's event queue can outlive a destroyed Tk root when another
+            # test creates a fresh interpreter in this same process. Remove
+            # only this test interpreter's leftover timers after app shutdown.
+            for callback in root.tk.splitlist(root.tk.call('after', 'info')):
+                root.tk.call('after', 'cancel', callback)
             try:
                 root.destroy()
             except tk.TclError:

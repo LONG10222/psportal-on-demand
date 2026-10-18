@@ -21,6 +21,11 @@ src = root/'app/src/main/java/org/psportal/host'
 service_source = (src/'ProxyService.java').read_text()
 assert 'START_NOT_STICKY' in service_source and 'START_STICKY' not in service_source
 assert 'onTaskRemoved' in service_source and 'onDestroy' in service_source
+# API26 emulator regression: task removal has an internal framework start ID,
+# so a guarded unconditional stop is needed after native teardown completes.
+assert 'onTaskRemoved(Intent rootIntent) { requestStop(latestStartId, true); }' in service_source
+assert 'if (startId != latestStartId) return;' in service_source
+assert 'if (taskRemoved) stopSelf();' in service_source
 native_source = (src/'NativeEngine.java').read_text()
 assert 'org.psportal.engine.mobile.Mobile' in native_source
 assert 'Mobile.start(configJson)' in native_source

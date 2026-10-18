@@ -139,20 +139,32 @@ public final class ProxyService extends Service {
     }
 
     private void requestStop(int startId) {
+        requestStop(startId, false);
+    }
+
+    private void requestStop(int startId, boolean taskRemoved) {
         main.removeCallbacks(statusTick);
-        session.stop(() -> { if (!destroyed) finishStop(startId); });
+        session.stop(() -> { if (!destroyed) finishStop(startId, taskRemoved); });
         if (foreground) updateNotification();
     }
 
     private void finishStop(int startId) {
+        finishStop(startId, false);
+    }
+
+    private void finishStop(int startId, boolean taskRemoved) {
         // A completion from an older command cannot stop a newer run.
         if (startId != latestStartId) return;
         stopForeground(STOP_FOREGROUND_REMOVE);
         foreground = false;
-        stopSelfResult(startId);
+        // Android may assign its task-removal event a newer framework start ID
+        // without delivering onStartCommand. stopSelfResult(oldId) then leaves
+        // an idle service behind. The guard above still protects a newer run.
+        if (taskRemoved) stopSelf();
+        else stopSelfResult(startId);
     }
 
-    @Override public void onTaskRemoved(Intent rootIntent) { requestStop(latestStartId); }
+    @Override public void onTaskRemoved(Intent rootIntent) { requestStop(latestStartId, true); }
     @Override public void onDestroy() {
         destroyed = true;
         main.removeCallbacksAndMessages(null);

@@ -27,6 +27,10 @@ def collect(build=BUILD, output=OUTPUT):
             (output / log.name).write_bytes(source.read(count))
         budget -= count
         report.append(f"{log.name}: retained final {count} of {size} bytes.")
+    screenshot = build / "logs/simulator-app.png"
+    if screenshot.is_file() and not screenshot.is_symlink() and screenshot.stat().st_size <= 5 * MIB:
+        shutil.copy2(screenshot, output / screenshot.name)
+        report.append(f"Release simulator screenshot: {screenshot.stat().st_size} bytes.")
     results = build / "TestResults.xcresult"
     if results.is_dir():
         entries = list(results.rglob("*"))
@@ -38,7 +42,7 @@ def collect(build=BUILD, output=OUTPUT):
             report.append(f"TestResults.xcresult omitted: {size} bytes exceeds 50 MiB or contains links. Review simulator-tests.log and Actions logs; full results are not retained.")
     else:
         report.append("No XCTest result bundle was produced.")
-    summary = "\n".join(report) + "\nArtifact limits: 20 MiB log tails plus 50 MiB XCTest bundle; one-day retention.\n"
+    summary = "\n".join(report) + "\nArtifact limits: 20 MiB log tails plus 50 MiB XCTest bundle and 5 MiB screenshot; one-day retention.\n"
     (output / "DIAGNOSTICS.txt").write_text(summary, encoding="utf-8")
     print(summary, end="")
 

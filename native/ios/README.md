@@ -1,13 +1,16 @@
-# iOS foreground-only host: source milestone
+# iOS foreground-only development host
 
-This is a SwiftUI app shell for the real, embedded Go/Mihomo adapter engine in
-`../engine`, bound through `../mobile`. It is **not a completed or validated iOS
-release**. The implementation was prepared on Linux without Xcode, an Apple SDK,
-signing identities, provisioning, or an iPhone/iPad. No `.app` or `.ipa` has been
-built, and neither Swift/Objective-C compilation nor device behavior is claimed.
+This SwiftUI app embeds the real Go/Mihomo engine in `../engine`, through
+`../mobile`. A real arm64 Simulator app compiled, linked and launched under
+Xcode 16.4; [CI run 39108633642](https://github.com/LONG10222/psportal-on-demand/actions/runs/39108633642)
+completed 10 XCTest methods with no failures and one explicit hardware-only
+Data Protection skip. Those first tests covered storage/configuration and mocked
+lifecycle orchestration, **not framework HTTP/CONNECT transport**.
 
-The priority deliverable is the native Linux host. This independent iOS source
-milestone does not claim desktop/Android feature parity or App Store acceptance.
+The next CI gate adds real framework socket fixtures, separate unsigned iPhoneOS
+ARM64 compilation, and a Release simulator launch/screenshot. These additions
+are pending their own successful run; see `VALIDATION.md`. No physical iPhone,
+Portal session, signing, App Store acceptance or full platform parity is claimed.
 
 ## Honest execution model
 
@@ -93,30 +96,35 @@ source of truth; no generated `.xcodeproj` is supplied or claimed validated.
 The only native engine input is the real `PSPortalEngine.xcframework`; there is
 no mock or fallback transport in the application target.
 
-### Public GitHub simulator CI (prepared, not yet run)
+### Public GitHub Apple build/test CI
 
-`../ci/ios-simulator.yml.example` is deliberately inactive until reviewed and
-copied to `.github/workflows/ios-simulator.yml`. It defines one standard
+`../ci/ios-simulator.yml.example` is the maintained template for the reviewed
+`.github/workflows/ios-simulator.yml` on the development PR. It defines one standard
 `macos-15` public-repository job, using the runner's existing Xcode 16.4, pinned
 Go 1.27.2, pinned gomobile, and official checksum-verified XcodeGen 2.46.0.
 GitHub Actions themselves are pinned to full commit SHAs. The job refuses private
 repositories, has no matrix, caches nothing, and cancels superseded runs.
 
-The job builds only the runner's simulator architecture by setting `IOS_TARGET`
-on the shared mobile recipe, runs native Go fixture tests, generates the Xcode
-project, builds a Release simulator app with `CODE_SIGNING_ALLOWED=NO`, then
-runs the XCTest suite on an already installed iPhone simulator whose runtime
-is no newer than the selected SDK (and at least iOS 16). The Data
+The job builds the runner's simulator architecture and iPhoneOS ARM64 by setting
+`IOS_TARGET` on the shared mobile recipe, runs native Go fixture tests, generates
+the Xcode project, builds a Release simulator app with `CODE_SIGNING_ALLOWED=NO`,
+and runs XCTest on an installed iPhone runtime no newer than the SDK (at least
+iOS 16). Real bridge tests bind controlled direct-route HTTP/CONNECT fixtures to
+an existing RFC1918 interface; no loopback-destination bypass or interface alias
+is introduced. The subscription stays unused. An unsigned iPhoneOS build/link
+gate follows; no tests execute on physical hardware. Finally, the Release
+simulator app is launched separately and a screenshot is captured. The Data
 Protection hardware test explicitly skips there; other test failures fail CI.
 No signing account, key, provisioning profile, physical device, or new Xcode
 license is requested. A failure is a blocker to diagnose, not a pass.
 
-Only after build and test success does the job create a downloadable ZIP with
-the simulator `.app`, GPL/dependency notices, corresponding source+vendor archive,
-build/source-commit information, and a SHA-256 manifest. It also retains build
+Only after all build and test gates pass does the job create separate simulator
+and unsigned-device ZIPs with the `.app`, GPL/dependency notices, corresponding
+source+vendor archive, build/source-commit information, and content/ZIP SHA-256
+manifests. The unsigned device app is **not installable as supplied**. It also retains build
 up to 20 MiB of log tails and a complete `.xcresult` only when it is at most
-50 MiB; the diagnostics report explicitly records omissions. The app/source ZIP
-is capped at 200 MiB. Artifacts have one-day retention to limit storage; GitHub's
+50 MiB plus a screenshot of at most 5 MiB; the report records omissions.
+The combined app/source ZIPs are capped at 200 MiB. Artifacts have one-day retention to limit storage; GitHub's
 normal account storage limits still apply. This is not an `.ipa` and
 cannot be installed on a physical iPhone. A successful simulator run will not
 establish real Portal, Wi-Fi, lock/background, power, signing, or distribution
@@ -179,7 +187,8 @@ These check metadata, privacy/lifecycle guardrails and the binding source
 contract. They are not a Swift compiler, SDK, simulator, or transport test.
 XCTest source is included for settings validation, non-persistence of the URL,
 file protection/backup flags, duplicate Start, Stop-during-Start, background Stop,
-no automatic restart, and idle-timer restoration. It has **not run** here.
+no automatic restart, and idle-timer restoration. The first 11 methods ran in the linked CI above. Three new real-framework
+transport methods await their own CI result.
 After producing the real framework/project on a Mac, choose an available
 simulator and run:
 
@@ -216,5 +225,6 @@ missing real framework or required notices. License texts appear in the app's
 Licenses screen. Preserve matching source and build instructions with any
 distribution; see `../THIRD_PARTY_NOTICES.md` and `../scripts/source_release.py`.
 
-No GPL/Apple store-terms compatibility determination is made. This is source work
-pending the build, hardware, privacy, signing, and distribution gates above.
+No GPL/Apple store-terms compatibility determination is made. This is a
+development build pending the remaining hardware, privacy, signing and
+distribution gates above.

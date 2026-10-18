@@ -14,6 +14,7 @@ import argparse
 import ast
 import hashlib
 import importlib.metadata
+from functools import lru_cache
 import json
 import os
 from pathlib import Path
@@ -29,6 +30,7 @@ TYPECODES = {'BINARY', 'EXTENSION', 'EXECUTABLE', 'DATA', 'SYMLINK',
              'PYMODULE', 'PYMODULE-1', 'PYMODULE-2', 'PYSOURCE', 'PYZ', 'PKG'}
 BINARY_TYPES = {'BINARY', 'EXTENSION', 'EXECUTABLE'}
 LICENSE_NAME = re.compile(r'(^|[._-])(licen[cs]e|copying|copyright|notice)s?($|[._-])', re.I)
+API_SET_NAME = re.compile(r'api-ms-win-[a-z0-9-]+\.dll', re.I)
 MACHO = {b'\xfe\xed\xfa\xce', b'\xce\xfa\xed\xfe', b'\xfe\xed\xfa\xcf',
          b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe', b'\xbe\xba\xfe\xca',
          b'\xca\xfe\xba\xbf', b'\xbf\xba\xfe\xca'}
@@ -80,6 +82,65 @@ def component(path):
     return 'other-runtime'
 
 
+def pe_version_metadata(pe):
+    """Keep unedited version-resource strings as provenance hints, not licenses."""
+    result = {'string_tables': []}
+    for fixed in getattr(pe, 'VS_FIXEDFILEINFO', ()):
+        for label, high, low in (('file_version', fixed.FileVersionMS, fixed.FileVersionLS),
+                                 ('product_version', fixed.ProductVersionMS, fixed.ProductVersionLS)):
+            result[label] = '.'.join(str(number) for number in (high >> 16, high & 65535, low >> 16, low & 65535))
+    def decode(value):
+        return value.decode('utf-8', errors='replace') if isinstance(value, bytes) else str(value)
+    for group in getattr(pe, 'FileInfo', ()):
+        for info in group:
+            for table in getattr(info, 'StringTable', ()):
+                result['string_tables'].append(dict(language=decode(table.LangID),
+                    entries={decode(key): decode(value) for key, value in table.entries.items()}))
+    return result
+
+
+@lru_cache(maxsize=256)
+def windows_api_set_resolution(name):
+    """Prove an unresolved API-set contract maps to a real System32 module.
+
+API-set names are virtual contracts, not necessarily files. A successful
+system-only loader resolution is evidence; a matching filename alone is not.
+No arbitrary library name/path is loaded and every acquired handle is freed.
+"""
+    if sys.platform != 'win32' or not API_SET_NAME.fullmatch(name):
+        return None
+    import ctypes
+    from ctypes import wintypes
+    kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel32.GetSystemDirectoryW.argtypes = (wintypes.LPWSTR, wintypes.UINT)
+    kernel32.GetSystemDirectoryW.restype = wintypes.UINT
+    kernel32.LoadLibraryExW.argtypes = (wintypes.LPCWSTR, wintypes.HANDLE, wintypes.DWORD)
+    kernel32.LoadLibraryExW.restype = wintypes.HMODULE
+    kernel32.GetModuleFileNameW.argtypes = (wintypes.HMODULE, wintypes.LPWSTR, wintypes.DWORD)
+    kernel32.GetModuleFileNameW.restype = wintypes.DWORD
+    kernel32.FreeLibrary.argtypes = (wintypes.HMODULE,)
+    kernel32.FreeLibrary.restype = wintypes.BOOL
+    buffer = ctypes.create_unicode_buffer(32768)
+    count = kernel32.GetSystemDirectoryW(buffer, len(buffer))
+    if not 0 < count < len(buffer):
+        raise OSError('Cannot determine Windows system directory')
+    system = Path(buffer.value).resolve(strict=True)
+    handle = kernel32.LoadLibraryExW(name, None, 0x00000800)  # LOAD_LIBRARY_SEARCH_SYSTEM32
+    if not handle:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        count = kernel32.GetModuleFileNameW(handle, buffer, len(buffer))
+        if not 0 < count < len(buffer):
+            raise OSError('Cannot identify API-set host module')
+        host = Path(buffer.value).resolve(strict=True)
+        if host.parent != system:
+            raise OSError('API-set host was not resolved within System32')
+        return dict(resolved=str(host), resolution_method='windows-api-set-system-loader',
+                    system_sha256=digest(host))
+    finally:
+        kernel32.FreeLibrary(handle)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     default_app = ROOT / 'dist' / ('PSPortalProxy.app' if sys.platform == 'darwin' else 'PSPortalProxy')
@@ -126,6 +187,20 @@ def main(argv=None):
     runtime = dict(python=sys.version, executable=sys.executable, base_prefix=sys.base_prefix,
                    prefix=sys.prefix, stdlib=sysconfig.get_path('stdlib'), platform=platform.platform(),
                    build_python=build_python)
+    runtime['stdlib_components'] = {}
+    for module_name, version_attribute in (
+            ('ssl', 'OPENSSL_VERSION'), ('zlib', 'ZLIB_RUNTIME_VERSION'),
+            ('pyexpat', 'EXPAT_VERSION'), ('_decimal', '__libmpdec_version__'),
+            ('unicodedata', 'unidata_version'), ('_bz2', None), ('_lzma', None)):
+        try:
+            module = importlib.import_module(module_name)
+            metadata = dict(version=getattr(module, version_attribute, None) if version_attribute else None)
+            source = getattr(module, '__file__', None)
+            if source and Path(source).is_file():
+                metadata.update(source=source, sha256=digest(Path(source)))
+            runtime['stdlib_components'][module_name] = metadata
+        except ImportError as error:
+            runtime['stdlib_components'][module_name] = dict(unavailable=str(error))
     # Each search directory is inspected for nearby notices, without scanning
     # home directories or treating repository-supplied terms as installed ones.
     notice_dirs = {}
@@ -193,6 +268,15 @@ def main(argv=None):
         if not fmt:
             continue
         record = dict(record, format=fmt)
+        if fmt == 'PE' and sys.platform == 'win32':
+            try:
+                import pefile  # Installed by PyInstaller on Windows.
+                with pefile.PE(str(path), fast_load=True) as pe:
+                    pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY['IMAGE_DIRECTORY_ENTRY_RESOURCE']])
+                    record['pe_version_resource'] = pe_version_metadata(pe)
+            except Exception as error:
+                record['pe_version_error'] = str(error)
+                issues.append('Cannot inspect PE version resource: ' + relative)
         candidates = [candidate for key in destination_keys(relative)
                       for candidate in by_destination.get(key, ())]
         if path.name in ('psportal-native', 'psportal-native.exe'):
@@ -220,6 +304,13 @@ def main(argv=None):
                            key=lambda item: (item[0], item[1] or ''))]
                 for item in record['imports']:
                     if item['resolved'] is None:
+                        try:
+                            proof = windows_api_set_resolution(item['name'])
+                            if proof:
+                                item.update(proof)
+                        except (OSError, ValueError) as error:
+                            item['api_set_resolution_error'] = str(error)
+                    if item['resolved'] is None:
                         issues.append('Unresolved imported library: ' + record['path'] + ' -> ' + item['name'])
             except Exception as error:
                 record['imports_error'] = str(error)
@@ -238,7 +329,7 @@ def main(argv=None):
             continue
         for path in directory.iterdir():
             add_candidate(path, metadata['components'], metadata['locations'])
-            if path.is_dir() and path.name.lower() in ('license', 'licenses', 'resources'):
+            if path.is_dir() and path.name.lower() in ('license', 'licenses', 'legal', 'resources'):
                 for child in path.rglob('*'):
                     add_candidate(child, metadata['components'], metadata['locations'])
     try:

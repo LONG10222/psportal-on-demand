@@ -41,7 +41,11 @@ def main(argv=None):
     if not args.skip_tests:
         subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-v'], cwd=root, check=True)
     build_env = dict(os.environ)
-    if sys.platform.startswith('linux'):
+    if sys.platform == 'win32':
+        from scripts.windows_build_environment import windows_pyinstaller_environment
+        build_env = windows_pyinstaller_environment(
+            build_env, executable=sys.executable, prefix=sys.prefix, base_prefix=sys.base_prefix)
+    elif sys.platform.startswith('linux'):
         # Standalone Python distributions keep Tcl/Tk beside libpython; make
         # them discoverable to PyInstaller's ldd analysis, for this child only.
         libdir = str(Path(sys.base_prefix) / 'lib')

@@ -45,11 +45,12 @@ jobs:
           test -d "$DEVELOPER_DIR"
           xcodebuild -version
           xcrun --sdk iphonesimulator --show-sdk-path
+          xcrun --sdk iphoneos --show-sdk-path
       - name: Install checksum-pinned official XcodeGen locally
         run: bash native/ios/scripts/install-xcodegen-ci.sh
-      - name: Build actual engine, compile simulator app, run XCTest and package source
+      - name: Build engine, test simulator, compile unsigned device app and package source
         run: bash native/ios/scripts/ci-simulator.sh
-      - name: Upload simulator app with matching source and licenses
+      - name: Upload simulator and unsigned-device apps with matching source and licenses
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: psportal-ios-simulator-${{ github.sha }}

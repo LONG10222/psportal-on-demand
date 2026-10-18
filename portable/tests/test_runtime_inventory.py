@@ -4,6 +4,8 @@ import importlib.util
 import io
 from pathlib import Path
 import tempfile
+import sys
+from types import SimpleNamespace
 import unittest
 
 
@@ -14,6 +16,33 @@ spec.loader.exec_module(inventory)
 
 
 class RuntimeInventoryTests(unittest.TestCase):
+    def test_pe_version_strings_preserve_origin_and_version_without_license_claim(self):
+        fixed = SimpleNamespace(FileVersionMS=(14 << 16) + 44, FileVersionLS=(35211 << 16),
+                                ProductVersionMS=(14 << 16) + 44, ProductVersionLS=(35211 << 16))
+        table = SimpleNamespace(LangID=b'040904b0', entries={b'OriginalFilename': b'VCRUNTIME140.dll',
+            b'CompanyName': b'Microsoft Corporation'})
+        pe = SimpleNamespace(VS_FIXEDFILEINFO=[fixed], FileInfo=[[SimpleNamespace(StringTable=[table])]])
+        metadata = inventory.pe_version_metadata(pe)
+        self.assertEqual(metadata['file_version'], '14.44.35211.0')
+        self.assertEqual(metadata['string_tables'][0]['entries']['OriginalFilename'], 'VCRUNTIME140.dll')
+        self.assertEqual(inventory.pe_version_metadata(SimpleNamespace()), {'string_tables': []})
+
+    def test_api_set_proof_never_loads_arbitrary_names_or_paths(self):
+        for name in ('kernel32.dll', 'untrusted.dll', '../api-ms-win-core-path-l1-1-0.dll',
+                     'C:\\api-ms-win-core-path-l1-1-0.dll', 'api-ms-win-core-path-l1-1-0.dll/extra'):
+            with self.subTest(name=name):
+                self.assertIsNone(inventory.windows_api_set_resolution(name))
+
+    @unittest.skipUnless(sys.platform == 'win32', 'actual Windows API-set loader proof')
+    def test_windows_api_set_has_exact_system_host_evidence(self):
+        proof = inventory.windows_api_set_resolution('api-ms-win-core-path-l1-1-0.dll')
+        self.assertIsNotNone(proof)
+        self.assertEqual(proof['resolution_method'], 'windows-api-set-system-loader')
+        host = Path(proof['resolved'])
+        self.assertTrue(host.is_file())
+        self.assertEqual(host.parent.name.casefold(), 'system32')
+        self.assertEqual(proof['system_sha256'], inventory.digest(host))
+
     def test_toc_walk_collects_only_known_data_records(self):
         values = ([('libpython.so', '/installed/libpython.so', 'BINARY'),
                    [('module', '/installed/module.py', 'PYMODULE')]],

@@ -30,6 +30,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--debian-runtime-notices', action='store_true')
     parser.add_argument('--xvfb', action='store_true')
+    parser.add_argument('--frozen-window', action='store_true', help='Verify native Windows/macOS frozen window launch and normal close')
     parser.add_argument('--source-tk', action='store_true', help='Exercise real source Tk windows on a graphical native runner')
     args = parser.parse_args()
     print('Build Python:', sys.executable, sys.version, flush=True)
@@ -54,6 +55,8 @@ def main():
     assert hashlib.sha256(bundled.read_bytes()).digest() == hashlib.sha256(native.read_bytes()).digest()
     assert (bundled.parent / 'corresponding-source.tar.gz').read_bytes() == source.read_bytes()
     env.update(PSPORTAL_BINARY=str(executable), PSPORTAL_DUAL_BINARY=str(executable))
+    if args.frozen_window:
+        env['PSPORTAL_FROZEN_WINDOW_TEST'] = '1'
     if args.source_tk or args.xvfb:
         env['PSPORTAL_TK_TEST'] = '1'
     command = [sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-v']
@@ -74,6 +77,7 @@ def main():
         corresponding_source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
         tests_run=int(count.group(1)), tests_skipped=int(skips.group(1)) if skips else 0,
         actual_frozen_gui_both_modes_tested=args.xvfb,
+        native_platform_frozen_window_smoke_tested=args.frozen_window,
         source_tk_gui_both_modes_tested=args.source_tk or args.xvfb,
         matching_bundled_native_discovery_tested=True,
         exact_debian_runtime_notices=args.debian_runtime_notices, signed_or_notarized=False,

@@ -7,9 +7,7 @@ import sys
 import threading
 from pathlib import Path
 
-cfg = json.loads(Path(sys.argv[sys.argv.index('-f') + 1]).read_text())
-if '-t' in sys.argv:
-    raise SystemExit(0)
+cfg = None
 name = 'AUTO'
 class API(http.server.BaseHTTPRequestHandler):
     def log_message(self, *args):
@@ -40,8 +38,25 @@ class Backend(socketserver.BaseRequestHandler):
     def handle(self):
         self.request.recv(65536)
         self.request.sendall(b'HTTP/1.1 200 OK\r\nContent-Length: 7\r\nConnection: close\r\n\r\nfixture')
-api = http.server.ThreadingHTTPServer(('127.0.0.1', int(cfg['external-controller'].split(':')[1])), API)
-socketserver.ThreadingTCPServer.allow_reuse_address = True
-backend = socketserver.ThreadingTCPServer(('127.0.0.1', cfg['port']), Backend)
-threading.Thread(target=backend.serve_forever, daemon=True).start()
-api.serve_forever()
+class FixtureHTTPServer(http.server.ThreadingHTTPServer):
+    def server_bind(self):
+        # HTTPServer's default performs reverse DNS for server_name. This
+        # controlled loopback fixture must not depend on runner DNS latency.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = 'offline-fixture'
+        self.server_port = self.server_address[1]
+
+def main():
+    global cfg
+    cfg = json.loads(Path(sys.argv[sys.argv.index('-f') + 1]).read_text())
+    if '-t' in sys.argv:
+        return
+    api = FixtureHTTPServer(('127.0.0.1', int(cfg['external-controller'].split(':')[1])), API)
+    socketserver.ThreadingTCPServer.allow_reuse_address = True
+    backend = socketserver.ThreadingTCPServer(('127.0.0.1', cfg['port']), Backend)
+    threading.Thread(target=backend.serve_forever, daemon=True).start()
+    api.serve_forever()
+
+
+if __name__ == '__main__':
+    main()

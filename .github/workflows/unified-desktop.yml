@@ -94,8 +94,10 @@ jobs:
           cache: ''
       - name: Install pinned build dependency
         run: python -m pip install --disable-pip-version-check -r portable/requirements-build.txt
+      - name: Fetch SHA-pinned official external core for host fixture tests only
+        run: python portable/ci/fetch_test_core.py
       - name: Build bundled native engine and execute native plus frozen dispatch tests
-        run: python portable/ci/build_dual.py --source-tk
+        run: python portable/ci/build_dual.py --source-tk --frozen-window
       - name: Inventory exact frozen runtime and installed notice candidates
         if: always() && hashFiles('portable/build/portalproxy/Analysis-00.toc') != ''
         continue-on-error: true

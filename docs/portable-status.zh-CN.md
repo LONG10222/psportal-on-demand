@@ -14,9 +14,10 @@
 
 1. 路由器：3,744 项 Lua 断言、LuCI 检查与打包检查通过；真实路由器/Mihomo/LuCI 版本仍需验收
 2. external 桌面：PR #2 的 Linux 真实 Mihomo/打包流量测试、实际 Tk 窗口 Start/Stop/restart/close，以及 Windows/macOS 打包程序配置检查、监听、拒绝、EOF 退出和再次启动均通过
-3. 最新统一 Linux 包：108 项测试中107项通过，1项图形显示测试在本地跳过。原生引擎40个顶层测试、203个测试结果、race、vet和实际 CLI 检查通过。完整 vendored 对应源码已离线重建/测试
-4. Android：真实 arm64/x86_64 AAR与APK编译成功，90项JVM断言与配置往返通过，lint无错误，16KiB对齐通过。专用开发签名APK的v2/v3签名验证通过；模拟器运行验收另计
-5. iOS：源码、生成接口和本地结构/脚本测试通过；实际 Xcode/Simulator/XCTest 验收由 PR #3 工作流执行，运行成功前不能称为已通过
+3. 统一 Linux 图形包：CI run 39108633515 的121项测试全部通过、零跳过，包含两种引擎实际打包窗口的启动、停止、再次启动、关闭取消/确认、真实 Mihomo 与打包流量；45个运行库ELF与21份完整版权文件核验通过
+4. 原生 CLI：CI run 39107706960 的 Linux/Windows/macOS 各 amd64与arm64，共六个真实系统运行任务全部通过；各40个顶层测试、203个测试结果、vet与实际CLI检查通过，Linux/macOS另通过race。Windows未执行race。完整 vendored 对应源码已离线重建/测试
+5. Android：真实 arm64/x86_64 AAR与APK编译成功，90项JVM断言与配置往返通过，lint无错误，16KiB对齐通过。开发签名APK已在API26模拟器安装运行，实际前台服务、JNI监听、HTTP/CONNECT与来源白名单受控测试通过。来自同一模拟器两个既有接口的合成客户端不代表真实Portal。移除任务的服务清理回归正在修复；新版签名包和较新API运行验收仍待完成
+6. iOS：CI run 39108633642 的真实 arm64 Simulator应用已编译、链接并实际启动，11项XCTest中10项通过，1项物理设备Data Protection测试明确跳过，零失败。应用、对应源码与许可同包保存。iPhoneOS编译、签名后实机安装与真实Portal仍是独立验收条件
 
 [独立核心桌面 PR #2](https://github.com/LONG10222/psportal-on-demand/pull/2) · [统一原生与移动端 PR #3](https://github.com/LONG10222/psportal-on-demand/pull/3)
 

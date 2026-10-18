@@ -18,6 +18,15 @@ def port():
         return sock.getsockname()[1]
 
 
+class FixtureServerTests(unittest.TestCase):
+    def test_loopback_fixture_never_performs_reverse_dns(self):
+        from fake_core import API, FixtureHTTPServer
+        with patch('socket.getfqdn', side_effect=AssertionError('Unexpected reverse DNS')):
+            with FixtureHTTPServer(('127.0.0.1', 0), API) as server:
+                self.assertEqual(server.server_name, 'offline-fixture')
+                self.assertGreater(server.server_port, 0)
+
+
 class ConfigTests(unittest.TestCase):
     def test_validation_and_render(self):
         with tempfile.TemporaryDirectory() as tmp:

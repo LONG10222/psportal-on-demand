@@ -1,54 +1,83 @@
-# iOS source validation record
+# iOS validation record
 
-Prepared 2026-10-18 on Linux. This records a source milestone, not an Apple build.
+Updated 2026-10-18. Simulator success is not physical-device or Portal proof.
 
-## Passed here
+## Verified actual macOS/Simulator run
 
-- `python3 native/ios/scripts/check-source.py`: 7 structural guardrail checks
-- `bash -n` on all iOS shell scripts
-- `python3 native/ios/scripts/check-ci-helpers.py`: simulator-selection and bounded-diagnostics fixture tests
-- XML property-list parsing with Python `plistlib`
-- Project YAML parsing with PyYAML and verification that both target source paths exist
-- Inspected actual generated Objective-C binding at
-  `native/dist/bindings/objc/src/gobind/Mobile.objc.h`: the bridge's Start/Stop/Status
-  calls match the generated declarations
-- Confirmed the shared native engine sets Mihomo's logging level to SILENT
-- Confirmed the Apple framework helper refuses Linux before installing tools or
-  attempting compilation; missing-framework verification fails closed
+[Run 39108633642](https://github.com/LONG10222/psportal-on-demand/actions/runs/39108633642)
+used PR head `a63600dab81aba38f5b4fecb35fab92289d0582f`, checked-out merge
+`c76e17462f3d0da3d611ef149b711e63110c0a45`, macOS 15 arm64, Xcode 16.4,
+iOS Simulator SDK/runtime 18.5, Go 1.27.2, pinned gomobile and XcodeGen 2.46.0.
 
-The structural checks assert no background modes, Network Extension target,
-automatic startup, downloaded executable launcher, or subscription serialization;
-they also inspect explicit background/lock Stop handling, stale-callback guards,
-idle-timer restoration, private-file protection, backup exclusion, real engine
-calls and bundled GPL/MIT notices. Structural checks cannot establish runtime
-correctness or replace compiler validation.
+- Real embedded simulator XCFramework compiled, Xcode project generated
+- Swift/Objective-C Release app and Debug test bundle compiled and linked
+- Actual app launched successfully after fixing a navigation-container crash
+- XCTest: 10 passed, 1 explicit physical Data Protection skip, 0 failures
+- Simulator platform metadata, executable and four bundled notices verified
+- Complete matching source/vendor and dependency license archive packaged
 
-## Included, not run
+Passed XCTest methods:
 
-Eleven XCTest methods covering settings validation/payloads, sanitized status, URL
-non-persistence, protected-file/backup metadata, repeated Start/Stop ordering,
-background Stop, no automatic restart, and idle-timer restoration. Lifecycle
-tests use a test-only recording driver; they do not validate the transport.
-The physical-device Data Protection method explicitly skips on Simulator rather
-than claiming hardware-backed encryption is proven there.
+- `PrivateSettingsStoreTests.testSaveOmitsSubscriptionAndIsExcludedFromBackupThenForgotten`
+- `ProxyLifecycleTests.testBackgroundStopsAndForegroundNeverRestarts`
+- `ProxyLifecycleTests.testRepeatedStartIsIgnoredAndImmediateStopWins`
+- `ProxyLifecycleTests.testSavedSettingsNeverAutoStart`
+- `ProxyLifecycleTests.testStopRestoresPriorIdleTimer`
+- `ProxySettingsTests.testClientListAndSelectionValidation`
+- `ProxySettingsTests.testOnlyCanonicalRFC1918AddressesAreAccepted`
+- `ProxySettingsTests.testPayloadMatchesSharedGoContractAndExcludesUIPreferences`
+- `ProxySettingsTests.testStatusDoesNotDisplayNativeErrorOrNodeSecrets`
+- `ProxySettingsTests.testSubscriptionAndPortsFailClosed`
 
-An inactive GitHub Actions template now exists at
-`native/ci/ios-simulator.yml.example`. Its YAML, single standard public-runner job,
-read-only repository permission, SHA-pinned actions and shell syntax were checked
-locally. It has not run, and does not change the unvalidated Apple-build status.
+`testCompleteDataProtectionOnPhysicalDevice` skipped explicitly. Lifecycle tests
+use `RecordingDriver`, so this first green run does **not** prove real framework
+HTTP/CONNECT, encrypted outbound routing, or physical background socket closure.
+The native Go fixtures passed on macOS separately.
 
-## Not available and not claimed
+Artifact 12128764511: GitHub outer ZIP SHA-256
+`8ad0b87aa3c9c0b985479c8f19b0eb723f54cb41a9ff880dfb175ab29acce7c9`.
+Inner simulator ZIP (28,307,559 bytes):
+`5c8f96bf6bd20225fdc624bef9fbcfe03b9d4d85293e4f9608b85db0aaa3cca3`.
+Corresponding-source archive:
+`9be8878e0c3ea7cc44a516f907e0b391e3f9d66c5745d454a77728ceb634d102`.
+Bundled ENGINE-NOTICES:
+`7d17847fa0b85799d19bca8202711f4d478b2d063c3d112ca704bb72578b0cb5`.
+Diagnostics artifact 12128764515 includes complete XCTest results.
 
-- XcodeGen project generation on a Mac
-- Apple SDK/Swift/Objective-C compilation or static framework linking
-- A built XCFramework, `.app`, signed `.ipa`, simulator execution, or XCTest run
-- Provisioning, signing, physical iPhone/iPad or PlayStation Portal operation
-- Real iOS subscription/node traffic, permissions, power/memory, lock/background
-  socket closure, crash-diagnostic privacy, backup behavior, or app-switcher UI QA
-- GPL/store-terms compatibility, privacy-manifest audit, export compliance or
-  distribution approval
+## Added gates, pending actual execution
 
-`README.md` contains the Mac build steps and physical-device release checklist.
-The shared mobile build generates complete engine dependency notices before
-building; `verify-build-inputs.sh` requires both those notices and the real
-XCFramework. No placeholder transport or fabricated iOS artifact is supplied.
+`EmbeddedTransportTests` calls the shipped generated-framework bridge directly,
+without a fake engine/dialer or policy override. Three methods cover:
+
+- Real direct HTTP forwarding/origin-form rewriting and proxy-header stripping;
+  real CONNECT payload echo and half-close
+- Stop closes an accepted partial-request socket; listener refuses connections
+  after Stop; restart works; loopback destinations still return 403
+- A real peer excluded by the listener allowlist receives 403
+
+Tests require an existing RFC1918 interface for controlled in-process direct
+fixtures. They fail with an explicit blocker if unavailable; they never change
+interfaces or permit loopback destinations. No subscription or encrypted node
+traffic is exercised by these direct fixtures.
+
+The same CI adds unsigned iPhoneOS ARM64 compile/link, a separate Release
+simulator launch/screenshot, and exact per-file source/notice/executable hashes.
+No new gate is claimed successful until its run passes. Physical-device testing,
+provisioning and signing remain separate.
+
+## Linux source checks
+
+Seven structural guardrails (six plus one generated-header skip on a clean
+checkout), four CI-helper fixture tests, all shell syntax, YAML and plist parsing
+passed locally. These checks do not replace Apple compiler/runtime evidence.
+
+## Not claimed
+
+- Physical iPhone/iPad or real Portal operation, signed IPA, provisioning/signing
+- Real subscription/encrypted node traffic on iOS, local-network permissions,
+  power/memory, hardware lock/background behavior, backup/Data Protection,
+  crash-diagnostic privacy or full UI acceptance
+- GPL/store-terms compatibility, privacy-manifest audit, export compliance,
+  distribution approval or feature parity with Linux/Android
+
+See `README.md` for build instructions and remaining device release gates.

@@ -34,6 +34,7 @@ def main():
     system = {'Linux': 'linux', 'Windows': 'windows', 'Darwin': 'darwin'}[platform.system()]
     arch = {'x86_64': 'amd64', 'AMD64': 'amd64', 'ARM64': 'arm64', 'aarch64': 'arm64', 'arm64': 'arm64'}[platform.machine()]
     go = os.environ.get('GO', 'go')
+    run([sys.executable, '-m', 'unittest', 'discover', '-s', 'scripts', '-p', 'test_*.py'], 'packaging-tests.txt')
     run([go, 'mod', 'download'])
     run([go, 'mod', 'verify'], 'module-verify.txt')
     run([go, 'test', '-count=1', '-json', '-timeout=5m', '-tags', TAGS, './...'], 'go-tests.jsonl')
