@@ -12,6 +12,8 @@ An on-demand proxy for PlayStation Portal on OpenWrt / iStoreOS. Starts Mihomo f
 - **Single client**: an IP allowlist and the Portal's manual HTTP proxy setting handle access.
 - **Independent service**: separate core and configuration, with direct LAN connections. OpenClash can remain stopped.
 
+> Node preferences and the optional authenticated legacy LuCI page require target-version OpenWrt/Mihomo/LuCI acceptance. Local mocks do not establish core compatibility. See [operations and acceptance notes (Chinese)](docs/node-preferences.zh-CN.md).
+
 ## Quick start
 
 ### 1. Requirements
@@ -44,7 +46,7 @@ If Lua dependencies are missing:
 
 ```sh
 opkg update
-opkg install lua luci-lib-nixio luci-lib-jsonc luci-lib-base libuci-lua
+opkg install lua luci-lib-nixio luci-lib-jsonc luci-lib-base libuci-lua curl ca-bundle
 ```
 
 ### 3. Configure
@@ -71,7 +73,7 @@ On the **Portal → Wi-Fi → current network → advanced settings**:
 - Enable the manual HTTP proxy, using the OpenWrt address and the port set above.
 - For this example, use `192.168.50.2:10081`.
 
-Connect to PlayStation services, then to your PS5. The first subscription download may take a moment; retry if needed.
+If no seed was imported, run `portalproxy subscription-update` before connecting. Updates are explicit, and a running core may reload the file immediately and switch routes. Viewing cached status never wakes the core.
 
 ## Commands
 

@@ -49,6 +49,14 @@ cp "$BASE/files/portalproxy" "$ROOT/usr/sbin/portalproxy"
 if [ "$CORE" != "$ROOT/usr/libexec/portalproxy/mihomo" ]; then cp "$CORE" "$ROOT/usr/libexec/portalproxy/mihomo"; fi
 chmod 700 "$ROOT/usr/libexec/portalproxy/"* "$ROOT/etc/init.d/portalproxy" "$ROOT/etc/init.d/portalproxy-core" "$ROOT/usr/sbin/portalproxy"
 chmod 600 "$ROOT/etc/config/portalproxy"
+# Optional legacy LuCI interface; CLI works without luci-compat.
+if [ -d "$ROOT/usr/lib/lua/luci" ]; then
+    mkdir -p "$ROOT/usr/lib/lua/luci/controller" "$ROOT/usr/lib/lua/luci/model/cbi"
+    cp "$BASE/luci/controller/portalproxy.lua" "$ROOT/usr/lib/lua/luci/controller/portalproxy.lua"
+    cp "$BASE/luci/model/cbi/portalproxy.lua" "$ROOT/usr/lib/lua/luci/model/cbi/portalproxy.lua"
+    chmod 644 "$ROOT/usr/lib/lua/luci/controller/portalproxy.lua" "$ROOT/usr/lib/lua/luci/model/cbi/portalproxy.lua"
+fi
+
 if [ -z "$ROOT" ]; then
     /etc/init.d/portalproxy-core disable
     echo 'Installed. Run: portalproxy setup'

@@ -8,9 +8,11 @@
 PS Portal 的 OpenWrt / iStoreOS 按需代理。访问外网时启动 Mihomo，空闲 60 秒后自动关闭。
 
 - **按需启停**：监听器开机自启，代理核心由外网请求唤醒。
-- **自动选线**：使用自己的订阅，按香港 → 日本 → 其他地区依次选择可用节点。
+- **节点偏好**：自己的订阅支持自动地区回退、首选后回退或固定节点；可选登录后的 LuCI 页面。
 - **单设备接入**：通过 IP 白名单限制客户端，Portal 手动设置 HTTP 代理即可使用。
 - **独立运行**：使用独立的核心和配置，OpenClash 无需启动；局域网请求直接连接。
+
+> 第二阶段仍需固定版本 Mihomo/OpenWrt/LuCI 实机验收，详见[节点偏好与验收](docs/node-preferences.zh-CN.md)。
 
 ## 快速开始
 
@@ -44,7 +46,7 @@ sh install.sh --core /path/to/mihomo
 
 ```sh
 opkg update
-opkg install lua luci-lib-nixio luci-lib-jsonc luci-lib-base libuci-lua
+opkg install lua luci-lib-nixio luci-lib-jsonc luci-lib-base libuci-lua curl ca-bundle
 ```
 
 ### 3. 配置
@@ -71,12 +73,16 @@ opkg install lua luci-lib-nixio luci-lib-jsonc luci-lib-base libuci-lua
 - HTTP 代理改为手动，地址填软路由 IP，端口填上面设置的端口。
 - 按示例应填 `192.168.50.2:10081`。
 
-连接网络后，即可登录 PlayStation 服务并连接 PS5。首次下载订阅可能需要稍等后重试。
+没有导入本地种子时，先执行 `portalproxy subscription-update` 下载节点缓存，再连接网络。更新改为明确操作，不再自动定时下载；运行中的核心可能立即载入更新并切换线路。
 
 ## 常用命令
 
 ```sh
 portalproxy status     # 查看运行状态
+portalproxy nodes      # 查看缓存节点（不唤醒）
+portalproxy prefer preferred '日本 A'  # 保存精确首选名称
+portalproxy apply      # 应用设置，会中断连接
+portalproxy subscription-update  # 明确下载，运行中可能换线
 portalproxy setup      # 修改配置
 portalproxy check      # 检查配置
 portalproxy restart    # 重启服务

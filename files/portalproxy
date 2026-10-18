@@ -52,6 +52,16 @@ case "${1:-status}" in
         /etc/init.d/portalproxy restart
         printf 'Portal HTTP proxy: %s:%s\n' "$listen_ip" "$listen_port"
         echo 'Listener enabled at boot. The core starts only for external requests.'
+        echo 'Import a seed or run portalproxy subscription-update before the first external request.'
+        ;;
+    nodes) exec /usr/bin/lua /usr/libexec/portalproxy/nodes.lua list ;;
+    nodes-refresh) exec /usr/bin/lua /usr/libexec/portalproxy/nodes.lua refresh ;;
+    prefer) shift; exec /usr/bin/lua /usr/libexec/portalproxy/nodes.lua set "$@" ;;
+    subscription-update) exec /usr/bin/lua /usr/libexec/portalproxy/update-subscription.lua ;;
+    apply)
+        [ "$(id -u)" = 0 ] || exit 1
+        /usr/bin/lua /usr/libexec/portalproxy/render.lua
+        exec /etc/init.d/portalproxy restart
         ;;
     status) exec /usr/bin/lua /usr/libexec/portalproxy/status.lua ;;
     check) exec /usr/bin/lua /usr/libexec/portalproxy/render.lua --check ;;
@@ -68,5 +78,5 @@ case "${1:-status}" in
         uci set portalproxy.main.enabled=0
         uci commit portalproxy
         ;;
-    *) echo 'Usage: portalproxy {setup|status|check|start|stop|restart|enable|disable}' >&2; exit 2 ;;
+    *) echo 'Usage: portalproxy {setup|status|nodes|nodes-refresh|prefer MODE [NAME]|subscription-update|apply|check|start|stop|restart|enable|disable}' >&2; exit 2 ;;
 esac

@@ -1,0 +1,3 @@
+# Build-only dependency. Runtime backend uses the Python standard library.
+# Review and intentionally update this pin before a public release.
+PyInstaller==6.16.0

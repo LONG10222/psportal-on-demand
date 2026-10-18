@@ -1,0 +1,119 @@
+name: Portable desktop builds
+
+on:
+  pull_request:
+    paths:
+      - 'portable/**'
+      - '.github/workflows/portable.yml'
+  workflow_dispatch:
+    inputs:
+      publish_artifacts:
+        description: 'Upload unsigned archives only after the runtime-license audit and distribution approval'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portable-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux x64 build and controlled real-core tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: portable
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Inspect native build platform and Tk imports
+        run: python -c "import sys, platform, tkinter; print(sys.version); print(platform.platform()); print(platform.machine()); print(tkinter.TkVersion)"
+      - name: Install pinned build dependency from package registry
+        run: python -m pip install --disable-pip-version-check -r requirements-build.txt
+      - name: Fetch and verify pinned official test-only Mihomo
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/psportal-test-core"
+          archive="$RUNNER_TEMP/psportal-test-core/mihomo.gz"
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
+            'https://github.com/MetaCubeX/mihomo/releases/download/v1.19.32/mihomo-linux-amd64-v1.19.32.gz' \
+            --output "$archive"
+          echo "8451100836c9eda194331c2babfad490b2faf30cebc1a04b0e76fd8ac2d35d10  $archive" | sha256sum --check --strict
+          gzip --decompress --stdout "$archive" > "$RUNNER_TEMP/psportal-test-core/mihomo"
+          chmod 700 "$RUNNER_TEMP/psportal-test-core/mihomo"
+          "$RUNNER_TEMP/psportal-test-core/mihomo" -v
+          printf 'MIHOMO_BINARY=%s\n' "$RUNNER_TEMP/psportal-test-core/mihomo" >> "$GITHUB_ENV"
+      - name: Run source tests and build unsigned archive
+        run: python build.py
+      - name: Run complete Linux suite including built executable
+        env:
+          PSPORTAL_BINARY: ${{ github.workspace }}/portable/dist/PSPortalProxy/PSPortalProxy
+        run: python -m unittest discover -s tests -v
+      - name: Hash distributable archive
+        run: python -c "import hashlib,pathlib; p=pathlib.Path('release'); files=sorted(p.glob('PSPortalProxy-*.tar.gz')); assert files; (p/'SHA256SUMS').write_text(''.join(hashlib.sha256(f.read_bytes()).hexdigest()+'  '+f.name+'\n' for f in files), encoding='utf-8')"
+      - name: Upload unsigned Linux build for review
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PSPortalProxy-linux-x64-unsigned
+          path: |
+            portable/release/PSPortalProxy-*.tar.gz
+            portable/release/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  desktop:
+    name: ${{ matrix.os }} native build only
+    needs: linux
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: portable
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Inspect native build platform and Tk imports
+        run: python -c "import sys, platform, tkinter; print(sys.version); print(platform.platform()); print(platform.machine()); print(tkinter.TkVersion)"
+      - name: Install pinned build dependency from package registry
+        run: python -m pip install --disable-pip-version-check -r requirements-build.txt
+      - name: Run available source tests and build unsigned archive
+        run: python build.py
+      - name: Hash distributable archive
+        run: python -c "import hashlib,pathlib; p=pathlib.Path('release'); files=sorted(p.glob('PSPortalProxy-*')); assert files; (p/'SHA256SUMS').write_text(''.join(hashlib.sha256(f.read_bytes()).hexdigest()+'  '+f.name+'\n' for f in files), encoding='utf-8')"
+      - name: Upload unsigned native build for review
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PSPortalProxy-${{ matrix.os }}-unsigned
+          path: |
+            portable/release/PSPortalProxy-*.zip
+            portable/release/PSPortalProxy-*.tar.gz
+            portable/release/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      # These builds do not establish GUI, real Mihomo, LAN, firewall, Portal,
+      # signing, notarization, installation, or Windows/macOS runtime acceptance.
+      # The test-only Linux core lives outside the checkout and is never shipped.
+      # PRs build/test only; archive upload is off until the runtime-license audit
+      # and explicit distribution approval are complete.

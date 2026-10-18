@@ -8,8 +8,8 @@ local config = require 'config'
 n.umask('077')
 local options = {}
 local keys = {'listen_ip','client_ip','local_dns','listen_port','backend_port','api_port','dns_port','idle_seconds',
-    'wakeup_timeout','health_interval','health_timeout','subscription_interval','routing_mark','core_path',
-    'subscription_url','subscription_user_agent','bootstrap_dns','health_url','doh_url'}
+    'wakeup_timeout','health_interval','health_timeout','routing_mark','core_path',
+    'selection_mode','preferred_node','subscription_url','subscription_user_agent','bootstrap_dns','health_url','doh_url'}
 for _,key in ipairs(keys) do
     local f = assert(io.popen('uci -q get portalproxy.main.'..key..' 2>/dev/null'))
     local value = f:read('*a'):gsub('[\r\n]+$',''); f:close()

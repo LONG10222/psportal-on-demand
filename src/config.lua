@@ -1,5 +1,7 @@
 local M = {}
 local protocol = require 'protocol'
+local selection = require 'selection'
+local subscription = require 'subscription'
 
 function M.to_yaml(value,encode)
     -- json-c emits a JSON slash escape that some YAML readers reject.
@@ -45,15 +47,9 @@ function M.validate(o)
     assert(c.core_path:match('^/[%w%._/%-]+$'), 'Invalid core_path')
     c.subscription_url = o.subscription_url or ''
     assert(not c.subscription_url:find('[%s%c]') and not c.subscription_url:find('REPLACE_ME',1,true), 'Set a real subscription_url locally')
-    local authority = c.subscription_url:match('^https://([^/%?#]+)')
-    assert(authority and not authority:find('@',1,true), 'subscription_url must use HTTPS without userinfo')
-    local host,port = authority:match('^([%w%.%-]+):(%d+)$')
-    if not host then assert(not authority:find(':',1,true), 'Invalid subscription port'); host=authority end
-    assert(host:match('^[%w%.%-]+$') and #host<=253, 'Invalid subscription host')
-    if port then integer(port,nil,1,65535,'subscription port') end
-    c.subscription_host = host
-    c.subscription_user_agent = o.subscription_user_agent or 'clash.meta'
-    assert(#c.subscription_user_agent < 256 and not c.subscription_user_agent:find('[\r\n]'), 'Invalid subscription_user_agent')
+    c.subscription_host = subscription.validate_url(c.subscription_url).host
+    c.selection_mode,c.preferred_node = selection.validate(o.selection_mode,o.preferred_node)
+    c.subscription_user_agent = subscription.validate_user_agent(o.subscription_user_agent)
     c.health_url = o.health_url or 'https://connectivitycheck.gstatic.com/generate_204'
     assert(c.health_url:match('^https://[^%s]+$'), 'health_url must use HTTPS')
     c.doh_url = o.doh_url or 'https://1.1.1.1/dns-query'
@@ -69,8 +65,10 @@ function M.render(options,secret,paths)
     assert(type(secret) == 'string' and #secret == 64 and secret:match('^%x+$'), 'Invalid management secret')
     paths = paths or {data='/etc/portalproxy', run='/tmp/portalproxy', core_service='/etc/init.d/portalproxy-core', core_name='portalproxy-core'}
     local health = {enable=true,url=c.health_url,interval=c.health_interval,timeout=c.health_timeout,lazy=false,['expected-status']=204}
-    local provider = {type='http',url=c.subscription_url,path='./providers/subscription.yaml',interval=c.subscription_interval,proxy='DIRECT',
-        ['size-limit']=5242880,header={['User-Agent']={c.subscription_user_agent}},['health-check']=health,
+    -- Explicit pinned HTTPS downloads write a private node-provider cache.
+    -- Mihomo watches file providers and may reload them while already running.
+    local provider = {type='file',path='./providers/subscription.yaml',['health-check']=health,
+        ['exclude-type']='direct|compatible|pass|dns',
         ['exclude-filter']='(?i)^(剩余流量|距离下次|套餐到期|到期时间|官网|更新订阅|Traffic|Expire|Reset)'}
     if c.routing_mark ~= 0 then provider.override = {['routing-mark']=c.routing_mark} end
     local core = {port=c.backend_port,['socks-port']=0,['mixed-port']=0,['redir-port']=0,['tproxy-port']=0,
@@ -83,15 +81,13 @@ function M.render(options,secret,paths)
             ['direct-nameserver']={unpack(c.bootstrap_dns)},
             ['nameserver-policy']={[c.subscription_host]={unpack(c.bootstrap_dns)}},nameserver={c.doh_url..'#PORTAL'}},
         ['proxy-providers']={SUBSCRIPTION=provider},
-        ['proxy-groups']={{name='PORTAL',type='fallback',use={'SUBSCRIPTION'},
-            filter='(?i)香港|🇭🇰|\\bHK\\b|Hong[ -]?Kong`(?i)日本|东京|大阪|🇯🇵|\\bJP\\b|Japan`.*',
-            url=c.health_url,['expected-status']=204,interval=c.health_interval,timeout=c.health_timeout,
-            ['max-failed-times']=2,lazy=false,['empty-fallback']='REJECT',['disable-udp']=true}},
+        ['proxy-groups']={selection.group(c)},
         rules=protocol.backend_reject_rules()}
     core.rules[#core.rules+1]='MATCH,PORTAL'
     if c.routing_mark ~= 0 then core['routing-mark'] = c.routing_mark end
     local policy = {bind=c.listen_ip,port=c.listen_port,allowed_ip=c.client_ip,backend_port=c.backend_port,api_port=c.api_port,
         local_dns=c.local_dns,idle_seconds=c.idle_seconds,wakeup_timeout=c.wakeup_timeout,health_url=c.health_url,
+        selection_mode=c.selection_mode,preferred_node=c.preferred_node,
         api_header=paths.data..'/api-header',core_name=paths.core_name,core_service=paths.core_service,run_dir=paths.run}
     return core,policy,c
 end

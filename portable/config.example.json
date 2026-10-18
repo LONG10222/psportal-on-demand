@@ -1,0 +1,12 @@
+{
+  "listen_host": "192.168.1.2",
+  "listen_port": 10081,
+  "allowed_clients": ["192.168.1.30"],
+  "core_path": "/absolute/path/to/mihomo",
+  "subscription_url": "https://your-provider.example/subscription",
+  "selection_mode": "auto",
+  "preferred_node": "",
+  "idle_seconds": 60,
+  "backend_port": 10082,
+  "api_port": 10090
+}

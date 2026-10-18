@@ -24,7 +24,8 @@
 | `health_interval` | `60` | 节点检查间隔，秒 |
 | `health_timeout` | `5000` | 节点检查超时，毫秒 |
 | `health_url` | `https://connectivitycheck.gstatic.com/generate_204` | 返回 HTTP 204 的检查地址 |
-| `subscription_interval` | `21600` | 订阅刷新间隔，秒 |
+| `selection_mode` | `auto` | auto、preferred、fixed |
+| `preferred_node` | 空 | 保存的精确节点名 |
 | `doh_url` | `https://1.1.1.1/dns-query` | 通过选中节点解析外网域名 |
 | `routing_mark` | `0` | 出站连接标记 |
 | `core_path` | `/usr/libexec/portalproxy/mihomo` | 独立核心路径 |
@@ -46,7 +47,7 @@ Portal 的后台请求、保活和失败重试也会触发启动或延长运行�
 
 节点使用 Mihomo `fallback` 组：香港优先，其次日本，最后其他地区；同地区保留订阅顺序。地区来自节点名称，识别中文名称、HK/JP 标签、旗帜、Hong Kong 和 Japan。所有节点不可用时，请求失败。
 
-健康检查和订阅刷新只在核心运行期间执行。订阅经直连下载，`bootstrap_dns` 应填写本网络实际可用的 DNS。可在向导中导入已有 YAML 作为初始缓存。
+健康检查只在核心运行期间执行。订阅改为明确执行 `portalproxy subscription-update`，安全下载到文件缓存，不自动定时更新。运行中的核心可能立即重载换线。详见[节点偏好与验收](node-preferences.zh-CN.md)。
 
 ## OpenClash 共存
 
