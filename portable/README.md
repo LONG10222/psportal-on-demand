@@ -93,14 +93,18 @@ the frozen embedded CLI test. These checks exercise actual native config/readine
 restricted destinations, empty local-provider failure, stdin EOF and restart;
 they do not establish real-node traffic, GUI appearance or device compatibility.
 
-Native packaging/build instructions are under `packaging/` and `docs/`. Do not call
-this a completed four-platform release. Remaining release gates include real
-Mihomo compatibility, native desktop executable builds/runs, GUI inspection,
-physical Portal end-to-end tests, and separate mobile-native implementation.
+Native packaging/build instructions are under `packaging/` and `docs/`. Packaged
+Windows x64, Linux x86_64 and macOS arm64 builds now have revision-specific
+runtime evidence, alongside native CLI tests on six OS/architecture combinations.
+See the [current platform record](../docs/portable-status.zh-CN.md) and
+[downloads](../docs/downloads.zh-CN.md) for exact artifacts, tested environments,
+signing status and remaining device/provider acceptance. Local fixture tests
+alone do not establish those platform results.
 
-Android requires a bundled native core and a user-started foreground service;
-this Python desktop process launcher is not an Android implementation. iOS cannot
-host a persistent LAN proxy via a Packet Tunnel extension: an honest foreground
-port must embed its core and stop on background. Android APK/iOS app, provisioning,
-license compliance and device tests remain separate work. See the project port
-status report for evidence and limitations.
+Actual Android and iOS hosts are in `native/android` and `native/ios`; the Python
+process launcher is desktop-only. Android uses a bundled native core and a
+user-started foreground service. iOS is foreground-only and stops on background;
+a Packet Tunnel extension cannot be repurposed as a persistent LAN proxy.
+Physical Portal/phone tests, encrypted-node end-to-end acceptance, Android Doze
+and device provisioning remain separate gates. Do not describe the project as
+a fully accepted cross-platform production release.

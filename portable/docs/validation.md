@@ -1,5 +1,7 @@
 # Unified Linux development build validation
 
+> Historical initial local snapshot and acceptance plan. The measurements below are preserved for that revision; statements about unrun platforms are not the current project status. See the [current platform validation record](../../docs/portable-status.zh-CN.md) and [artifact-specific downloads](../../docs/downloads.zh-CN.md).
+
 Date: 2026-10-18 UTC. Preview revision 3; unsigned development build.
 
 ## Package and environment

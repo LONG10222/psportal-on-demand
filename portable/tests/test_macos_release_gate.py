@@ -2,7 +2,7 @@
 import copy
 import hashlib
 import io
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import tarfile
 import tempfile
 import unittest
@@ -182,7 +182,7 @@ class MacOSReleaseGateTests(unittest.TestCase):
                 normal_quit=True,no_listener=True,open_exitcode=0),commands=[
                 success(['/usr/bin/codesign','--verify','--deep','--strict','--verbose=2',extracted])]*2)
         args=[report,binaries,files,links,dict(source_commit='commit',native_binary_sha256='e'*64),
-              seal,acceptance,Path('/release/app.tar.gz'),'1'*64,'2'*64,'3'*64]
+              seal,acceptance,PurePosixPath('/release/app.tar.gz'),'1'*64,'2'*64,'3'*64]
         return args
 
     def test_final_seal_and_extracted_launch_are_bound_to_exact_artifact(self):
@@ -208,3 +208,10 @@ class MacOSReleaseGateTests(unittest.TestCase):
             elif mutation=='archive-once':acceptance['commands'].pop()
             else:acceptance['commands'][0]['returncode']=1
             with self.subTest(mutation=mutation),self.assertRaises(ValueError):verify_final_seal(*args)
+
+    def test_synthetic_macos_receipt_uses_posix_paths_on_every_host(self):
+        args=self.seal_fixture()
+        self.assertEqual(str(args[7]), args[6]['archive'])
+        verify_final_seal(*args)
+        args[7]=PureWindowsPath('/release/app.tar.gz')
+        with self.assertRaises(ValueError):verify_final_seal(*args)

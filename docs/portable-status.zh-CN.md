@@ -1,36 +1,44 @@
-# 跨平台开发版：验证结果与剩余条件
+# 跨平台验证记录
 
-更新：2026-10-18 UTC。这是开发预览版，不是所有平台已完成实机验收的声明。
+更新：2026-10-18 UTC。以下是开发预览版证据，不是全部设备或网络条件已验收的声明。安装与对应产物版本见[下载说明](downloads.zh-CN.md)。
 
-## 同一套产品结构
+## 已验证范围
 
-- 原有 `src/`、LuCI、OpenWrt 安装流程保持独立
-- `portable/` 是同一个桌面界面，默认 external 独立 Mihomo，也可明确选择 experimental embedded
-- `native/engine` 是 Go 共享引擎；桌面 CLI/界面子进程、Android JNI 与 iOS framework 复用它
-- embedded 只接受文档列出的受限节点协议/配置与公网节点地址。固定节点不存在或不可用时失败关闭，不会偷偷切换另一引擎
-- 这是 HTTP/HTTPS CONNECT 按需代理，不是 UDP、完整 VPN 或游戏画面串流服务
+| 平台 / 组件 | 已通过 | 尚未证明 |
+| --- | --- | --- |
+| OpenWrt / LuCI | 3,744 项 Lua 断言、页面检查和打包检查 | 目标路由器、Mihomo/LuCI 版本实机兼容 |
+| Linux x86_64 GUI | Debian 13；实际冻结 Tk 窗口、两种引擎生命周期、真实 Mihomo 受控流量；完整运行库来源/许可与源码核验 | 所有发行版、真实 Portal/订阅 |
+| Windows x64 GUI | 实际打包窗口打开/正常关闭；源码 Tk 的双引擎 Start/Stop/restart；真实 Mihomo/原生测试；25 个运行库路径来源与许可核验 | Windows 全版本/ARM64 GUI；打包窗口的全部控件交互；代码签名 |
+| macOS arm64 GUI | 实际窗口与双引擎源码 Tk 测试；最终 app 的严格嵌套代码签名检查；最终归档解压后的 LaunchServices 窗口启动/正常退出；64 个二进制来源路径核验 | Intel GUI、所有 macOS 版本；Developer ID/公证；真实 Portal |
+| 原生 CLI | Linux、Windows、macOS 各 amd64/arm64 六个真实系统任务；每项 203 个测试/子测试、CLI 检查和源码/许可打包；Linux/macOS race | Windows race；真实订阅/Portal/所有节点协议 |
+| Android | 90 项 JVM 断言、lint、签名与 16 KiB 静态对齐；精确 x86_64 APK 的 API26 实际 HTTP/CONNECT/来源过滤、重启、Home/Recents/通知 Stop；30 秒 Asleep 期间传输 | ARM64 手机/16 KiB 实机；Doze/OEM 省电；真实 Portal；公网加密节点全链路 |
+| iOS | Simulator 实际安装启动；15 项 XCTest 中 14 通过、1 项硬件保护测试跳过；三项真实 GoMobile TCP 测试；实际 bundle 隐私用途清单/许可证；unsigned iPhoneOS 构建；最终归档解压后的精确 Simulator app 安装启动 | 真机签名安装、本地网络权限、Data Protection/备份、耗电、Portal；公网加密节点全链路 |
 
-## 已有证据
+Windows/macOS 的“打包窗口启动/退出”与“源码 Tk 全流程交互”是不同证据，不把后者冒充前者。原生测试中的真实 Mihomo 适配器使用受控 SOCKS5 上游，不是加密节点互联网端到端测试。
 
-1. 路由器：3,744 项 Lua 断言、LuCI 检查与打包检查通过；真实路由器/Mihomo/LuCI 版本仍需验收
-2. external 桌面：PR #2 的 Linux 真实 Mihomo/打包流量测试、实际 Tk 窗口 Start/Stop/restart/close，以及 Windows/macOS 打包程序配置检查、监听、拒绝、EOF 退出和再次启动均通过
-3. 统一桌面：CI run 39109675559 的 Linux、Windows、macOS 实际系统任务全部通过，包含两种引擎的实际 Tk 窗口、冻结应用窗口、真实 Mihomo 与受控 HTTP/CONNECT 流量。Windows/macOS 后续增加完整运行库来源与许可证发布门禁：Windows 已通过；macOS 的全部 63 个二进制来源、完整通知与 163 项运行测试通过，最终归档目录清单检查仍在修复，最终发布须等待该门禁通过
-4. 原生 CLI：CI run 39110679832 的 Linux/Windows/macOS 各 amd64 与 arm64，共六个真实系统运行任务全部通过；203 个测试结果、vet、实际 CLI 与完整源码打包检查通过，Linux/macOS 另通过 race。Windows 未执行 race。完整 vendored 对应源码已离线重建/测试
-5. Android：真实 arm64/x86_64 AAR 与 APK 编译成功，90 项 JVM 断言与配置往返通过，lint 无错误，16 KiB 对齐通过。开发签名通用 APK 在 API26 模拟器通过实际前台服务、JNI 监听、HTTP/CONNECT、来源白名单及移除任务清理测试；API36 ATD 另通过通知拒绝/批准、服务启动及停止。来自模拟器既有接口的合成客户端不代表真实 Portal。已提供 arm64 独立安装包，签名与内容一致性通过，但未在 ARM64 物理设备运行。独立 x86_64 包的精确安装与启动已通过，完整重测继续中。API36 系统镜像没有可用局域网地址且默认禁用 Doze，不能据此声称锁屏/Doze 已通过；未修改网络或省电设置来掩盖该限制
-6. iOS：CI run 39110679850 的 arm64 Simulator Release 应用实际安装启动成功，14 项 XCTest 中 13 项通过、1 项物理设备 Data Protection 测试明确跳过。三项真实 GoMobile 桥接测试覆盖 HTTP、CONNECT、拒绝未授权来源、停止监听和已接受套接字、重新启动；其他生命周期测试使用明确标注的测试替身。unsigned iPhoneOS arm64 编译/链接通过。模拟器 app、未签名设备 app 与完整对应源码分别提供；未签名设备 app 不能直接安装，仍需 Apple 签名/配置与真实 iPhone 验证
+## 构建与产物对应
 
-[独立核心桌面 PR #2](https://github.com/LONG10222/psportal-on-demand/pull/2) · [统一原生与移动端 PR #3](https://github.com/LONG10222/psportal-on-demand/pull/3)
+- Linux GUI：`4ef16d63`，[run 39109675559](https://github.com/LONG10222/psportal-on-demand/actions/runs/39109675559)
+- Windows GUI：`5925e67b`，[run 39111614703](https://github.com/LONG10222/psportal-on-demand/actions/runs/39111614703)
+- 修正后的 macOS GUI：`eccd6b1b`，[run 39113880648](https://github.com/LONG10222/psportal-on-demand/actions/runs/39113880648) 的 Mac 任务通过。此前 `0b3529de` 包在添加 native 目录后未重新封装完整资源签名，已被替换，勿混用旧三包
+- 原生六平台：[run 39113880825](https://github.com/LONG10222/psportal-on-demand/actions/runs/39113880825) 全通过；二进制与已保留版本哈希一致
+- Android 精确 APK：arm64-v8a SHA256 `8f1c22953c4d0315bb02d9a111c803074f8b7c29629240caf5ac4a247be67762`；x86_64 SHA256 `224d5181a9d3717ad906f2fbb312e6bea435f7d7f485aeb3ff8f6dbeef86a489`
+- iOS 隐私资源与最终归档修正版：`eccd6b1b`，[run 39113880593](https://github.com/LONG10222/psportal-on-demand/actions/runs/39113880593) 通过。最终 ZIP 解压后核对文件/模式/链接与资源，再安装并启动精确 Simulator app；设备构建仍未签名，Simulator 的 linker 签名不等于商店分发签名
 
-## 必须区分的验收层级
+`eccd6b1b` 同轮 Windows 任务因新增 Mac 测试夹具使用 Windows 路径分隔符而失败；修复只修改测试夹具，不改变已验收的 Windows 程序。最新提交的整体 CI 结果请看 [PR #3](https://github.com/LONG10222/psportal-on-demand/pull/3)，不要用某个平台成功代替整轮成功。
 
-编译、受控回环流量、实际操作系统运行、模拟器、手机实机、Portal与真实Wi-Fi/订阅是不同证据。跨编译不能替代运行，模拟器不能替代真实Portal。具体工作流的提交号、日志、二进制SHA与随包验证报告才对应那次产物。
+每份二进制保留其自己的提交、完整对应源码、依赖和校验值。独立静态复核已将三桌面共 30 个冻结 Python 模块/入口与精确 Git 源码逐项比对；同时核对架构、依赖、压缩包路径/链接、源码配套和 Android 签名。它不替代实际系统或设备测试。
 
-Linux图形包使用Debian13的Python3.13/Tk8.6，需GLIBC_2.38符号、系统zlib/libxcb、X11或XWayland及字体环境。其他发行版未保证兼容；包内静态原生CLI可单独试用。
+## 仍需真实环境的验收
 
-Android需明确启动前台服务并测试锁屏/Doze；iOS只能在应用前台保持代理。不能通过虚构VPN用途承诺iOS后台局域网代理。真实设备安装、签名、商店交付和平台权限各有独立条件。
+1. 手机/Portal/Wi-Fi：物理设备连接、本地网络授权、真实网络隔离/防火墙、长时间使用与耗电
+2. 公网节点：实际订阅获取、节点协议兼容、健康排序、加密节点唤醒/闲置/再次唤醒。移动端已测 LAN 直连不会唤醒核心；正式 JNI/GoMobile 不包含测试拨号注入。缺少受控公网 HTTPS 订阅和代理节点，不能用本地直连代替该验证
+3. Android 省电：API26 关屏 30 秒只是 ADB 连接的模拟器观察；API36 镜像默认禁用 Doze，完整系统镜像无可用局域网地址，未修改设置来制造通过结果
+4. iOS：仅前台托管，进入后台停止。Apple 不允许把 Packet Tunnel 扩展当成后台局域网代理服务器；未签名设备构建需另行签名/配置，Simulator 无法证明真机隐私与硬件保护行为
+5. 发行：Windows 无 Authenticode，macOS 无 Developer ID/公证，Android 为开发签名，iOS 设备包未签名。未宣称商店审核、自动更新或跨平台正式发行完成
 
-## 下载与许可
+## 使用与许可边界
 
-通过测试的CI任务才上传对应产物，开发产物暂存期较短。原生二进制必须与同次完整对应源码、依赖源码和许可证一并保留。私有签名密钥、订阅与凭据不进入源码或公开产物。
+项目是 HTTP/HTTPS CONNECT 按需代理，不是 UDP 游戏串流服务或完整 VPN。桌面默认独立 Mihomo，实验性 embedded 与移动端使用受限原生适配器。固定节点失败时不静默换节点、换引擎或外网直连。
 
-所有版本均不自动修改防火墙、系统代理、DNS、VPN或开机服务。配置Portal前先确认自己的地址、允许客户端和可信订阅；不要公开监听给不可信网络。
+不自动修改系统防火墙、代理、DNS、VPN 或开机服务。原生程序分发时须同时保留完整对应源码、vendor 依赖与 GPL/第三方通知；原始路由器与包装代码保持原许可证。
