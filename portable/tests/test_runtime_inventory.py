@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import sys
 from types import SimpleNamespace
+from unittest.mock import patch
 import unittest
 
 
@@ -16,6 +17,30 @@ spec.loader.exec_module(inventory)
 
 
 class RuntimeInventoryTests(unittest.TestCase):
+    def test_api_set_loader_proof_overrides_unrelated_static_path(self):
+        name = 'api-ms-win-crt-runtime-l1-1-0.dll'
+        proof = dict(resolved='C:/Windows/System32/ucrtbase.dll',
+                     resolution_method='windows-api-set-system-loader', system_sha256='a' * 64)
+        with patch.object(inventory.sys, 'platform', 'win32'), \
+             patch.object(inventory, 'windows_api_set_resolution', return_value=proof):
+            item = inventory.annotate_import(name, 'C:/Unrelated/JDK/' + name)
+            self.assertEqual(item['resolved'], proof['resolved'])
+            self.assertIn('JDK', item['static_resolved'])
+        with patch.object(inventory.sys, 'platform', 'win32'), \
+             patch.object(inventory, 'windows_api_set_resolution', side_effect=OSError('unavailable')):
+            item = inventory.annotate_import(name, 'C:/Unrelated/JDK/' + name)
+            self.assertIsNone(item['resolved'])
+            self.assertIn('unavailable', item['api_set_resolution_error'])
+
+    def test_packaged_notice_directory_keeps_component_named_text_and_manifests(self):
+        for path in ('licenses/cpython-3.13.16/bzip2.txt', 'licenses/cpython-3.13.16/manifest.json',
+                     'native/licenses/notice/README.txt', 'native/LICENSE'):
+            self.assertTrue(inventory.is_packaged_notice(path))
+        self.assertFalse(inventory.is_packaged_notice('native/corresponding-source.tar.gz'))
+        self.assertEqual(inventory.companion_notice_directory(Path('/dist/PSPortalProxy.app'), 'darwin'),
+                         Path('/dist/PSPortalProxy/licenses'))
+        self.assertIsNone(inventory.companion_notice_directory(Path('/dist/PSPortalProxy'), 'win32'))
+
     def test_pe_version_strings_preserve_origin_and_version_without_license_claim(self):
         fixed = SimpleNamespace(FileVersionMS=(14 << 16) + 44, FileVersionLS=(35211 << 16),
                                 ProductVersionMS=(14 << 16) + 44, ProductVersionLS=(35211 << 16))
@@ -58,6 +83,8 @@ class RuntimeInventoryTests(unittest.TestCase):
                     {prefix + 'Python.framework/Python', 'Python.framework/Python'})
         self.assertEqual(inventory.destination_keys('_internal\\python313.dll'),
             {'_internal/python313.dll', 'python313.dll'})
+        self.assertIn('python3.13/lib-dynload/_struct.so', inventory.destination_keys(
+            'Contents/Frameworks/python3__dot__13/lib-dynload/_struct.so'))
 
     def test_license_names_include_component_prefixed_notices(self):
         for name in ('LICENSE', 'LICENSE.txt', 'license.terms', 'COPYING',

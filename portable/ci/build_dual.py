@@ -29,6 +29,7 @@ def run(command, *, cwd=ROOT, env=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--debian-runtime-notices', action='store_true')
+    parser.add_argument('--cpython-runtime-notices', action='store_true', help='Retain exact reviewed Windows/macOS CPython component notices')
     parser.add_argument('--xvfb', action='store_true')
     parser.add_argument('--frozen-window', action='store_true', help='Verify native Windows/macOS frozen window launch and normal close')
     parser.add_argument('--source-tk', action='store_true', help='Exercise real source Tk windows on a graphical native runner')
@@ -45,6 +46,8 @@ def main():
     build = [sys.executable, PORTABLE / 'build.py', '--native-engine', native, '--native-source', source]
     if args.debian_runtime_notices:
         build.append('--debian-runtime-notices')
+    if args.cpython_runtime_notices:
+        build.append('--cpython-runtime-notices')
     run(build, env=env)
     if system == 'darwin':
         executable = PORTABLE / 'dist/PSPortalProxy.app/Contents/MacOS/PSPortalProxy'
@@ -76,10 +79,12 @@ def main():
         platform=platform.platform(), python=sys.version, native_binary_sha256=hashlib.sha256(native.read_bytes()).hexdigest(),
         corresponding_source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
         tests_run=int(count.group(1)), tests_skipped=int(skips.group(1)) if skips else 0,
+        actual_external_core_tested=bool(env.get('MIHOMO_BINARY')),
         actual_frozen_gui_both_modes_tested=args.xvfb,
         native_platform_frozen_window_smoke_tested=args.frozen_window,
         source_tk_gui_both_modes_tested=args.source_tk or args.xvfb,
         matching_bundled_native_discovery_tested=True,
+        exact_cpython_runtime_notices=args.cpython_runtime_notices,
         exact_debian_runtime_notices=args.debian_runtime_notices, signed_or_notarized=False,
         live_subscription_or_physical_portal_tested=False)
     if args.debian_runtime_notices:

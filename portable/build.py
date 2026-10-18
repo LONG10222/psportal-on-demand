@@ -18,11 +18,14 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--skip-tests', action='store_true', help='Build without tests; not suitable for release acceptance')
     parser.add_argument('--debian-runtime-notices', action='store_true', help='Audit exact distro Python3.13/Tk8.6 ELF and retain installed Debian notices')
+    parser.add_argument('--cpython-runtime-notices', action='store_true', help='Retain the exact reviewed Windows/macOS CPython supplemental notices; fail on unreviewed versions')
     parser.add_argument('--native-engine', type=Path, help='Bundle a reviewed native psportal executable as an experimental option')
     parser.add_argument('--native-source', type=Path, help='Matching complete native source+vendor archive; required with --native-engine')
     args = parser.parse_args(argv)
     if args.debian_runtime_notices and (not sys.platform.startswith('linux') or Path(sys.base_prefix) != Path('/usr')):
         parser.error('--debian-runtime-notices requires the distro /usr Linux Python used for this build')
+    if args.cpython_runtime_notices and sys.platform not in ('win32', 'darwin'):
+        parser.error('--cpython-runtime-notices is limited to reviewed Windows/macOS CPython builds')
     if bool(args.native_engine) != bool(args.native_source):
         parser.error('--native-engine and --native-source must be supplied together')
     if args.native_engine:
@@ -81,6 +84,11 @@ def main(argv=None):
         shutil.copy2(python_license, notices / 'Python-LICENSE.txt')
     else:
         print('NOTICE: Python license file was not found; add it before redistribution.')
+    if args.cpython_runtime_notices:
+        from scripts.retain_cpython_notices import retain_supplement
+        retain_supplement(root / 'notices' / 'cpython-3.13.16', notices / 'cpython-3.13.16',
+            python_license, vcruntime_origin=Path(sys.base_prefix) / 'VCRUNTIME140.dll',
+            bundled_vcruntime=folder / '_internal' / 'VCRUNTIME140.dll')
     distribution = importlib.metadata.distribution('pyinstaller')
     for item in distribution.files or ():
         if str(item).endswith('COPYING.txt'):

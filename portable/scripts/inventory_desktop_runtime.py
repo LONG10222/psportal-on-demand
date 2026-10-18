@@ -70,6 +70,11 @@ def destination_keys(relative):
     for prefix in ('_internal/', 'Contents/Frameworks/', 'Contents/Resources/', 'Contents/MacOS/'):
         if relative.startswith(prefix):
             keys.add(relative[len(prefix):])
+    # PyInstaller 6.16 macOS BUNDLE replaces dots in code-containing directory
+    # names for codesign, while the original TOC retains their source spelling.
+    for key in list(keys):
+        parts = key.split('/')
+        keys.add('/'.join([part.replace('__dot__', '.') for part in parts[:-1]] + parts[-1:]))
     return keys
 
 
@@ -80,6 +85,16 @@ def component(path):
     if re.search(r'(^|/)(tk\d[^/]*|tk\.framework|_tk_data)(/|$)', text):
         return 'Tk'
     return 'other-runtime'
+
+
+def is_packaged_notice(relative):
+    parts = str(relative).replace('\\', '/').split('/')
+    return any(part.lower() in ('license', 'licenses') for part in parts[:-1]) or bool(LICENSE_NAME.search(parts[-1]))
+
+
+def companion_notice_directory(app, target_platform):
+    # build.py archives this known companion directory beside the macOS .app.
+    return app.with_suffix('') / 'licenses' if target_platform == 'darwin' and app.suffix == '.app' else None
 
 
 def pe_version_metadata(pe):
@@ -139,6 +154,19 @@ No arbitrary library name/path is loaded and every acquired handle is freed.
                     system_sha256=digest(host))
     finally:
         kernel32.FreeLibrary(handle)
+
+
+def annotate_import(name, resolved):
+    item = dict(name=name, resolved=resolved)
+    if sys.platform == 'win32' and API_SET_NAME.fullmatch(name):
+        item.update(static_resolved=resolved, resolved=None)
+        try:
+            proof = windows_api_set_resolution(name)
+            if proof:
+                item.update(proof)
+        except (OSError, ValueError) as error:
+            item['api_set_resolution_error'] = str(error)
+    return item
 
 
 def main(argv=None):
@@ -252,7 +280,7 @@ def main(argv=None):
                       sorted((ROOT.parent / 'native' / 'dist').glob('psportal-*/psportal*')))
     native_origins = [path for path in native_origins if path.is_file() and binary_format(path)]
 
-    all_files, binaries, symlinks = [], [], []
+    all_files, binaries, symlinks, macho_proofs = [], [], [], {}
     for path in sorted(app.rglob('*')):
         relative = path.relative_to(app).as_posix()
         if path.is_symlink():
@@ -277,7 +305,10 @@ def main(argv=None):
             except Exception as error:
                 record['pe_version_error'] = str(error)
                 issues.append('Cannot inspect PE version resource: ' + relative)
-        candidates = [candidate for key in destination_keys(relative)
+        keys = destination_keys(relative)
+        if path.resolve().is_relative_to(app):
+            keys.update(destination_keys(path.resolve().relative_to(app).as_posix()))
+        candidates = [candidate for key in sorted(keys)
                       for candidate in by_destination.get(key, ())]
         if path.name in ('psportal-native', 'psportal-native.exe'):
             candidates += [dict(source=str(source), sha256=digest(source), type='REVIEWED_NATIVE')
@@ -288,7 +319,18 @@ def main(argv=None):
                           and item.get('sha256') == record['sha256']]
         record['origin_candidates'] = candidates
         record['origin_hash_verified'] = any(item.get('sha256') == record['sha256'] for item in candidates)
-        if not record['origin_hash_verified']:
+        if not record['origin_hash_verified'] and fmt == 'Mach-O' and sys.platform == 'darwin':
+            from macho_origin_proof import prove_macho_origin
+            record['origin_transformation_proofs'] = []
+            resolved_relative = path.resolve().relative_to(app).as_posix()
+            destination = resolved_relative.removeprefix('Contents/Frameworks/').removeprefix('Contents/MacOS/')
+            for candidate in candidates:
+                key = (candidate['source'], str(path.resolve()), destination, candidate['type'])
+                if key not in macho_proofs:
+                    macho_proofs[key] = prove_macho_origin(candidate['source'], path.resolve(), destination, candidate['type'])
+                record['origin_transformation_proofs'].append(macho_proofs[key])
+            record['origin_transformation_verified'] = any(proof['verified'] for proof in record['origin_transformation_proofs'])
+        if not record['origin_hash_verified'] and not record.get('origin_transformation_verified'):
             issues.append('Unverified binary origin/hash: ' + relative)
         binaries.append(record)
     if not binaries:
@@ -299,17 +341,10 @@ def main(argv=None):
         search_paths = sorted({str((app / item['path']).parent) for item in binaries})
         for record in binaries:
             try:
-                record['imports'] = [dict(name=name, resolved=resolved) for name, resolved in
+                record['imports'] = [annotate_import(name, resolved) for name, resolved in
                     sorted(get_imports(str(app / record['path']), search_paths=search_paths),
                            key=lambda item: (item[0], item[1] or ''))]
                 for item in record['imports']:
-                    if item['resolved'] is None:
-                        try:
-                            proof = windows_api_set_resolution(item['name'])
-                            if proof:
-                                item.update(proof)
-                        except (OSError, ValueError) as error:
-                            item['api_set_resolution_error'] = str(error)
                     if item['resolved'] is None:
                         issues.append('Unresolved imported library: ' + record['path'] + ' -> ' + item['name'])
             except Exception as error:
@@ -319,8 +354,8 @@ def main(argv=None):
         issues.append('PyInstaller dependency inspector unavailable: ' + str(error))
 
     candidates = {}
-    def add_candidate(path, labels, locations):
-        if path.is_file() and LICENSE_NAME.search(path.name):
+    def add_candidate(path, labels, locations, force=False):
+        if path.is_file() and (force or LICENSE_NAME.search(path.name)):
             value = candidates.setdefault(path.resolve(), dict(components=set(), locations=set()))
             value['components'].update(labels)
             value['locations'].update(locations)
@@ -340,7 +375,18 @@ def main(argv=None):
         issues.append('Installed PyInstaller package metadata unavailable')
     for path in app.rglob('*'):
         if not path.is_symlink() or path.resolve().is_relative_to(app):
-            add_candidate(path, {component(path)}, {'already-packaged'})
+            add_candidate(path, {component(path)}, {'already-packaged'},
+                          force=is_packaged_notice(path.relative_to(app)))
+    companion = companion_notice_directory(app, sys.platform)
+    if companion and companion.is_dir():
+        if not companion.resolve().is_relative_to(app.parent):
+            issues.append('Companion notices escape the build output directory')
+        else:
+            for path in companion.rglob('*'):
+                if path.is_symlink() and not path.resolve().is_relative_to(companion.resolve()):
+                    issues.append('Companion notice link escapes its directory: ' + str(path))
+                    continue
+                add_candidate(path, {component(path)}, {'already-packaged-companion'}, force=True)
     notices = []
     for path, metadata in sorted(candidates.items()):
         sha = digest(path)
@@ -357,13 +403,16 @@ def main(argv=None):
     report = dict(schema_version=1, diagnostic_only=True, inventory_complete=not issues,
         license_coverage_verified=False, distribution_approved=False,
         source_commit=os.environ.get('GITHUB_SHA', ''), app=str(app), build=str(build), runtime=runtime,
+        companion_notice_directory=str(companion) if companion else None,
         limitations=[
             'License candidates are retained verbatim, but proximity does not establish license applicability.',
-            'macOS install-name rewriting or signing can change hashes; mismatches remain unverified.',
+            'Mach-O transformations require scratch-only pinned normalization and exact normalized byte equality.',
             'System dependency resolutions are diagnostic; this does not claim those libraries were bundled.',
             'A complete platform-specific license and corresponding-source review is still required.'],
         summary=dict(files=len(all_files), binaries=len(binaries),
-            verified_binary_origins=sum(item['origin_hash_verified'] for item in binaries),
+            verified_binary_origins=sum(item['origin_hash_verified'] or item.get('origin_transformation_verified', False) for item in binaries),
+            byte_identical_binary_origins=sum(item['origin_hash_verified'] for item in binaries),
+            normalized_binary_origins=sum(item.get('origin_transformation_verified', False) for item in binaries),
             license_candidates=len(notices), issues=len(issues)),
         issues=issues, tocs=tocs, binaries=binaries, files=all_files, symlinks=symlinks,
         collected_dependencies=origins, license_candidates=notices)

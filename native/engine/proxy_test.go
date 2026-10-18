@@ -348,11 +348,26 @@ func TestProxyDNSFailureBeforeCore(t *testing.T) {
 	}
 }
 func TestProxyClientAllowlistAndConnectionLimit(t *testing.T) {
+	// Admission checks happen before request parsing. Read the rejection without
+	// racing a request write against the server's close: Windows may discard the
+	// queued response when unread request bytes cause a TCP reset on close.
+	admissionResponse := func(p *Proxy) string {
+		c := proxyConnect(t, p)
+		defer c.Close()
+		response, err := io.ReadAll(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(response)
+	}
 	core := &fixtureCore{}
 	p := startTestProxy(t, core, func(p *Proxy) { p.cfg.AllowedClients = []string{"192.168.1.55"} })
-	response := proxyExchange(t, p, "GET http://8.8.8.8/ HTTP/1.1\r\nHost: 8.8.8.8\r\n\r\n")
+	response := admissionResponse(p)
 	if !strings.Contains(response, "403 Forbidden") {
 		t.Fatal(response)
+	}
+	if stats := p.Status(); stats["denied_clients"].(uint64) != 1 || stats["accepted"].(uint64) != 0 {
+		t.Fatalf("unapproved peer was not rejected at admission: %v", stats)
 	}
 	p = startTestProxy(t, core, func(p *Proxy) { p.cfg.MaxConnections = 1 })
 	c := proxyConnect(t, p)
@@ -362,9 +377,15 @@ func TestProxyClientAllowlistAndConnectionLimit(t *testing.T) {
 	for p.Status()["active"].(uint64) != 1 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
-	response = proxyExchange(t, p, "GET http://8.8.8.8/ HTTP/1.1\r\nHost: 8.8.8.8\r\n\r\n")
+	if p.Status()["active"].(uint64) != 1 {
+		t.Fatal("first client did not occupy the connection slot")
+	}
+	response = admissionResponse(p)
 	if !strings.Contains(response, "503 Service Unavailable") {
 		t.Fatal(response)
+	}
+	if stats := p.Status(); stats["accepted"].(uint64) != 1 || stats["active"].(uint64) != 1 {
+		t.Fatalf("over-limit peer was accepted: %v", stats)
 	}
 	if core.acquisitions.Load() != 0 {
 		t.Fatal("unapproved client woke core")

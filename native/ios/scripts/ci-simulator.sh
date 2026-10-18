@@ -86,6 +86,9 @@ print('Verified unsigned iPhoneOS ARM64 build metadata. No device installation/r
 PY_DEVICE
 xcrun vtool -show-build "$DEVICE_APP/PSPortalHost" > "$LOGS/device-platform.log"
 
+# XCTest may shut down its destination (or use a temporary clone). Explicitly
+# boot the existing selected simulator before the independent Release launch.
+xcrun simctl bootstatus "$SIMULATOR_ID" -b 2>&1 | tee "$LOGS/release-simulator-boot.log"
 # Launch the Release simulator app separately from the Debug XCTest host.
 xcrun simctl install "$SIMULATOR_ID" "$APP"
 LAUNCH="$(xcrun simctl launch --terminate-running-process "$SIMULATOR_ID" org.psportal.host.foreground)"

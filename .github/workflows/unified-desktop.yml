@@ -72,7 +72,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2025, macos-15]
+        include:
+          - os: windows-2025
+            python: '3.13.16'
+            notice_flag: '--cpython-runtime-notices'
+          - os: macos-15
+            python: '3.13'
+            notice_flag: ''
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     env:
@@ -90,14 +96,14 @@ jobs:
           cache: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
-          python-version: '3.13'
+          python-version: ${{ matrix.python }}
           cache: ''
       - name: Install pinned build dependency
         run: python -m pip install --disable-pip-version-check -r portable/requirements-build.txt
       - name: Fetch SHA-pinned official external core for host fixture tests only
         run: python portable/ci/fetch_test_core.py
       - name: Build bundled native engine and execute native plus frozen dispatch tests
-        run: python portable/ci/build_dual.py --source-tk --frozen-window
+        run: python portable/ci/build_dual.py --source-tk --frozen-window ${{ matrix.notice_flag }}
       - name: Inventory exact frozen runtime and installed notice candidates
         if: always() && hashFiles('portable/build/portalproxy/Analysis-00.toc') != ''
         continue-on-error: true
@@ -114,7 +120,21 @@ jobs:
           path: portable/runtime-inventory/**
           if-no-files-found: error
           retention-days: 1
-      # The exact Windows/macOS Python/Tk runtime notice audits are separate.
-      # These jobs validate the combined executables but do not publish them.
-      # Native CLI artifacts with complete corresponding source are published
-      # by native-desktop.yml after their own runtime checks succeed.
+      - name: Verify exact Windows runtime, complete notices and archived test evidence
+        id: windows_release_gate
+        if: success() && runner.os == 'Windows'
+        run: python portable/scripts/verify_windows_release.py
+      - name: Upload audited unsigned Windows GUI with matching source and notices
+        if: success() && runner.os == 'Windows' && steps.windows_release_gate.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: psportal-unified-windows-x64-unsigned-${{ github.sha }}
+          path: |
+            portable/release/PSPortalProxy-windows-*.zip
+            portable/release/VALIDATION.json
+            portable/release/WINDOWS-RUNTIME-REVIEW.json
+            portable/release/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+      # macOS GUI archive upload remains gated on its own exact runtime review.
