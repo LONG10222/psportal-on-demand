@@ -1,0 +1,72 @@
+#!/bin/sh
+set -eu
+
+cleanup() {
+    [ -z "${tty_settings:-}" ] || stty "$tty_settings" 2>/dev/null || true
+    [ -z "${setup_file:-}" ] || rm -f "$setup_file"
+}
+prompt() {
+    printf '%s [%s]: ' "$1" "$2"
+    IFS= read -r reply
+    [ -n "$reply" ] || reply="$2"
+}
+get_option() { uci -q get "portalproxy.main.$1" 2>/dev/null || true; }
+
+case "${1:-status}" in
+    setup|configure)
+        [ "$(id -u)" = 0 ] || { echo 'Run setup as root.' >&2; exit 1; }
+        [ -t 0 ] || { echo 'Setup requires an interactive terminal.' >&2; exit 1; }
+        umask 077
+        setup_file="$(mktemp /tmp/portalproxy-setup.XXXXXX)"
+        tty_settings="$(stty -g)"
+        trap cleanup EXIT
+        trap 'exit 129' HUP
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        detected_ip="$(uci -q get network.lan.ipaddr 2>/dev/null || true)"
+        detected_ip="${detected_ip%%/*}"
+        old_ip="$(get_option listen_ip)"
+        prompt 'OpenWrt LAN IPv4 address' "${old_ip:-$detected_ip}"; listen_ip="$reply"
+        prompt 'Portal reserved IPv4 address' "$(get_option client_ip)"; client_ip="$reply"
+        dns="$(get_option local_dns)"
+        [ -n "$dns" ] || dns="$(uci -q get network.lan.gateway 2>/dev/null || true)"
+        prompt 'LAN DNS server (usually the main router)' "${dns:-$listen_ip}"; local_dns="$reply"
+        dns="$(get_option bootstrap_dns)"
+        prompt 'Working bootstrap DNS IPv4 addresses, separated by spaces' "${dns:-$local_dns}"; bootstrap_dns="$reply"
+        prompt 'HTTP proxy port' "$(get_option listen_port)"; listen_port="${reply:-10081}"
+        prompt 'External idle timeout in seconds' "$(get_option idle_seconds)"; idle_seconds="${reply:-60}"
+        printf 'HTTPS Clash/Mihomo subscription URL (hidden; empty keeps existing): '
+        stty -echo
+        IFS= read -r subscription_url
+        stty "$tty_settings"
+        printf '\n'
+        prompt 'Optional local Clash/Mihomo YAML seed file; empty skips import' ''; seed_file="$reply"
+        mark="$(get_option routing_mark)"
+        if [ "${mark:-0}" = 0 ] && [ -f /etc/init.d/openclash ]; then mark=6666; fi
+        prompt 'Outbound routing mark (6666 for common OpenClash builds, 0 disables)' "${mark:-0}"; routing_mark="$reply"
+        printf '%s\n' "$listen_ip" "$client_ip" "$local_dns" "$bootstrap_dns" "$listen_port" "$idle_seconds" "$subscription_url" "$seed_file" "$routing_mark" > "$setup_file"
+        /usr/bin/lua /usr/libexec/portalproxy/configure.lua "$setup_file"
+        /usr/bin/lua /usr/libexec/portalproxy/render.lua
+        /etc/init.d/portalproxy-core disable
+        /etc/init.d/portalproxy enable
+        /etc/init.d/portalproxy restart
+        printf 'Portal HTTP proxy: %s:%s\n' "$listen_ip" "$listen_port"
+        echo 'Listener enabled at boot. The core starts only for external requests.'
+        ;;
+    status) exec /usr/bin/lua /usr/libexec/portalproxy/status.lua ;;
+    check) exec /usr/bin/lua /usr/libexec/portalproxy/render.lua --check ;;
+    start|stop|restart) exec /etc/init.d/portalproxy "$1" ;;
+    enable)
+        uci set portalproxy.main.enabled=1
+        uci commit portalproxy
+        /etc/init.d/portalproxy enable
+        exec /etc/init.d/portalproxy start
+        ;;
+    disable)
+        /etc/init.d/portalproxy stop
+        /etc/init.d/portalproxy disable
+        uci set portalproxy.main.enabled=0
+        uci commit portalproxy
+        ;;
+    *) echo 'Usage: portalproxy {setup|status|check|start|stop|restart|enable|disable}' >&2; exit 2 ;;
+esac

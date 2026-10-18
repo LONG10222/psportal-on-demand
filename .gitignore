@@ -1,0 +1,14 @@
+# Runtime data belongs on the router, never in this checkout.
+config.local/
+state/
+backups/
+dist/
+.env
+.env.*
+*.log
+*.key
+*.pem
+*.tar.gz
+*.zip
+__pycache__/
+.DS_Store
