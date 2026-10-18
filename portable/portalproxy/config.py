@@ -40,6 +40,10 @@ def validate(raw, path):
     if not isinstance(raw, dict):
         raise ValueError('Configuration must be an object')
     cfg = dict(DEFAULTS, **raw)
+    from .nodes import validate_policies
+    cfg['node_policies'] = validate_policies(cfg.get('node_policies', {}))
+    if type(cfg.get('live_node_controls', False)) is not bool:
+        raise ValueError('live_node_controls must be a boolean')
     existing = cfg.get('existing_proxy_port')
     if existing is not None:
         if type(existing) is not int or not 1024 <= existing <= 65535 or existing == cfg['listen_port']:
@@ -189,6 +193,12 @@ def render(cfg, secret):
         'timeout':cfg['health_timeout'],'lazy':False,'expected-status':204,
         'exclude-type':'Direct|Compatible|Pass|Dns','max-failed-times':2,
         'empty-fallback':'REJECT','disable-udp':True}]
+    if cfg.get('live_node_controls') and mode != 'fixed':
+        # Keep the regional policy as the default, with a real Selector around
+        # it so a user click is stable rather than an expiring fallback override.
+        groups[0]['name'] = 'ONDEMAND-POLICY'
+        groups.insert(0, {'name':'PORTAL', 'type':'select', 'proxies':['ONDEMAND-POLICY'],
+                          'use':['SUBSCRIPTION'], 'disable-udp':True})
     return {'port':cfg['backend_port'],'allow-lan':False,'bind-address':'127.0.0.1',
         'mode':'rule','log-level':'silent','ipv6':False,'find-process-mode':'off',
         'external-controller':f"127.0.0.1:{cfg['api_port']}",'secret':secret,

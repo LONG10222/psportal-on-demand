@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import ipaddress
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -208,6 +209,18 @@ class ProxyServer:
         self._closing = False
         self.stats = {"accepted": 0, "denied_clients": 0, "local_requests": 0,
                       "external_requests": 0, "errors": 0, "active": 0}
+        self.clients = {}
+
+    def snapshot(self):
+        """Only clients that actually reached this listener, never a Wi-Fi scan."""
+        now = time.time()
+        self.clients = {ip: row for ip, row in self.clients.items()
+                        if row['active'] or now - row['last_seen'] <= 300}
+        rows = [dict(ip=ip, **row) for ip, row in self.clients.items()]
+        rows.sort(key=lambda row: (-bool(row['active']), -row['last_seen'], row['ip']))
+        return dict(kind='statistics', **self.stats,
+                    devices=sum(row['active'] > 0 for row in rows), clients=rows[:256],
+                    truncated=len(rows) > 256)
 
     @property
     def bound_addresses(self) -> list[tuple]:
@@ -343,6 +356,7 @@ class ProxyServer:
         upstream_writer = None
         acquired = False
         counted = False
+        client = None
         state = {"responded": False}
         try:
             peer = writer.get_extra_info("peername")
@@ -360,6 +374,11 @@ class ProxyServer:
             counted = True
             self.stats["active"] += 1
             self.stats["accepted"] += 1
+            client = self.clients.setdefault(str(ipaddress.ip_address(peer[0])),
+                dict(active=0, requests=0, last_seen=0))
+            client['active'] += 1
+            client['requests'] += 1
+            client['last_seen'] = time.time()
             request = parse_request(await self._header(reader))
             route = await asyncio.wait_for(resolve_destination(request.host, request.port), self.timeout)
             if route.kind == "external":
@@ -428,4 +447,6 @@ class ProxyServer:
             finally:
                 if counted:
                     self.stats["active"] -= 1
+                    client['active'] -= 1
+                    client['last_seen'] = time.time()
                 await _close_writer(writer)

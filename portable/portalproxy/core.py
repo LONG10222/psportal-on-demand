@@ -172,17 +172,19 @@ class CoreManager:
         self.runtime = Path(tempfile.mkdtemp(prefix='session-', dir=root))
         (self.runtime / 'providers').mkdir(mode=0o700)
         self.monitor = None
+        from .nodes import NodeControl
+        self.nodes = NodeControl(self)
 
     def start_monitor(self):
         if self.monitor is None:
             self.monitor = asyncio.create_task(self._idle_loop())
 
-    def _request(self, path, method='GET', payload=None):
+    def _request(self, path, method='GET', payload=None, timeout=2):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
         request = urllib.request.Request(f"http://127.0.0.1:{self.config['api_port']}{path}",
             data=None if payload is None else json.dumps(payload).encode(), method=method,
             headers={'Authorization':'Bearer '+self.secret, 'Content-Type':'application/json'})
-        with opener.open(request, timeout=2) as response:
+        with opener.open(request, timeout=timeout) as response:
             data = response.read(1024 * 1024 + 1)
             if len(data) > 1024 * 1024:
                 raise CoreError('Controller response too large')
@@ -260,8 +262,14 @@ class CoreManager:
                 except Exception:
                     pass
                 raise
+            if not self.config.get('profile_file'):
+                from .profiles import read_profile
+                provider_path = self.runtime / 'providers/subscription.yaml'
+                canonical = read_profile(provider_path)
+                atomic_private(provider_path, json.dumps(canonical, ensure_ascii=False).encode())
             rendered = generated if self.config.get('profile_file') else render(self.config, self.secret)
-            atomic_private(self.runtime / 'config.json', json.dumps(rendered).encode())
+            # YAML parsers reject JSON's surrogate-pair escapes for emoji names.
+            atomic_private(self.runtime / 'config.json', json.dumps(rendered, ensure_ascii=False).encode())
             args = (self.config['core_path'], '-d', str(self.runtime), '-f', str(self.runtime / 'config.json'))
             check = await launch_external(*args, '-t')
             try:
@@ -283,6 +291,7 @@ class CoreManager:
                     writer.close()
                     await writer.wait_closed()
                     await self._select()
+                    await self.nodes.restore()
                     self.state = 'running'
                     print('Core: running', flush=True)
                     return
@@ -327,6 +336,8 @@ class CoreManager:
                 async with self.lock:
                     if self.process is not None and not self.active and time.monotonic() - self.last_used >= self.config['idle_seconds']:
                         await self._stop()
+                if self.state == 'running':
+                    await self.nodes.tick()
         except asyncio.CancelledError:
             pass
 

@@ -5,7 +5,7 @@ import sys
 root = Path(SPECPATH).resolve().parent
 analysis = Analysis(
     [str(root / 'packaging' / 'entry.py')], pathex=[str(root)],
-    binaries=[], datas=[], hiddenimports=['portalproxy.__main__'],
+    binaries=[], datas=[], hiddenimports=['portalproxy.__main__', 'yaml._yaml'],
     hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=[], noarchive=False,
 )
 pyz = PYZ(analysis.pure)

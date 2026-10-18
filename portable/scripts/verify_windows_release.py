@@ -34,18 +34,31 @@ def within_windows(path, root):
 
 def verify_inventory(report, reviewed, system_root):
     require(report.get('inventory_complete') is True and not report.get('issues'), 'Runtime inventory has unresolved issues')
+    try:
+        from .pyyaml_runtime import verify_python_inventory
+    except ImportError:
+        from pyyaml_runtime import verify_python_inventory
+    yaml_review, yaml_extension = verify_python_inventory(report, 'win32')
+    yaml_path = '_internal/' + yaml_review['extension_path']
     binaries = report.get('binaries', [])
-    require(len(binaries) == 25 and all(b.get('origin_hash_verified') is True for b in binaries), 'Expected exactly 25 verified binary origins')
+    require(len(binaries) == 26 and len({b['path'] for b in binaries}) == 26 and
+            all(b.get('origin_hash_verified') is True for b in binaries),
+            'Expected exactly 23 CPython + 1 PyYAML + 2 application/native verified binary origins')
     files = {item['path']: item['sha256'] for item in report.get('files', [])}
     require(len(files) == len(report.get('files', [])), 'Duplicate inventoried file path')
     require(all(files.get(binary['path']) == binary['sha256'] for binary in binaries), 'Binary hashes disagree with archive file inventory')
-    internal = {b['path']: b['sha256'] for b in binaries if b['path'].startswith('_internal/')}
+    internal = {b['path']: b['sha256'] for b in binaries if b['path'].startswith('_internal/') and b['path'] != yaml_path}
     require(internal == reviewed['runtime_files'], 'Windows runtime differs from the individually reviewed files')
-    require({b['path'] for b in binaries} == set(internal) | {'PSPortalProxy.exe', 'native/psportal-native.exe'}, 'Unexpected executable in Windows package')
+    require({b['path'] for b in binaries} == set(internal) | {yaml_path, 'PSPortalProxy.exe', 'native/psportal-native.exe'}, 'Unexpected executable in Windows package')
     require(report['runtime']['pyinstaller'] == reviewed['pyinstaller_version'], 'PyInstaller version requires new review')
     prefix = report['runtime']['base_prefix']
     system = str(PureWindowsPath(system_root) / 'System32')
     for binary in binaries:
+        if binary['path'] == yaml_path:
+            require(binary['sha256'] == yaml_review['extension_sha256'] and
+                    any(c.get('source') == yaml_extension['source'] and c.get('sha256') == binary['sha256'] and
+                        c.get('type') == 'EXTENSION' and within_windows(c.get('source'), report['runtime']['prefix'])
+                        for c in binary.get('origin_candidates', [])), 'YAML extension differs from exact installed wheel origin')
         if binary['path'] in internal:
             require(any(c.get('sha256') == binary['sha256'] and within_windows(c.get('source'), prefix)
                         for c in binary.get('origin_candidates', [])), 'Runtime origin is outside selected Python')
@@ -80,7 +93,9 @@ def main(argv=None):
         for item in binary.get('imports', []):
             if item['name'].lower().startswith('api-ms-win-'):
                 require(digest(Path(item['resolved']).read_bytes()) == item['system_sha256'], 'System API-set host changed since inventory')
+    from pyyaml_runtime import verify_retained_notices
     app = Path(report['app'])
+    verify_retained_notices(app / 'licenses/pyyaml-6.0.3', report['runtime']['pyyaml'])
     require(app.resolve() == (ROOT / 'dist/PSPortalProxy').resolve(), 'Unexpected app inventory path')
     validation = json.loads((ROOT / 'release/VALIDATION.json').read_text(encoding='utf-8'))
     require(report['source_commit'] == validation['source_commit'] == os.environ['GITHUB_SHA'], 'Evidence came from a different commit')

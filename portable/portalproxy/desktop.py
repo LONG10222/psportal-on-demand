@@ -118,6 +118,8 @@ class BackendProcess:
     def __init__(self):
         self.process: subprocess.Popen | None = None
         self.events: queue.Queue[str] = queue.Queue(maxsize=500)
+        self.updates = queue.Queue(maxsize=100)
+        self._write_lock = threading.Lock()
         self.secrets: tuple[str, ...] = ()
         self.stopping_since: float | None = None
         self._signaled = False
@@ -168,6 +170,9 @@ class BackendProcess:
             self.process = process
         self.launch = launch
         self.stopping_since = None
+        while not self.updates.empty():
+            try: self.updates.get_nowait()
+            except queue.Empty: break
         self._signaled = False
         self.log(('Experimental embedded engine' if launch.embedded else 'External-Mihomo listener')
                  + ' process started. Waiting for listener readiness.')
@@ -187,9 +192,20 @@ class BackendProcess:
         try:
             with process.stdout:
                 while True:
-                    line = process.stdout.readline(4097)
+                    from .runtime import PREFIX, MAX_EVENT
+                    line = process.stdout.readline(MAX_EVENT + 1)
                     if not line:
                         break
+                    if line.startswith(PREFIX) and len(line.encode('utf-8')) <= MAX_EVENT:
+                        try:
+                            event = json.loads(line[len(PREFIX):])
+                            with self._state_lock:
+                                owned = self.process is process
+                            if owned and isinstance(event, dict) and event.get('kind') in ('statistics', 'nodes', 'control_error'):
+                                self.updates.put_nowait(event)
+                        except (ValueError, queue.Full):
+                            pass
+                        continue
                     if len(line) > 4096:
                         # Drop the entire oversized record, not split tokens.
                         while line and not line.endswith('\n'):
@@ -210,6 +226,17 @@ class BackendProcess:
                     except (OSError, ValueError):
                         pass
                 launch.cleanup()
+
+    def command(self, request_id, action, **values):
+        process = self.process
+        if process is None or process.poll() is not None or self.stopping_since is not None:
+            raise RuntimeError('Start the listener first.')
+        line = json.dumps(dict(id=request_id, action=action, **values), ensure_ascii=False) + '\n'
+        if len(line.encode('utf-8')) > 8192:
+            raise ValueError('Node command is too large')
+        with self._write_lock:
+            process.stdin.write(line)
+            process.stdin.flush()
 
     def stop(self) -> None:
         process = self.process
@@ -269,6 +296,10 @@ class DesktopApp:
         self.importing = False
         self.quick_start_pending = False
         self.import_events = queue.Queue()
+        self.command_id = 0
+        self.pending_command = None
+        self.statistics = None
+        self.node_state = None
         self.inputs = []
         self.engine_inputs = {}
         self.profile_selection_inputs = []
@@ -413,6 +444,8 @@ class DesktopApp:
                 self.vars['profile_file'].set('')
                 self.vars['subscription_file'].set(str(path.absolute()))
             self.view.preview = info
+            if str(path.absolute()) != (self.raw.get('profile_file') or self.raw.get('subscription_file')):
+                self.raw.pop('node_policies', None)
             self.raw.pop('existing_proxy_port', None)
             try:
                 metadata = path.with_suffix(path.suffix + '.info.json')
@@ -511,6 +544,7 @@ class DesktopApp:
             messagebox.showerror(self._t('Check configuration'), self._t('Enter a valid HTTPS subscription URL.'), parent=self.root)
             return
         self.importing = True
+        self._set_status('Importing subscription…')
         self.view.quick_button.configure(state='disabled')
         self.view.link_button.configure(state='disabled')
         for widget, _ in self.inputs:
@@ -552,8 +586,10 @@ class DesktopApp:
             return
         pending, self.quick_start_pending = self.quick_start_pending, False
         if error:
+            self._set_status('Stopped with error')
             messagebox.showerror(self._t('Cannot inspect provider'), self._t(error), parent=self.root)
         else:
+            self._set_status('Stopped')
             if self._use_imported_file(path) and pending and self._configure_lan():
                 self.start()
                 self.view.show('LAN sharing')
@@ -608,6 +644,8 @@ class DesktopApp:
             elif key == 'allowed_clients':
                 value = [part.strip() for part in value.split(',') if part.strip()]
             values[key] = value
+        if values.get('engine_mode') == 'external' and not values.get('existing_proxy_port'):
+            values['live_node_controls'] = True
         return values
 
     def save(self) -> bool:
@@ -645,6 +683,10 @@ class DesktopApp:
             return
         if not self.save():
             return
+        self.statistics = None
+        self.node_state = None
+        self.pending_command = None
+        self.view.node_message = ''
         try:
             self.backend.start(self.path, self.raw)
         except (OSError, RuntimeError, ValueError):
@@ -661,8 +703,54 @@ class DesktopApp:
         self.stop_button.configure(state='disabled')
         self._set_status('Stopping…')
 
+    def node_command(self, action):
+        if self.pending_command is not None:
+            return
+        if self.raw.get('existing_proxy_port'):
+            self.view.node_message = 'Node controls are managed by the existing Clash client.'
+            self.view.refresh()
+            return
+        group = self.view.group_var.get()
+        selected = self.view.live_node_table.selection()
+        name = self.view.live_node_table.item(selected[0], 'values')[0] if selected else None
+        if action == 'select' and not name:
+            self.view.node_message = 'Choose a node, then click Switch node.'
+            self.view.refresh()
+            return
+        self.command_id += 1
+        try:
+            self.backend.command(self.command_id, action, group=group, name=name)
+            self.pending_command = self.command_id
+            self.view.node_message = 'Testing latency…' if action in ('test', 'latency') else 'Updating nodes…'
+        except (OSError, ValueError, RuntimeError):
+            self.view.node_message = 'Start the listener first.'
+        self.view.refresh()
+
+    def _poll_updates(self):
+        for _ in range(100):
+            try: event = self.backend.updates.get_nowait()
+            except queue.Empty: break
+            if event['kind'] == 'statistics':
+                self.statistics = event
+            elif event['kind'] == 'nodes':
+                self.node_state = event
+                if self.pending_command is None and event.get('message'):
+                    self.view.node_message = event['message']
+                if event.get('id') == self.pending_command and self.pending_command is not None:
+                    self.pending_command = None
+                    self.view.node_message = event.get('message', '')
+                    self.raw['node_policies'] = event.get('policies', {})
+                    try: save_config(self.path, self.raw)
+                    except (OSError, ValueError):
+                        self.view.node_message = 'Selection applied; preference could not be saved.'
+            elif event['kind'] == 'control_error' and event.get('id') == self.pending_command:
+                self.pending_command = None
+                self.view.node_message = event['message']
+        self.view.refresh()
+
     def poll(self):
         self._poll_import()
+        self._poll_updates()
         for _ in range(100):
             try:
                 line = self.backend.events.get_nowait()
@@ -683,6 +771,9 @@ class DesktopApp:
             result = self.backend.poll()
             if result is not None:
                 self._set_status('Stopped' if result == 0 else 'Stopped with error')
+                self.statistics = None
+                self.node_state = None
+                self.pending_command = None
                 self.backend.log('Listener exited.' if result == 0 else f'Listener exited with code {result}.')
                 self.running_controls(False)
         if self.closing and self.backend.process is None and not self.importing:

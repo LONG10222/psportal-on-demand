@@ -1,6 +1,7 @@
 """Portable command-line service; does not alter OS networking or autostart."""
 import argparse
 import asyncio
+import json
 import signal
 import sys
 import threading
@@ -15,19 +16,37 @@ async def serve(config, desktop_child=False):
     def stop(*_):
         loop.call_soon_threadsafe(stopped.set)
     old = {}
+    commands = asyncio.Queue(maxsize=16)
     for name in ('SIGINT', 'SIGTERM', 'SIGBREAK'):
         sig = getattr(signal, name, None)
         if sig is not None:
             old[sig] = signal.signal(sig, stop)
     if desktop_child:
+        def enqueue(command):
+            if not commands.full():
+                commands.put_nowait(command)
         def watch_parent():
-            for line in sys.stdin:
+            while True:
+                line = sys.stdin.readline(8193)
+                if not line:
+                    break
+                if len(line) > 8192:
+                    while line and not line.endswith('\n'):
+                        line = sys.stdin.readline(8193)
+                    continue
                 if line.strip() == 'stop':
                     break
+                try:
+                    value = json.loads(line)
+                    if isinstance(value, dict) and type(value.get('id')) is int:
+                        loop.call_soon_threadsafe(enqueue, value)
+                except ValueError:
+                    pass
             stop()
         threading.Thread(target=watch_parent, daemon=True).start()
     core = None
     proxy = None
+    ipc_tasks = []
     try:
         if config.get('existing_proxy_port'):
             from .existing_proxy import ExistingProxy
@@ -38,8 +57,16 @@ async def serve(config, desktop_child=False):
         await proxy.start()
         core.start_monitor()
         print(f"Proxy ready at {config['listen_host']}:{config['listen_port']}; core starts on demand", flush=True)
+        if desktop_child:
+            from . import runtime
+            ipc_tasks = [asyncio.create_task(runtime.publish(proxy, core)),
+                         asyncio.create_task(runtime.commands(commands, core))]
         await stopped.wait()
     finally:
+        for task in ipc_tasks:
+            task.cancel()
+        if ipc_tasks:
+            await asyncio.gather(*ipc_tasks, return_exceptions=True)
         if proxy:
             await proxy.close()
         if core:

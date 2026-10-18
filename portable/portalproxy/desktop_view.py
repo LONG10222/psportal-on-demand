@@ -5,7 +5,7 @@ from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 from . import i18n
 
-PAGES = ('Overview', 'Profiles', 'Proxies', 'Rules', 'LAN sharing', 'Settings', 'Logs')
+PAGES = ('Overview', 'Profiles', 'Proxies', 'Rules', 'LAN sharing', 'Settings', 'Logs', 'Devices')
 SUBTITLES = dict(zip(PAGES, (
     'A clear view of the listener, engine and device connection.',
     'Import a provider or keep using your HTTPS subscription.',
@@ -14,6 +14,7 @@ SUBTITLES = dict(zip(PAGES, (
     'Give another device an address it can connect to.',
     'Keep the complete external core and the experimental embedded option.',
     'Original diagnostics, with sensitive values redacted.',
+    'Devices using this proxy, grouped by source IP.',
 )))
 
 
@@ -30,6 +31,9 @@ class DesktopView:
         self.status = 'Stopped'
         self.preview = None
         self.subscription_info = None
+        self.node_message = ''
+        self._nodes_rendered = None
+        self._clients_rendered = None
         self.advanced = False
         self.advanced_sections = []
         self.setup_network = ''
@@ -111,14 +115,52 @@ class DesktopView:
         self.preview_var = tk.StringVar()
         ttk.Label(profile, textvariable=self.preview_var, style='Portal.CardNote.TLabel', wraplength=680).grid(row=10, column=0, columnspan=3, sticky='w')
 
-        proxies = self.card(self.frames['Proxies'], 'Selection policy')
+        # Scroll the advanced policy details without crowding the simple node list.
+        proxy_page = self.frames['Proxies']
+        proxy_page.rowconfigure(0, weight=1)
+        canvas = tk.Canvas(proxy_page, highlightthickness=0, background=self.palette['page'])
+        canvas.grid(row=0, column=0, sticky='nsew')
+        scrollbar = ttk.Scrollbar(proxy_page, orient='vertical', command=canvas.yview)
+        scrollbar.grid(row=0, column=1, sticky='ns')
+        canvas.configure(yscrollcommand=scrollbar.set)
+        self.proxy_canvas = canvas
+        proxy_body = ttk.Frame(canvas, style='Portal.Page.TFrame')
+        proxy_body.columnconfigure(0, weight=1)
+        window = canvas.create_window((0, 0), window=proxy_body, anchor='nw')
+        proxy_body.bind('<Configure>', lambda _: canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.bind('<Configure>', lambda event: canvas.itemconfigure(window, width=event.width))
+        live = self.card(proxy_body, 'Live proxy nodes')
+        bar = ttk.Frame(live, style='Portal.Card.TFrame')
+        bar.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(0, 12))
+        self.group_var = tk.StringVar()
+        self.group_combo = ttk.Combobox(bar, textvariable=self.group_var, state='readonly', width=34)
+        self.group_combo.pack(side='left')
+        self.group_combo.bind('<<ComboboxSelected>>', lambda _: app.node_command('nodes'))
+        self.live_node_table = self.table(live, ('Name', 'Protocol', 'Latency', 'Selected'), height=9)
+        self.live_node_table.master.grid_configure(row=2)
+        self.live_node_table.column('Name', width=320)
+        for column in ('Protocol', 'Latency', 'Selected'):
+            self.live_node_table.column(column, width=95, minwidth=65)
+        self.live_node_table.bind('<Double-1>', lambda _: app.node_command('select'))
+        actions = ttk.Frame(live, style='Portal.Card.TFrame')
+        actions.grid(row=3, column=0, columnspan=3, sticky='w', pady=12)
+        self.node_buttons = []
+        for label, action in (('Load nodes', 'nodes'), ('Switch node', 'select'), ('Test latency', 'test'), ('Auto · lowest latency', 'latency')):
+            button = self.button(actions, label, command=lambda action=action: app.node_command(action))
+            button.pack(side='left', padx=(0, 8)); self.node_buttons.append(button)
+        self.node_note_var = tk.StringVar()
+        ttk.Label(live, textvariable=self.node_note_var, style='Portal.CardNote.TLabel', wraplength=690,
+                  justify='left').grid(row=4, column=0, columnspan=3, sticky='w')
+        proxies = self.card(proxy_body, 'Selection policy', row=1)
+        self.advanced_sections.append(proxies)
         self.fields(proxies, ('selection_mode', 'preferred_node'))
         self.label(proxies, 'HK → JP → other regions. Prefer keeps fallback; fixed never switches silently.',
                    wraplength=680, style='Portal.CardNote.TLabel').grid(row=5, column=0, columnspan=3, sticky='w', pady=16)
         self.label(proxies, 'Full profile uses its original groups and rules; provider selection fields do not override them.',
                    wraplength=680, style='Portal.CardNote.TLabel').grid(row=6, column=0, columnspan=3, sticky='w')
 
-        inventory = self.card(self.frames['Proxies'], 'Node inventory', row=1, padding=(24, 16))
+        inventory = self.card(proxy_body, 'Node inventory', row=2, padding=(24, 16))
+        self.advanced_sections.append(inventory)
         self.node_table = self.table(inventory, ('Name', 'Protocol'), height=4)
         self.label(inventory, 'Local file preview only. First 500 entries; no latency test or node switch is performed.',
                    wraplength=680, style='Portal.CardNote.TLabel').grid(row=2, column=0, columnspan=3, sticky='w', pady=(12, 0))
@@ -163,6 +205,14 @@ class DesktopView:
             'dark' if self.theme_combo.current() == 0 else 'light'))
 
         self._overview()
+
+        devices = self.card(self.frames['Devices'], 'Proxy clients')
+        self.client_summary = tk.StringVar()
+        ttk.Label(devices, textvariable=self.client_summary, style='Portal.CardNote.TLabel', wraplength=680).grid(row=1, column=0, columnspan=3, sticky='w')
+        self.client_table = self.table(devices, ('Device IP', 'Connections', 'Requests', 'Last seen'), height=10)
+        self.client_table.master.grid_configure(row=2, pady=14)
+        self.label(devices, 'Active counts mean open proxy connections. Recent devices stay visible for five minutes; this is not a list of all Wi-Fi devices.',
+            style='Portal.CardNote.TLabel', wraplength=680, justify='left').grid(row=3, column=0, columnspan=3, sticky='w')
 
         logs = self.frames['Logs']; logs.rowconfigure(0, weight=1)
         app.log_widget = ScrolledText(logs, height=16, state='disabled', wrap='word',
@@ -239,6 +289,7 @@ class DesktopView:
         self.theme = theme
         self._styles()
         self.root.configure(background=self.palette['page'])
+        self.proxy_canvas.configure(background=self.palette['page'])
         self.refresh()
 
     def table(self, parent, columns, height):
@@ -339,6 +390,14 @@ class DesktopView:
             self.label(frame, key, style='Portal.CardNote.TLabel').pack(anchor='w')
             var = tk.StringVar(); self.metric_vars[key] = var
             ttk.Label(frame, textvariable=var, style='Portal.Metric.TLabel', wraplength=200).pack(anchor='w', pady=(14, 0))
+        metrics.grid_remove()
+        hero = ttk.Frame(page, padding=18, style='Portal.Card.TFrame')
+        hero.grid(row=1, column=0, sticky='ew')
+        self.hero_var = tk.StringVar()
+        self.hero_note_var = tk.StringVar()
+        ttk.Label(hero, textvariable=self.hero_var, style='Portal.Metric.TLabel', wraplength=690).pack(anchor='w')
+        ttk.Label(hero, textvariable=self.hero_note_var, style='Portal.CardNote.TLabel', wraplength=690,
+                  justify='left').pack(anchor='w', pady=(8, 0))
         panel = ttk.Frame(page, padding=26, style='Portal.Card.TFrame')
         panel.grid(row=2, column=0, sticky='ew', pady=18)
         self.label(panel, 'Your devices, one connection.', style='Portal.CardTitle.TLabel').pack(anchor='w')
@@ -361,7 +420,7 @@ class DesktopView:
         self.advanced = bool(enabled)
         for name, button in self.nav.items():
             button.pack_forget()
-            if self.advanced or name in ('Overview', 'LAN sharing'):
+            if self.advanced or name in ('Overview', 'Proxies', 'Devices', 'LAN sharing'):
                 button.pack(fill='x', pady=4, ipady=7, before=self.advanced_button)
         for section in self.advanced_sections:
             section.grid() if self.advanced else section.grid_remove()
@@ -369,7 +428,7 @@ class DesktopView:
             button.pack_forget()
             if self.advanced:
                 button.pack(side='left', padx=(0, 10), before=self.app.stop_button)
-        if not self.advanced and self.page not in ('Overview', 'LAN sharing'):
+        if not self.advanced and self.page not in ('Overview', 'Proxies', 'Devices', 'LAN sharing'):
             self.show('Overview')
         self.refresh()
 
@@ -402,6 +461,9 @@ class DesktopView:
             self.theme_combo.current(0 if self.theme == 'dark' else 1)
         for table, columns in ((self.node_table, ('Name', 'Protocol')), (self.rule_table, ('Imported rules',))):
             for key in columns:
+                table.heading(key, text=self.tr(key))
+        for table in (self.live_node_table, self.client_table):
+            for key in table['columns']:
                 table.heading(key, text=self.tr(key))
         if self._preview_rendered is not self.preview:
             for table in (self.node_table, self.rule_table):
@@ -438,6 +500,7 @@ class DesktopView:
         host = self.app.vars.get('listen_host'); port = self.app.vars.get('listen_port')
         address = f'{host.get()}:{port.get()}' if host and host.get() and port and port.get() else self.tr('Not configured')
         self.address_var.set(address)
+        self._refresh_runtime(address)
         self.guide_var.set(self.tr('Server: {host}\nPort: {port}', host=host.get(), port=port.get())
                            if host and host.get() and port and port.get() else self.tr('Prepare the subscription on Overview first.'))
         if self.preview:
@@ -447,6 +510,72 @@ class DesktopView:
             self.preview_var.set(message)
         elif hasattr(self, 'preview_var'):
             self.preview_var.set(self.tr('No provider inspected.'))
+
+    def _refresh_runtime(self, address):
+        import datetime
+        app = self.app
+        statistics = app.statistics or {}
+        embedded = app.vars['engine_mode'].get() == 'embedded'
+        counts = self.tr('{devices} active devices · {connections} connections',
+                         devices=statistics.get('devices', 0), connections=statistics.get('active', 0))
+        if embedded:
+            counts = self.tr('Device counts unavailable in embedded mode')
+        ready = self.status == 'Listening'
+        title = ('Devices are using the proxy' if statistics.get('devices') else 'Ready · waiting for a device') if ready else self.status
+        if ready and embedded:
+            title = 'Listening'
+        self.hero_var.set(self.tr(title))
+        self.hero_note_var.set(counts + '\n' + self.tr('Connection address') + ': ' + address + ' · ' +
+            self.tr(self.core_state if not app.raw.get('existing_proxy_port') else 'Managed by existing client'))
+        self.client_summary.set(counts + ' · ' + self.tr('Errors: {count}', count=statistics.get('errors', 0)))
+        clients = statistics.get('clients', [])
+        client_key = (clients, self.language)
+        if self._clients_rendered != client_key:
+            self.client_table.delete(*self.client_table.get_children())
+            for item in clients:
+                when = datetime.datetime.fromtimestamp(item['last_seen']).strftime('%H:%M:%S')
+                self.client_table.insert('', 'end', values=(item['ip'], item['active'], item['requests'], when))
+            self._clients_rendered = client_key
+        linked = bool(app.raw.get('existing_proxy_port'))
+        live = app.node_state
+        enabled = ready and not linked and not embedded and app.pending_command is None
+        self.group_combo.configure(state='readonly' if enabled else 'disabled')
+        for button in self.node_buttons:
+            button.configure(state='normal' if enabled else 'disabled')
+        if linked:
+            note = 'Node controls are managed by the existing Clash client.'
+        elif embedded:
+            note = 'Live node controls require the external Mihomo engine.'
+        elif app.pending_command is not None:
+            note = self.node_message
+        elif self.node_message:
+            note = self.node_message
+        else:
+            note = ('Select a node or enable automatic lowest latency.' if live else
+                    'Start the listener, then load nodes. This wakes only our own core.')
+        if live and not linked:
+            self.group_combo.configure(values=live['groups'])
+            if app.pending_command is None:
+                self.group_var.set(live['group'])
+            state = live.get('policies', {}).get(live['group'], {}).get('mode')
+            note = self.tr(note) + '\n' + self.tr('Current: {node} · Policy: {policy}', node=live['current'],
+                policy=self.tr('Auto · lowest latency' if state == 'latency' else 'Manual' if state == 'manual' else 'Original subscription policy'))
+            if state == 'latency':
+                note += '\n' + self.tr('Retest every {seconds}s while the core runs; sleeping cores stay asleep.', seconds=max(30, int(app.raw.get('health_interval', 300))))
+        else:
+            note = self.tr(note)
+        self.node_note_var.set(note)
+        node_key = (live, self.language, linked)
+        if self._nodes_rendered != node_key:
+            selection = self.live_node_table.selection()
+            selected = self.live_node_table.item(selection[0], 'values')[0] if selection else None
+            self.live_node_table.delete(*self.live_node_table.get_children())
+            for row in live.get('rows', []) if live and not linked else []:
+                item = self.live_node_table.insert('', 'end', values=(row['name'], row['type'],
+                    str(row['delay']) + ' ms' if row['delay'] else '—', self.tr('Current') if row['selected'] else ''))
+                if row['name'] == selected:
+                    self.live_node_table.selection_set(item)
+            self._nodes_rendered = node_key
 
     def observe(self, line):
         if line.startswith('Core: '):
