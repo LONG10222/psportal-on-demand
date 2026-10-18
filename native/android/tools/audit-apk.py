@@ -6,13 +6,18 @@ p = argparse.ArgumentParser()
 p.add_argument('apk', type=pathlib.Path)
 p.add_argument('--sdk', type=pathlib.Path, required=True)
 p.add_argument('--report', type=pathlib.Path, required=True)
+p.add_argument('--abis', nargs='+', choices=['arm64-v8a', 'x86_64'], default=['arm64-v8a', 'x86_64'],
+               help='Exact expected ABI set; defaults to the universal APK')
 a = p.parse_args()
 tools = a.sdk / 'build-tools/35.0.0'
 report = {'apk': a.apk.name, 'sha256': hashlib.sha256(a.apk.read_bytes()).hexdigest(), 'bytes': a.apk.stat().st_size, 'native_libraries': {}}
 with zipfile.ZipFile(a.apk) as apk:
     for asset in ['assets/licenses/ENGINE-NOTICES.txt', 'assets/licenses/GPL-3.0.txt', 'assets/licenses/PROJECT-MIT.txt', 'classes.dex', 'AndroidManifest.xml']:
         assert apk.getinfo(asset).file_size > 0, asset
-    for abi, machine in [('arm64-v8a', 183), ('x86_64', 62)]:
+    expected_native = {f'lib/{abi}/libgojni.so' for abi in a.abis}
+    assert {name for name in apk.namelist() if name.startswith('lib/')} == expected_native, 'Unexpected or missing native ABI payload'
+    for abi in a.abis:
+        machine = {'arm64-v8a': 183, 'x86_64': 62}[abi]
         name = f'lib/{abi}/libgojni.so'; data = apk.read(name)
         assert data[:6] == b'\x7fELF\x02\x01', 'Expected 64-bit little-endian ELF'
         assert struct.unpack_from('<H', data, 18)[0] == machine, abi

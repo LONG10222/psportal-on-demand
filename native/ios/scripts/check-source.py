@@ -12,6 +12,15 @@ APP = ROOT / "PSPortalHost"
 
 
 class SourceGuardrails(unittest.TestCase):
+    def test_required_reason_manifest_matches_reviewed_uses(self):
+        manifest = plistlib.loads((APP / "PrivacyInfo.xcprivacy").read_bytes())
+        entries = manifest["NSPrivacyAccessedAPITypes"]
+        self.assertEqual(len(entries), 2)
+        self.assertEqual({entry["NSPrivacyAccessedAPIType"]: entry["NSPrivacyAccessedAPITypeReasons"] for entry in entries}, {
+            "NSPrivacyAccessedAPICategoryFileTimestamp": ["C617.1"],
+            "NSPrivacyAccessedAPICategorySystemBootTime": ["35F9.1"],
+        })
+
     def test_valid_plist_without_background_modes_or_file_sharing(self):
         with (APP / "Info.plist").open("rb") as source:
             info = plistlib.load(source)

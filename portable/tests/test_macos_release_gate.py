@@ -123,3 +123,22 @@ class MacOSReleaseGateTests(unittest.TestCase):
         item=dict(source='/app/licenses/COPYING',sha256='a'*64,locations=['already-packaged-companion'])
         self.assertEqual(companion_candidates(dict(license_candidates=[item])), {item['source']:item['sha256']})
         with self.assertRaises(ValueError):companion_candidates(dict(license_candidates=[item,copy.deepcopy(item)]))
+
+    def test_empty_directories_are_bound_to_the_exact_tested_tree(self):
+        data=b'tested';sha=hashlib.sha256(data).hexdigest()
+        expected={'PSPortalProxy.app','PSPortalProxy.app/empty'}
+        with tempfile.TemporaryDirectory() as temporary:
+            archive=Path(temporary)/'app.tar.gz'
+            for mutation in ('none','missing','extra','privileged'):
+                with tarfile.open(archive,'w:gz') as stream:
+                    dirs=expected-{'PSPortalProxy.app/empty'} if mutation=='missing' else set(expected)
+                    if mutation=='extra':dirs.add('PSPortalProxy.app/unknown')
+                    for path in sorted(dirs):
+                        member=tarfile.TarInfo(path);member.type=tarfile.DIRTYPE
+                        member.mode=0o4755 if mutation=='privileged' else 0o755;stream.addfile(member)
+                    member=tarfile.TarInfo('PSPortalProxy.app/file');member.size=len(data)
+                    stream.addfile(member,io.BytesIO(data))
+                if mutation=='none':verify_archive(archive,{'file':dict(sha256=sha)}, {}, {}, expected)
+                else:
+                    with self.subTest(mutation=mutation),self.assertRaises(ValueError):
+                        verify_archive(archive,{'file':dict(sha256=sha)}, {}, {}, expected)

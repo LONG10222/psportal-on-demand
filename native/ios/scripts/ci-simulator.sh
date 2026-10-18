@@ -85,6 +85,7 @@ assert not (app/'embedded.mobileprovision').exists(), 'Unexpected provisioning p
 print('Verified unsigned iPhoneOS ARM64 build metadata. No device installation/runtime proof.')
 PY_DEVICE
 xcrun vtool -show-build "$DEVICE_APP/PSPortalHost" > "$LOGS/device-platform.log"
+python3 "$ROOT/scripts/audit-app-resources.py" "$APP" "$DEVICE_APP" | tee "$LOGS/privacy-resource-audit.log"
 
 # XCTest may shut down its destination (or use a temporary clone). Explicitly
 # boot the existing selected simulator before the independent Release launch.
@@ -125,6 +126,7 @@ root=pathlib.Path(sys.argv[1])
 paths=[root/'psportal-native-corresponding-source.tar.gz',root/'PSPortalHost.app/PSPortalHost']
 paths += sorted((root/'licenses').rglob('*'))
 paths += sorted((root/'PSPortalHost.app').rglob('*.txt'))
+paths += sorted((root/'PSPortalHost.app').rglob('*.xcprivacy'))
 (root/'CONTENT-SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.relative_to(root).as_posix()+'\n' for p in paths if p.is_file()))
 PY_HASH
 ditto -c -k --keepParent "$STAGING" "$OUTPUT/$PACKAGE.zip"
@@ -146,6 +148,7 @@ root=pathlib.Path(sys.argv[1])
 paths=[root/'psportal-native-corresponding-source.tar.gz',root/'PSPortalHost.app/PSPortalHost']
 paths += sorted((root/'licenses').rglob('*'))
 paths += sorted((root/'PSPortalHost.app').rglob('*.txt'))
+paths += sorted((root/'PSPortalHost.app').rglob('*.xcprivacy'))
 (root/'CONTENT-SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.relative_to(root).as_posix()+'\n' for p in paths if p.is_file()))
 PY_DEVICE_HASH
 ditto -c -k --keepParent "$DEVICE_STAGING" "$OUTPUT/$DEVICE_PACKAGE.zip"

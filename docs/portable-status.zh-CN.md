@@ -14,10 +14,10 @@
 
 1. 路由器：3,744 项 Lua 断言、LuCI 检查与打包检查通过；真实路由器/Mihomo/LuCI 版本仍需验收
 2. external 桌面：PR #2 的 Linux 真实 Mihomo/打包流量测试、实际 Tk 窗口 Start/Stop/restart/close，以及 Windows/macOS 打包程序配置检查、监听、拒绝、EOF 退出和再次启动均通过
-3. 统一 Linux 图形包：CI run 39108633515 的121项测试全部通过、零跳过，包含两种引擎实际打包窗口的启动、停止、再次启动、关闭取消/确认、真实 Mihomo 与打包流量；45个运行库ELF与21份完整版权文件核验通过
-4. 原生 CLI：CI run 39107706960 的 Linux/Windows/macOS 各 amd64与arm64，共六个真实系统运行任务全部通过；各40个顶层测试、203个测试结果、vet与实际CLI检查通过，Linux/macOS另通过race。Windows未执行race。完整 vendored 对应源码已离线重建/测试
-5. Android：真实 arm64/x86_64 AAR与APK编译成功，90项JVM断言与配置往返通过，lint无错误，16KiB对齐通过。开发签名APK已在API26模拟器安装运行，实际前台服务、JNI监听、HTTP/CONNECT与来源白名单受控测试通过。来自同一模拟器两个既有接口的合成客户端不代表真实Portal。移除任务的服务清理回归正在修复；新版签名包和较新API运行验收仍待完成
-6. iOS：CI run 39108633642 的真实 arm64 Simulator应用已编译、链接并实际启动，11项XCTest中10项通过，1项物理设备Data Protection测试明确跳过，零失败。应用、对应源码与许可同包保存。iPhoneOS编译、签名后实机安装与真实Portal仍是独立验收条件
+3. 统一桌面：CI run 39109675559 的 Linux、Windows、macOS 实际系统任务全部通过，包含两种引擎的实际 Tk 窗口、冻结应用窗口、真实 Mihomo 与受控 HTTP/CONNECT 流量。Windows/macOS 后续增加完整运行库来源与许可证发布门禁：Windows 已通过；macOS 的全部 63 个二进制来源、完整通知与 163 项运行测试通过，最终归档目录清单检查仍在修复，最终发布须等待该门禁通过
+4. 原生 CLI：CI run 39110679832 的 Linux/Windows/macOS 各 amd64 与 arm64，共六个真实系统运行任务全部通过；203 个测试结果、vet、实际 CLI 与完整源码打包检查通过，Linux/macOS 另通过 race。Windows 未执行 race。完整 vendored 对应源码已离线重建/测试
+5. Android：真实 arm64/x86_64 AAR 与 APK 编译成功，90 项 JVM 断言与配置往返通过，lint 无错误，16 KiB 对齐通过。开发签名通用 APK 在 API26 模拟器通过实际前台服务、JNI 监听、HTTP/CONNECT、来源白名单及移除任务清理测试；API36 ATD 另通过通知拒绝/批准、服务启动及停止。来自模拟器既有接口的合成客户端不代表真实 Portal。已提供 arm64 独立安装包，签名与内容一致性通过，但未在 ARM64 物理设备运行。独立 x86_64 包的精确安装与启动已通过，完整重测继续中。API36 系统镜像没有可用局域网地址且默认禁用 Doze，不能据此声称锁屏/Doze 已通过；未修改网络或省电设置来掩盖该限制
+6. iOS：CI run 39110679850 的 arm64 Simulator Release 应用实际安装启动成功，14 项 XCTest 中 13 项通过、1 项物理设备 Data Protection 测试明确跳过。三项真实 GoMobile 桥接测试覆盖 HTTP、CONNECT、拒绝未授权来源、停止监听和已接受套接字、重新启动；其他生命周期测试使用明确标注的测试替身。unsigned iPhoneOS arm64 编译/链接通过。模拟器 app、未签名设备 app 与完整对应源码分别提供；未签名设备 app 不能直接安装，仍需 Apple 签名/配置与真实 iPhone 验证
 
 [独立核心桌面 PR #2](https://github.com/LONG10222/psportal-on-demand/pull/2) · [统一原生与移动端 PR #3](https://github.com/LONG10222/psportal-on-demand/pull/3)
 

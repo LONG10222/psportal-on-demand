@@ -20,17 +20,53 @@ or Portal release signoff.
   PT_LOAD alignments of 16,384 bytes and `zipalign -c -P 16 -v 4` all pass
 - Manifest/XML/resource guardrails, direct JNI linkage, no VPN/boot/subprocess
   paths, and both build variants' explicitly null signing configurations
-- No signing identity was generated. `apksigner verify` reports the specific
-  expected unsigned result, `Missing META-INF/MANIFEST.MF`
+- Ordinary Gradle/CI builds generate no signing identity. The unsigned APK audit
+  requires the specific expected `Missing META-INF/MANIFEST.MF` verifier result
+- Separately authorized project-only development signing: APK signature schemes
+  v2/v3 verify; 16 KiB ZIP alignment still passes; every original unsigned ZIP
+  payload entry is byte-identical in the signed APK
 
 ## Artifact provenance
 
-Final unsigned APK: `app/build/outputs/apk/release/app-release-unsigned.apk`
+Current unsigned APK: `app/build/outputs/apk/release/app-release-unsigned.apk`
 
 - Size: 75,204,521 bytes
-- SHA256: `fd3820fc49408ef1d5b9902348a9377ae60bfb07e28576c44c07a4669962a50c`
+- SHA256: `7a66562bd24716f823e139155bf2d12278f563ccd7074dfee4692071c03eb35f`
 - Application ID `org.psportal.host`, version `0.1.0-dev` / code 1
 - min SDK 26, target SDK 36; arm64-v8a and x86_64
+
+Development-signed test APK: `app/build/outputs/apk/release/psportal-android-development.apk`
+
+- Size: 75,216,056 bytes
+- SHA256: `4327d921988cbca20b520ff32ba8f57085e327567ca7ab17420faad0d53f3c62`
+- Public signing certificate SHA256:
+  `7239e963e690e62a50bbd14939c15b749b51e14b7e3454795ef379ec12c5ec60`
+- The dedicated private key and password remain outside the source tree. They
+  are not included in source, CI, artifacts or corresponding-source archives
+- This is a test identity, not a store/release identity
+
+### Smaller standalone ABI downloads
+
+The opt-in `-PpsportalAbiSplits=true` build also passed release assembly, lint and
+all 90 JVM/structural checks. It emits complete standalone APKs, each containing
+only its selected native ABI. Both were signed with the same authorized project
+test key and passed signature v2/v3 verification and 16 KiB ZIP/ELF alignment.
+Every non-signature payload entry, including DEX, manifest, resources, licenses
+and the selected native library, is byte-identical to the tested universal APK.
+
+- arm64-v8a APK: 35,976,308 bytes; SHA256
+  `8f1c22953c4d0315bb02d9a111c803074f8b7c29629240caf5ac4a247be67762`
+- arm64-v8a download ZIP: 12,256,831 bytes; SHA256
+  `6bcf07f9bd5ff3003d96c701bcfbae284fbe2ccaad0ae738a96dc0988cb0d9ac`
+- x86_64 APK: 39,466,097 bytes; SHA256
+  `224d5181a9d3717ad906f2fbb312e6bea435f7d7f485aeb3ff8f6dbeef86a489`
+- x86_64 download ZIP: 13,400,879 bytes; SHA256
+  `ecc793f732f46b04da44b609cdf5d4b2eda4721a3cbbefc6faf937f8c4baad1f`
+
+These packaging checks do not establish arm64 device execution. The runtime
+sections below identify the tested universal candidate explicitly; direct
+x86_64 standalone installation/testing is separate pending evidence. The build
+defaults and ordinary CI remain universal and unsigned.
 
 Real AAR: `app/libs/psportal-engine.aar`
 
@@ -47,8 +83,9 @@ a graph-only dependency used by dependency tests. It is absent from linked app
 imports and vendored corresponding-source files; no license has been invented
 for it. Preserve the inventory warning alongside the bundled runtime licenses.
 
-Local reports (generated, not committed): `build/final-apk-build.log`,
-`build/reports/apk-audit.json`, and
+Local reports (generated, not committed): `build/task-removal-build.log`,
+`build/reports/apk-audit.json`, `build/reports/development-apk.json`,
+`build/reports/signing-payload-audit.json`, and
 `app/build/reports/lint-results-release.{html,xml,txt}`.
 
 ## Toolchain and agreement
@@ -73,27 +110,125 @@ No blanket `sdkmanager --licenses`, fabricated acceptance hash, paid service or
 installation on the user's computer was used. Future builds still require their
 own properly licensed SDK; the repository does not auto-accept agreements.
 
-## Runtime limitations and remaining gates
+## Actual Android 8 / API 26 runtime
 
-The APK is **unsigned and cannot be installed**. Installation needs a separately
-authorized signing identity. Build and lint success do not establish Android
-runtime behavior or real Portal compatibility.
+AOSP `system-images;android-26;default;x86_64`, revision 1, ran under official
+Emulator 37.2.12 with software CPU emulation. Framework boot completion was real;
+no boot properties were forced. The guest uses 4 KiB pages. The final signed APK
+above was installed successfully and its Activity launched successfully.
 
-This development environment has no `/dev/kvm`. VM-accelerated emulation is
-therefore unavailable here; software emulation may be possible but slower. The
-official Emulator 37.2.12 and AOSP API 36 x86_64 revision 2 use the same SDK license,
-not an additional Google Play agreement. No emulator app execution, physical
-phone test or real Portal test is claimed by this record.
+Verified on that final APK:
 
-Remaining runtime gates are listed in README: permission grant/deny/revocation,
-foreground notification and Stop action, process/lifecycle transitions, real
-JNI start/stop, LAN routing and allowlist, lazy wake/idle teardown, node selection,
-16 KiB device execution, Wi-Fi changes and screen-off/Doze/OEM behavior.
+- Visible Activity configuration starts the actual embedded JNI listener and
+  foreground service; configuration is not injected through a raw native API
+- Phone/listener: existing `wlan0` address `192.168.232.2:10081`
+- Synthetic client: existing `radio0` address `192.168.200.2`, explicitly bound
+  by the guest socket client; normal `HostConfig` requires the two IPs to differ
+- Kernel socket evidence confirms the allowlisted source reaching the listener
+- HTTP absolute-form requests return the controlled LAN HTTP fixture body
+- CONNECT returns `200 Connection Established` and the controlled TCP echo body
+- A client bound to the non-allowlisted Wi-Fi source receives no proxy response;
+  the controlled upstream fixture receives no additional request
+- Direct-LAN tests leave the UI reporting `Core: stopped`, with zero active
+  external connections: no subscription or remote adapter is needed for them
+- Home leaves the foreground service and listener active
+- Removing the Activity from Recents removes both the listener and the service
 
-## Optional CI
+These are synthetic, same-emulator peer tests. Both private addresses existed
+before testing; no addresses or network settings were changed. Upstream fixtures
+ran on the isolated task host, reached through emulator alias `10.0.2.2`.
+The HTTPS subscription field contained only `https://example.com/unused-fixture.yaml`.
+This does not establish remote-phone/Portal LAN reachability or subscription
+compatibility.
 
-`../ci/android-unsigned.yml.example` and `tools/ci-unsigned.sh` prepare a standard
-public-repository Ubuntu build with matching source/licenses and one-day artifact
-retention. The template is inactive until reviewed and copied into GitHub's
-workflow directory. Shell syntax and YAML structure are checked locally; no
-GitHub Actions run is claimed. CI also produces only an unsigned APK.
+An immediately preceding APK also verified the visible notification **Stop**
+action removing the listener and service, and the UI rejecting equal phone and
+Portal addresses. Its only subsequent application-code change was the Recents
+cleanup fix below. The final APK re-ran the start/protocol/Home/Recents sequence.
+
+### Runtime-found regression, fixed and re-tested
+
+Before the fix, Recents removal closed sockets and the notification but left an
+idle ServiceRecord. Android 8's task-removal path assigns another internal start
+ID without calling the service's `onStartCommand`; consequently the previously
+recorded ID is too old for `stopSelfResult`. The task-removal completion now calls
+`stopSelf()` after native teardown, while first checking the captured start ID
+against the latest delivered command so an older completion cannot stop a newer
+run. Normal Stop paths retain `stopSelfResult`.
+
+See the [official Android 8 ActiveServices source](https://android.googlesource.com/platform/frameworks/base/+/android-8.0.0_r1/services/core/java/com/android/server/am/ActiveServices.java).
+A structural regression guard and actual emulator re-test cover this fix.
+Generated evidence: `build/emulator/api26/fixed-lifecycle-result.json`,
+`protocol-results.json`, `allowlisted-peer-netstat.txt`, `allowlisted-http.txt`,
+`allowlisted-connect.txt`, `fixed-running-status.json`, and
+`fixed-recents-stop-result.txt` in the same directory.
+
+## Actual Android 16 / API 36 ATD runtime
+
+The final signed APK was installed successfully on official AOSP API 36 ATD
+x86_64 revision 1 under Emulator 37.2.12. Real framework boot completed without
+forcing boot properties. On this image the normal Activity verified:
+
+- Notification permission denial leaves no service or listener
+- Explicit permission grant through the platform UI permits startup
+- Android 16 creates a foreground service with `connectedDevice` type `0x10`
+- The actual embedded JNI listener binds the configured `10.0.2.16:10081`
+- Activity **Stop** removes the service and listener
+
+The ATD image intentionally omits SystemUI and other platform apps; it cannot
+verify the real notification shade or Recents UI. See
+[Android's ATD documentation](https://developer.android.com/studio/test/managed-devices).
+Positive protocol tests were not established on ATD; the API 26 synthetic tests
+above remain separately identified. A first standalone UI-automation command
+exited 137, while a compressed retry succeeded and the app stayed alive. No cause
+for that command's exit is asserted.
+
+The bounded screen-off attempt stopped before any power key was sent: the guest's
+Wi-Fi address `10.0.2.16` had disappeared, leaving existing `eth0` address
+`10.0.2.15`. The Activity correctly rejected the now-unassigned configured address
+and opened no service or listener. No network settings were changed. Screen-off
+survival is therefore **not established**. ATD also reports
+`mLightEnabled=false` and `mDeepEnabled=false`, so it cannot establish Doze
+behavior. Platform Doze defaults were not modified.
+
+Generated evidence: `build/reports/android-runtime.json` and
+`build/emulator/api36-atd/{runtime-result.json,runtime-completion.log,notification-denied.txt,connected-device-fgs-confirmed.txt,app-stop-result.txt,restart-ui-diagnostic.txt,restart-network-diagnostic.txt,power-test-capabilities.txt}`.
+
+## Full-system emulator and remaining gates
+
+This development environment has no `/dev/kvm`; hardware-accelerated emulation
+is unavailable. Full AOSP API 36 x86_64 revision 2 genuinely completed its first
+boot, but its emulator exited with status 137 during APK installation. No app
+execution was established by that attempt, and its exit cause is unproven. A
+serialized retry is separate work and is not counted as a pass in this record.
+
+Host-to-guest emulator console TCP redirection reset connections against both
+the proxy and an independent netcat fixture. It was not used to claim a proxy
+allowlist failure or successful remote-peer path. Screenshot capture was not
+usable: the app intentionally uses `FLAG_SECURE`, and an emulator-side capture
+showed software-rendering artifacts. No fabricated or cleaned-up UI image is
+presented as test evidence.
+
+Remaining gates include notification/channel revocation during a run, full-system
+modern notification/Recents behavior, API 37 local-network permissions, physical
+arm64 and 16 KiB execution, Wi-Fi loss during a run, screen-off/Doze/OEM behavior, external
+subscription wake/idle and node selection on Android, and a real Portal session.
+Shared-engine fixture/unit tests do not replace these device checks.
+
+## Public unsigned CI
+
+`../ci/android-unsigned.yml.example` remains a reusable inactive template; a copy
+was explicitly activated in the public development PR using a standard Ubuntu
+runner. Actual build, JVM/configuration tests, lint, APK audit and matching
+source/license artifact upload all passed in these runs:
+
+- [39107122283](https://github.com/LONG10222/psportal-on-demand/actions/runs/39107122283)
+- [39107706917](https://github.com/LONG10222/psportal-on-demand/actions/runs/39107706917)
+- [39108633524](https://github.com/LONG10222/psportal-on-demand/actions/runs/39108633524)
+
+The runtime-found Recents fix also passed the full public CI pipeline in
+[39109675657](https://github.com/LONG10222/psportal-on-demand/actions/runs/39109675657),
+head `4ef16d63a16fa9783e26cef5b69c488f5be5d80a`. Its separate unsigned APK SHA256 is
+`9bf6f8b78b5b0c6eab96c88330e4f84bb2a2ea6b8e7efcdd9eebd895e5306132`.
+CI artifacts expire after one day and contain unsigned APKs. They are not an
+installable or durable release.

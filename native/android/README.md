@@ -5,14 +5,22 @@ The Activity edits a per-run configuration; an explicitly started foreground
 service owns the embedded JNI engine. There is no Python runtime, VPN service,
 root requirement, shell subprocess or downloaded executable in the app.
 
-**Development status (2026-10-18):** the real arm64/x86_64 Go engine AAR and
-unsigned release APK build successfully. Android compilation, release lint,
-90 JVM assertions, Java-to-Go configuration round-trip and 16 KiB ELF/APK
-alignment checks pass. See [VALIDATION.md](VALIDATION.md) for versions, provenance
-and limitations. The unsigned APK cannot be installed until it is signed using
-a separately authorized identity. Android runtime, physical Portal, background
-and subscription behavior are not yet device-verified; this is a development
-build, not a four-platform parity or release-readiness claim.
+**Development status (2026-10-18):** the real arm64/x86_64 engine AAR and
+APK build successfully. Compilation, release lint, 90 JVM assertions, Java-to-Go
+configuration round-trip and 16 KiB ELF/APK alignment checks pass. An explicitly
+authorized project-only development signing identity was used for isolated
+emulator tests; ordinary Gradle/CI builds remain unsigned.
+
+The signed candidate has passed actual Android 8 / API 26 installation, Activity
+and JNI startup, controlled LAN HTTP/CONNECT, source-IP filtering, background
+continuation and Recents teardown. That runtime test found and verified a fix for
+an idle service left behind after task removal. Android 16 / API 36 ATD also passed
+installation, visible notification permission denial/grant, connected-device
+foreground-service enforcement, real JNI startup and Activity Stop. ATD cannot
+establish full notification/Recents UI or Doze behavior. See
+[VALIDATION.md](VALIDATION.md) for exact artifacts and test boundaries. Physical Portal,
+arm64/16 KiB hardware, external subscription and screen-off/OEM behavior remain
+unverified; this is a development build, not a parity or release signoff.
 
 ## Runtime behavior
 
@@ -149,11 +157,29 @@ python3 tools/audit-apk.py app/build/outputs/apk/release/app-release-unsigned.ap
 
 Result on a successful build:
 `app/build/outputs/apk/release/app-release-unsigned.apk`.
+
+For smaller standalone downloads, opt into normal Gradle ABI splits:
+
+```sh
+./gradlew --no-daemon -PpsportalAbiSplits=true :app:assembleRelease :app:lintRelease
+python3 tools/audit-apk.py app/build/outputs/apk/release/app-arm64-v8a-release-unsigned.apk \
+  --sdk "$ANDROID_HOME" --abis arm64-v8a --report build/reports/arm64-apk-audit.json
+python3 tools/audit-apk.py app/build/outputs/apk/release/app-x86_64-release-unsigned.apk \
+  --sdk "$ANDROID_HOME" --abis x86_64 --report build/reports/x86_64-apk-audit.json
+```
+
+Each per-ABI APK is a complete standalone app, not an install-together split
+package. Choose arm64-v8a for compatible phones and x86_64 for compatible emulators.
+Both contain the same Java code, resources, licenses and corresponding native
+library as the universal build. Without the property, the default remains the
+universal APK. Preserve a tested artifact before switching output modes.
+
 Both debug and release signing configurations are explicitly null; these commands
 must not create an Android debug keystore. Unsigned APKs cannot be installed.
 Signing requires a separately authorized existing key or explicit permission to
-create one. No signing keys, Google accounts, Play Console configuration, uploads
-or publication are included in this project.
+create one. No signing keys or passwords are included in this project. The isolated test
+identity is stored outside the source tree and must never be added to CI or public
+artifacts. Google accounts and Play Console configuration are not required.
 
 Before any release, inspect ELF segment alignment (16 KiB), APK zip alignment,
 ABI contents, AAR dependency licenses and corresponding source. The Gradle wrapper
@@ -176,7 +202,9 @@ Pull requests install missing exact packages under the runner's existing accepte
 SDK license; manual runs expose an install toggle. In either case `sdkmanager`
 receives no license-acceptance input. A missing or changed agreement therefore
 fails closed instead of being auto-accepted.
-Activating CI does not make an unsigned APK installable or replace device tests.
+The template has also been activated in the public development PR; successful
+run links are recorded in [VALIDATION.md](VALIDATION.md). CI does not make an
+unsigned APK installable or replace device tests.
 
 ## Tests and device release gates
 
@@ -185,7 +213,8 @@ Activating CI does not make an unsigned APK installable or replace device tests.
 The 90 JVM assertions cover config validation/JSON escaping, duplicate Start,
 Stop before/during Start, stale status, multiple Stop callers, restart sequencing,
 error redaction and failed teardown. Python structural checks cover manifest,
-resources, direct JNI imports, unsigned builds and no boot/VPN/subprocess paths.
+resources, direct JNI imports, unsigned builds, the task-removal cleanup guard
+and no boot/VPN/subprocess paths.
 The fake Java engine is confined to tests and is never bundled in the app.
 
 Required device matrix:

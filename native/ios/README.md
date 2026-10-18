@@ -1,16 +1,25 @@
 # iOS foreground-only development host
 
 This SwiftUI app embeds the real Go/Mihomo engine in `../engine`, through
-`../mobile`. A real arm64 Simulator app compiled, linked and launched under
-Xcode 16.4; [CI run 39108633642](https://github.com/LONG10222/psportal-on-demand/actions/runs/39108633642)
-completed 10 XCTest methods with no failures and one explicit hardware-only
-Data Protection skip. Those first tests covered storage/configuration and mocked
-lifecycle orchestration, **not framework HTTP/CONNECT transport**.
+`../mobile`. [CI run 39110679850](https://github.com/LONG10222/psportal-on-demand/actions/runs/39110679850)
+compiled and linked actual arm64 Simulator and unsigned iPhoneOS apps with
+Xcode 16.4. Simulator XCTest completed **13 passed, one explicit hardware-only
+Data Protection skip, zero failures**. Three tests exercise real generated-
+framework HTTP/CONNECT direct fixtures, client/destination denial and Stop/
+restart socket behavior; the others cover storage/configuration and mocked
+UI lifecycle. The Release simulator app separately launched and was captured
+in a rendered, stopped-state screenshot.
 
-The next CI gate adds real framework socket fixtures, separate unsigned iPhoneOS
-ARM64 compilation, and a Release simulator launch/screenshot. These additions
-are pending their own successful run; see `VALIDATION.md`. No physical iPhone,
-Portal session, signing, App Store acceptance or full platform parity is claimed.
+No physical iPhone, real Portal session, subscription/encrypted-node routing on
+iOS, signing, App Store acceptance or full platform parity is claimed. The
+unsigned iPhoneOS app is **not installable as supplied**. Simulator cannot prove
+local-network privacy permissions or hardware Data Protection. See
+`VALIDATION.md` for exact source provenance, hashes and remaining release gates.
+
+The subsequent bounded resource audit found missing required-reason privacy
+metadata in that immutable development package. This source revision adds the
+file-metadata/timer manifest and exact bundle/import checks; its Apple CI result
+must be recorded before treating the correction as built. See `PRIVACY-AUDIT.md`.
 
 ## Honest execution model
 
@@ -187,8 +196,8 @@ These check metadata, privacy/lifecycle guardrails and the binding source
 contract. They are not a Swift compiler, SDK, simulator, or transport test.
 XCTest source is included for settings validation, non-persistence of the URL,
 file protection/backup flags, duplicate Start, Stop-during-Start, background Stop,
-no automatic restart, and idle-timer restoration. The first 11 methods ran in the linked CI above. Three new real-framework
-transport methods await their own CI result.
+no automatic restart, and idle-timer restoration. All 14 methods ran in the linked CI above: 13 passed and the physical Data
+Protection method skipped. Three methods use the actual framework and sockets.
 After producing the real framework/project on a Mac, choose an available
 simulator and run:
 

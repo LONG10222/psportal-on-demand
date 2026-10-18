@@ -137,7 +137,7 @@ def verify_inventory(report, reviewed):
     return binaries, files, links
 
 
-def verify_archive(archive, files, links, companion):
+def verify_archive(archive, files, links, companion, directories=None):
     regular = {'PSPortalProxy.app/' + path: item['sha256'] for path, item in files.items() if path not in links}
     for path, item in files.items():
         if path in links:
@@ -147,7 +147,9 @@ def verify_archive(archive, files, links, companion):
     require(not set(regular) & set(companion), 'Companion archive path collides with app')
     regular.update(companion)
     expected_links = {'PSPortalProxy.app/' + path: target for path, target in links.items()}
-    seen, actual_regular, actual_links = set(), {}, {}
+    if directories is not None:
+        require(all(safe_relative(name) for name in directories), 'Unsafe expected archive directory')
+    seen, actual_regular, actual_links, actual_directories = set(), {}, {}, set()
     with tarfile.open(archive, 'r:gz') as stream:
         for member in stream:
             name = member.name.rstrip('/')
@@ -155,7 +157,10 @@ def verify_archive(archive, files, links, companion):
             seen.add(name)
             require(member.mode & 0o6000 == 0, 'Privileged archive member mode is not accepted')
             if member.isdir():
-                require(any(path.startswith(name + '/') for path in (*regular, *expected_links)), 'Unexpected archive directory')
+                require(name in directories if directories is not None else
+                        any(path.startswith(name + '/') for path in (*regular, *expected_links)),
+                        'Unexpected archive directory: ' + name)
+                actual_directories.add(name)
             elif member.issym():
                 actual_links[name] = member.linkname
             elif member.isfile():
@@ -169,6 +174,8 @@ def verify_archive(archive, files, links, companion):
             else:
                 raise ValueError('Hardlinks and special archive members are not accepted')
     require(actual_regular == regular and actual_links == expected_links, 'Archive differs from exact tested files, notices or symlink targets')
+    if directories is not None:
+        require(actual_directories == directories, 'Archive differs from tested directory set')
 
 
 def companion_candidates(report):
@@ -237,10 +244,15 @@ def main(argv=None):
         companion[name] = digest((ROOT / 'docs' / name).read_bytes())
     archives = list((ROOT / 'release').glob('PSPortalProxy-darwin-*.tar.gz'))
     require(len(archives) == 1, 'Expected one exact macOS archive')
-    verify_archive(archives[0], files, links, companion)
+    directories = {'PSPortalProxy.app', 'licenses'}
+    for root, prefix in ((app, 'PSPortalProxy.app'), (notices, 'licenses')):
+        directories.update(prefix + '/' + path.relative_to(root).as_posix() for path in root.rglob('*')
+                           if path.is_dir() and not path.is_symlink())
+    verify_archive(archives[0], files, links, companion, directories)
     result = dict(source_commit=validation['source_commit'], developer_id_signed=False, notarized=False,
         scope='Reviewed macOS arm64 CPython3.13.15/PyInstaller6.16.0 development GUI archive only',
-        runtime_binaries_verified=len(binaries), runtime_review_source=reviewed['evidence_run'],
+        runtime_binaries_verified=len(binaries), archive_directories_verified=len(directories),
+        runtime_review_source=reviewed['evidence_run'],
         complete_versioned_notices_retained=True, matching_native_source_retained=True,
         real_window_and_runtime_checks_passed=True, runtime_inventory_sha256=digest(args.inventory.read_bytes()),
         archive_sha256=digest(archives[0].read_bytes()), physical_portal_or_live_subscription_tested=False)

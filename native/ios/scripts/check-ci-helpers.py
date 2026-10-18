@@ -3,6 +3,7 @@
 """Linux-compatible tests for CI helpers; these do not execute an Apple build."""
 import importlib.util
 import pathlib
+import struct
 import tempfile
 import unittest
 
@@ -18,9 +19,23 @@ def module(name):
 
 selector = module("select-simulator")
 diagnostics = module("collect-ci-diagnostics")
+resources = module("audit-app-resources")
 
 
 class CIHelpers(unittest.TestCase):
+    def test_privacy_import_reader_ignores_debug_and_defined_symbols(self):
+        names = [b"_mach_absolute_time", b"_debug", b"_defined"]
+        strings = b"\0"
+        entries = b""
+        for name, kind in zip(names, [0x01, 0xE0, 0x0F]):
+            entries += struct.pack("<IBBHQ", len(strings), kind, 0, 0, 0)
+            strings += name + b"\0"
+        header = struct.pack("<8I", 0xFEEDFACF, 0x100000C, 0, 2, 1, 24, 0, 0)
+        command = struct.pack("<6I", 2, 24, 56, 3, 56 + len(entries), len(strings))
+        self.assertEqual(resources.undefined_symbols(header + command + entries + strings), {"_mach_absolute_time"})
+        with self.assertRaisesRegex(AssertionError, "Mach-O"):
+            resources.undefined_symbols(b"not a Mach-O executable")
+
     def test_ignores_future_unavailable_and_non_iphone_runtimes(self):
         def device(name, udid, available=True):
             return {"name": name, "udid": udid, "isAvailable": available}

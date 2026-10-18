@@ -37,6 +37,8 @@ build = (root/'app/build.gradle').read_text()
 assert build.count('signingConfig = null') == 2
 assert 'targetSdk 36' in build and 'minSdk 26' in build
 assert 'verifyEmbeddedEngine' in build
+assert "gradleProperty('psportalAbiSplits')" in build and '.getOrElse(false)' in build
+assert "include 'arm64-v8a', 'x86_64'" in build and 'universalApk false' in build
 strings = {entry.attrib.get('name') for entry in ET.parse(root/'app/src/main/res/values/strings.xml').getroot()}
 import re
 for source in src.glob('*.java'):
