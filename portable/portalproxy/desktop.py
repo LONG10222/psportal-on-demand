@@ -259,10 +259,6 @@ class BackendProcess:
 
 class DesktopApp:
     def __init__(self, root, path: Path):
-        import tkinter as tk
-        from tkinter import ttk
-        from tkinter.scrolledtext import ScrolledText
-
         self.root, self.path = root, path.expanduser().absolute()
         self.backend = BackendProcess()
         self.raw: dict = {}
@@ -270,89 +266,92 @@ class DesktopApp:
         self.dirty = False
         self.loading = False
         self.closing = False
+        self.importing = False
+        self.quick_start_pending = False
+        self.import_events = queue.Queue()
         self.inputs = []
         self.engine_inputs = {}
-        root.title('PS Portal On-Demand')
-        root.minsize(740, 750)
-        root.protocol('WM_DELETE_WINDOW', self.close)
-        outer = ttk.Frame(root, padding=16)
-        outer.pack(fill='both', expand=True)
-        outer.columnconfigure(1, weight=1)
-        ttk.Label(outer, text='PS Portal On-Demand', font=('TkDefaultFont', 17, 'bold')).grid(row=0, column=0, columnspan=3, sticky='w')
-        ttk.Label(outer, text='A local HTTP proxy for your Portal. No system proxy or router changes.').grid(row=1, column=0, columnspan=3, sticky='w', pady=(4, 12))
-        self.path_var = tk.StringVar(value=str(self.path))
-        ttk.Label(outer, textvariable=self.path_var, wraplength=550).grid(row=2, column=0, columnspan=2, sticky='w')
-        self.choose_button = ttk.Button(outer, text='Choose config…', command=self.choose_config)
-        self.choose_button.grid(row=2, column=2, sticky='e', pady=(0, 10))
-        for row, (key, title) in enumerate(FIELDS, start=3):
-            ttk.Label(outer, text=title).grid(row=row, column=0, sticky='w', padx=(0, 12), pady=4)
-            variable = tk.StringVar()
-            variable.trace_add('write', self._changed)
-            self.vars[key] = variable
-            if key in ('selection_mode', 'engine_mode'):
-                choices = ('auto', 'prefer', 'fixed') if key == 'selection_mode' else ('external', 'embedded')
-                widget = ttk.Combobox(outer, textvariable=variable, values=choices, state='readonly')
-            else:
-                widget = ttk.Entry(outer, textvariable=variable, show='•' if key == 'subscription_url' else '')
-            widget.grid(row=row, column=1, columnspan=1 if key in ('core_path', 'native_path', 'subscription_file') else 2, sticky='ew', pady=4)
-            self.inputs.append((widget, 'readonly' if key in ('selection_mode', 'engine_mode') else 'normal'))
-            if key in ('core_path', 'native_path', 'backend_port', 'api_port'):
-                self.engine_inputs[key] = [widget]
-            if key in ('core_path', 'native_path', 'subscription_file'):
-                command = {'core_path': self.choose_core, 'native_path': self.choose_native, 'subscription_file': self.choose_provider}[key]
-                browse = ttk.Button(outer, text='Browse…', command=command)
-                browse.grid(row=row, column=2, padx=(8, 0))
-                self.inputs.append((browse, 'normal'))
-                if key in self.engine_inputs:
-                    self.engine_inputs[key].append(browse)
-        controls_row = 3 + len(FIELDS)
-        controls = ttk.Frame(outer)
-        controls.grid(row=controls_row, column=0, columnspan=3, sticky='ew', pady=(12, 8))
-        self.save_button = ttk.Button(controls, text='Save / validate', command=self.save)
-        self.save_button.pack(side='left')
-        self.start_button = ttk.Button(controls, text='Start listener', command=self.start)
-        self.start_button.pack(side='left', padx=8)
-        self.stop_button = ttk.Button(controls, text='Stop', command=self.stop, state='disabled')
-        self.stop_button.pack(side='left')
-        self.status_var = tk.StringVar(value='Stopped')
-        ttk.Label(controls, textvariable=self.status_var).pack(side='right')
-        self.mode_note_var = tk.StringVar()
-        ttk.Label(outer, textvariable=self.mode_note_var, wraplength=680).grid(row=controls_row + 1, column=0, columnspan=3, sticky='w', pady=(0, 8))
-        ttk.Label(outer, text='Keep this computer awake and on the same LAN. Configure the Portal with the LAN IPv4 and proxy port above.', wraplength=680).grid(row=controls_row + 2, column=0, columnspan=3, sticky='w', pady=(0, 8))
-        self.log_widget = ScrolledText(outer, height=9, state='disabled', wrap='word')
-        self.log_widget.grid(row=controls_row + 3, column=0, columnspan=3, sticky='nsew')
-        outer.rowconfigure(controls_row + 3, weight=1)
+        self.profile_selection_inputs = []
+        from .existing_proxy import detect_system_proxy, read_clash_accounting
+        self.existing_proxy = detect_system_proxy()
+        self.clash_info = read_clash_accounting() if self.existing_proxy else None
+        from .desktop_view import DesktopView
+        self.view = DesktopView(self)
         self.load()
         root.after(150, self.poll)
 
     def _changed(self, *_):
         if not self.loading:
+            if _ and 'subscription_url' in self.vars and str(self.vars['subscription_url']) == _[0]:
+                self.view.subscription_info = None
             self.dirty = True
             self.engine_controls()
+            self.view.refresh()
+
+    def _t(self, key, **values):
+        return self.view.tr(key, **values)
+
+    def _set_status(self, status):
+        self.view.status = status
+        if status in ('Stopped', 'Stopped with error'):
+            self.view.core_state = 'stopped' if status == 'Stopped' else 'Not reported'
+        self.view.refresh()
+
+    def set_language(self, language):
+        from .i18n import save_language
+        self.view.set_language(language)
+        self.engine_controls()
+        try:
+            save_language(self.path, language)
+        except (OSError, ValueError):
+            self.backend.log(self._t('Preferences could not be saved. Language changed for this session.'))
+
+    def set_theme(self, theme):
+        from .i18n import save_theme
+        self.view.set_theme(theme)
+        try:
+            save_theme(self.path, theme)
+        except (OSError, ValueError):
+            self.backend.log('Appearance preference could not be saved.')
 
     def engine_controls(self):
-        running = self.backend.process is not None and self.backend.process.poll() is None
+        running = (self.backend.process is not None and self.backend.process.poll() is None) or self.importing
         mode = self.vars['engine_mode'].get() if 'engine_mode' in self.vars else 'external'
         for key, widgets in self.engine_inputs.items():
             active = mode == ('embedded' if key == 'native_path' else 'external')
             for widget in widgets:
                 widget.configure(state='normal' if active and not running else 'disabled')
+        full_profile = bool(self.vars.get('profile_file') and self.vars['profile_file'].get().strip())
+        for widget, normal in self.profile_selection_inputs:
+            widget.configure(state='disabled' if running or full_profile else normal)
         if hasattr(self, 'mode_note_var'):
-            self.mode_note_var.set(
+            self.mode_note_var.set(self._t(
                 'Experimental embedded mode: restricted adapter subset, public-only node endpoints. Some subscriptions are unsupported; fixed mode never silently falls back. See desktop.md.'
                 if mode == 'embedded' else
-                'External mode: separate trusted Mihomo executable. This remains the default fallback.')
+                'External mode: separate trusted Mihomo executable. This remains the default fallback.'))
 
     def load(self):
         from tkinter import messagebox
+        self.view.preview = None
+        self.view.subscription_info = None
         try:
             self.raw = read_config(self.path) if self.path.exists() else {}
         except (OSError, UnicodeError, ValueError):
-            messagebox.showerror('Cannot open configuration', 'The file could not be read as a JSON configuration. Choose a different file.', parent=self.root)
+            messagebox.showerror(self._t('Cannot open configuration'), self._t('The file could not be read as a JSON configuration. Choose a different file.'), parent=self.root)
             self.raw = {}
         defaults = dict(config.DEFAULTS, listen_host='', allowed_clients=[], core_path='', subscription_url='',
                         native_path=str(config.bundled_native_path() or ''))
         defaults.update(self.raw)
+        source = self.raw.get('profile_file') or self.raw.get('subscription_file')
+        if source:
+            try:
+                metadata = Path(source).with_suffix(Path(source).suffix + '.info.json')
+                if metadata.is_file() and metadata.stat().st_size <= 8192:
+                    self.view.subscription_info = read_config(metadata)
+            except (ValueError, OSError):
+                pass
+        elif self.raw.get('existing_proxy_port') or not self.raw.get('subscription_url'):
+            self.view.subscription_info = self.clash_info
         self.loading = True
         for key, variable in self.vars.items():
             value = defaults.get(key, '')
@@ -362,32 +361,238 @@ class DesktopApp:
         self.loading = False
         self.dirty = False
         self.path_var.set(str(self.path))
+        from .i18n import load_language
+        self.view.set_language(load_language(self.path))
+        from .i18n import load_theme
+        self.view.set_theme(load_theme(self.path))
         self.engine_controls()
+        self.view.refresh()
 
     def choose_config(self):
         from tkinter import filedialog, messagebox
-        if self.dirty and not messagebox.askyesno('Discard unsaved edits?', 'Open another configuration and discard these unsaved edits?', parent=self.root):
+        if self.dirty and not messagebox.askyesno(self._t('Discard unsaved edits?'), self._t('Open another configuration and discard these unsaved edits?'), parent=self.root):
             return
-        name = filedialog.askopenfilename(title='Open configuration', initialdir=self.path.parent, filetypes=[('JSON configuration', '*.json'), ('All files', '*')], parent=self.root)
+        name = filedialog.askopenfilename(title=self._t('Open configuration'), initialdir=self.path.parent, filetypes=[('JSON configuration', '*.json'), ('All files', '*')], parent=self.root)
         if name:
             self.path = Path(name).absolute()
             self.load()
 
     def choose_core(self):
         from tkinter import filedialog
-        name = filedialog.askopenfilename(title='Choose your verified Mihomo executable', parent=self.root)
+        name = filedialog.askopenfilename(title=self._t('Choose your verified Mihomo executable'), parent=self.root)
         if name:
             self.vars['core_path'].set(name)
 
     def choose_provider(self):
         from tkinter import filedialog
-        name = filedialog.askopenfilename(title='Choose local Clash/Mihomo provider YAML', filetypes=[('YAML provider', '*.yaml *.yml'), ('All files', '*')], parent=self.root)
+        name = filedialog.askopenfilename(title=self._t('Choose local Clash/Mihomo provider YAML'), filetypes=[('YAML provider', '*.yaml *.yml'), ('All files', '*')], parent=self.root)
         if name:
-            self.vars['subscription_file'].set(name)
+            self._use_imported_file(Path(name))
+
+    def choose_profile(self):
+        from tkinter import filedialog
+        name = filedialog.askopenfilename(title=self._t('Complete Clash/Mihomo profile'),
+            filetypes=[('YAML', '*.yaml *.yml *.json'), ('All files', '*')], parent=self.root)
+        if name:
+            self._use_imported_file(Path(name), full=True)
+
+    def _use_imported_file(self, path, full=False):
+        from tkinter import messagebox
+        from .profiles import inspect_profile, read_profile, validate_host_profile, host_overlay
+        try:
+            info = inspect_profile(path)
+            full = full or info['kind'] == 'profile'
+            if full:
+                if self.vars['engine_mode'].get() == 'embedded':
+                    raise ValueError('Complete profiles require the external Mihomo engine')
+                validate_host_profile(host_overlay(read_profile(path)))
+                self.raw['host_profile_overlay'] = True
+                self.vars['profile_file'].set(str(path.absolute()))
+                self.vars['subscription_file'].set('')
+            else:
+                self.vars['profile_file'].set('')
+                self.vars['subscription_file'].set(str(path.absolute()))
+            self.view.preview = info
+            self.raw.pop('existing_proxy_port', None)
+            try:
+                metadata = path.with_suffix(path.suffix + '.info.json')
+                self.view.subscription_info = read_config(metadata) if metadata.is_file() and metadata.stat().st_size <= 8192 else None
+            except (OSError, ValueError):
+                self.view.subscription_info = None
+            self.view.refresh()
+            return True
+        except (ValueError, OSError) as error:
+            messagebox.showerror(self._t('Cannot inspect provider'), self._t(str(error)), parent=self.root)
+            return False
+
+    def quick_start(self):
+        if self.importing or self.backend.process is not None:
+            return
+        self.raw.pop('existing_proxy_port', None)
+        if not self._configure_lan(): return
+        self.quick_start_pending = True
+        self.import_subscription()
+        if not self.importing:
+            self.quick_start_pending = False
+
+    def _configure_lan(self, reserved=()):
+        from tkinter import messagebox
+        from .setup import discover_lan, available_port
+        try:
+            network = discover_lan()
+            chosen = set(reserved)
+            for key, host, default in (('listen_port', network['host'], 10081),
+                                       ('backend_port', '127.0.0.1', 10082),
+                                       ('api_port', '127.0.0.1', 10090)):
+                try:
+                    preferred = int(self.vars[key].get())
+                except ValueError:
+                    preferred = default
+                # Keep the standard listener away from compatibility ports.
+                excluded = chosen | ({10082, 10090} if key == 'listen_port' else set())
+                selected = available_port(host, preferred, excluded)
+                chosen.add(selected)
+                self.vars[key].set(str(selected))
+            self.vars['listen_host'].set(network['host'])
+            self.vars['allowed_clients'].set(', '.join(network['clients']))
+            self.view.setup_network = network['subnet']
+            self.view.refresh()
+            return True
+        except ValueError as error:
+            messagebox.showerror(self._t('Check configuration'), self._t(str(error)), parent=self.root)
+            return False
+
+    def use_existing_proxy(self):
+        if self.importing or self.backend.process is not None: return
+        from .existing_proxy import detect_system_proxy, read_clash_accounting
+        self.existing_proxy = detect_system_proxy()
+        if not self.existing_proxy:
+            from tkinter import messagebox
+            messagebox.showinfo(self._t('Existing proxy'), self._t('No active loopback HTTP system proxy was detected.'), parent=self.root)
+            return
+        port = self.existing_proxy['port']
+        if not self._configure_lan((port,)): return
+        self.vars['engine_mode'].set('external')
+        self.vars['profile_file'].set('')
+        self.vars['subscription_file'].set('')
+        self.vars['selection_mode'].set('auto')
+        self.vars['preferred_node'].set('')
+        self.raw['existing_proxy_port'] = port
+        self.clash_info = read_clash_accounting()
+        self.view.subscription_info = self.clash_info
+        self.view.refresh()
+        self.start()
+        self.view.show('LAN sharing')
+
+    def inspect_provider(self):
+        from tkinter import messagebox
+        from .profiles import inspect_profile
+        path = self.vars['profile_file'].get() or self.vars['subscription_file'].get()
+        try:
+            if not path:
+                raise ValueError('Choose a local YAML file first.')
+            self.view.preview = inspect_profile(Path(path))
+            self.view.refresh()
+        except (OSError, ValueError) as error:
+            messagebox.showerror(self._t('Cannot inspect provider'), self._t(str(error)), parent=self.root)
+
+    def import_subscription(self):
+        if self.importing or self.backend.process is not None:
+            return
+        from tkinter import messagebox
+        from urllib.parse import urlsplit
+        url = self.vars['subscription_url'].get().strip()
+        try:
+            parsed = urlsplit(url)
+            if (parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or parsed.fragment
+                    or any(ord(c) <= 32 for c in url)):
+                raise ValueError()
+        except ValueError:
+            messagebox.showerror(self._t('Check configuration'), self._t('Enter a valid HTTPS subscription URL.'), parent=self.root)
+            return
+        self.importing = True
+        self.view.quick_button.configure(state='disabled')
+        self.view.link_button.configure(state='disabled')
+        for widget, _ in self.inputs:
+            widget.configure(state='disabled')
+        self.start_button.configure(state='disabled')
+        self.save_button.configure(state='disabled')
+        self.choose_button.configure(state='disabled')
+        self.backend.log(self._t('Importing subscription…'))
+        def work():
+            target = None
+            try:
+                from .core import download_subscription
+                from .profiles import inspect_profile
+                folder = self.path.parent / 'profiles'
+                folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+                fd, filename = tempfile.mkstemp(prefix='import-', suffix='.yaml', dir=folder)
+                os.close(fd); target = Path(filename)
+                metadata = download_subscription(url, target)
+                inspect_profile(target)
+                if isinstance(metadata, dict):
+                    from .core import atomic_private
+                    atomic_private(target.with_suffix(target.suffix + '.info.json'), json.dumps(metadata).encode())
+                self.import_events.put((target, None))
+            except Exception:
+                if target is not None:
+                    target.unlink(missing_ok=True)
+                self.import_events.put((None, 'Subscription import failed. Check the URL and connection.'))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _poll_import(self):
+        from tkinter import messagebox
+        try:
+            path, error = self.import_events.get_nowait()
+        except queue.Empty:
+            return
+        self.importing = False
+        self.running_controls(self.backend.process is not None)
+        if self.closing:
+            return
+        pending, self.quick_start_pending = self.quick_start_pending, False
+        if error:
+            messagebox.showerror(self._t('Cannot inspect provider'), self._t(error), parent=self.root)
+        else:
+            if self._use_imported_file(path) and pending and self._configure_lan():
+                self.start()
+                self.view.show('LAN sharing')
+
+    def copy_address(self):
+        from tkinter import messagebox
+        from .profiles import connection_details
+        try:
+            info = connection_details(self.collect())
+            self.root.clipboard_clear()
+            self.root.clipboard_append(f"{info['host']}:{info['port']}")
+            self.backend.log(self._t('Address copied.'))
+        except ValueError as error:
+            messagebox.showerror(self._t('Check configuration'), self._t(str(error)), parent=self.root)
+
+    def _export(self, client=False):
+        from tkinter import filedialog, messagebox
+        from .profiles import connection_details, client_config
+        try:
+            values = self.collect()
+            data = client_config(values) if client else connection_details(values)
+            name = filedialog.asksaveasfilename(title=self._t('Export Clash client…' if client else 'Export connection guide…'),
+                defaultextension='.yaml' if client else '.json', parent=self.root)
+            if name:
+                from .core import atomic_private
+                atomic_private(Path(name), json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8'))
+                self.backend.log(self._t('Connection guide exported.'))
+        except (OSError, ValueError) as error:
+            messagebox.showerror(self._t('Cannot export'), self._t(str(error)), parent=self.root)
+
+    def export_guide(self):
+        self._export()
+
+    def export_client(self):
+        self._export(client=True)
 
     def choose_native(self):
         from tkinter import filedialog
-        name = filedialog.askopenfilename(title='Choose your verified PSPortal native engine executable', parent=self.root)
+        name = filedialog.askopenfilename(title=self._t('Choose your verified PSPortal native engine executable'), parent=self.root)
         if name:
             self.vars['native_path'].set(name)
 
@@ -411,10 +616,10 @@ class DesktopApp:
             values = self.collect()
             save_config(self.path, values)
         except ValueError as error:
-            messagebox.showerror('Check configuration', redact_log(str(error), secret_values(self.raw)), parent=self.root)
+            messagebox.showerror(self._t('Check configuration'), redact_log(str(error), secret_values(self.raw)), parent=self.root)
             return False
         except OSError:
-            messagebox.showerror('Cannot save configuration', 'The configuration could not be saved. Choose a writable location and check file permissions.', parent=self.root)
+            messagebox.showerror(self._t('Cannot save configuration'), self._t('The configuration could not be saved. Choose a writable location and check file permissions.'), parent=self.root)
             return False
         self.raw = values
         self.dirty = False
@@ -423,6 +628,8 @@ class DesktopApp:
         return True
 
     def running_controls(self, running: bool):
+        self.view.quick_button.configure(state='disabled' if running else 'normal')
+        self.view.link_button.configure(state='disabled' if running else 'normal')
         self.start_button.configure(state='disabled' if running else 'normal')
         self.save_button.configure(state='disabled' if running else 'normal')
         self.choose_button.configure(state='disabled' if running else 'normal')
@@ -444,17 +651,18 @@ class DesktopApp:
             message = ('The experimental embedded engine could not start. Check its executable path, OS/CPU compatibility and permissions. No engine switch was made.'
                        if self.raw.get('engine_mode') == 'embedded' else
                        'The listener process could not start. Check the application files and executable permissions.')
-            messagebox.showerror('Cannot start listener', message, parent=self.root)
+            messagebox.showerror(self._t('Cannot start listener'), self._t(message), parent=self.root)
             return
         self.running_controls(True)
-        self.status_var.set('Process running')
+        self._set_status('Process running')
 
     def stop(self):
         self.backend.stop()
         self.stop_button.configure(state='disabled')
-        self.status_var.set('Stopping…')
+        self._set_status('Stopping…')
 
     def poll(self):
+        self._poll_import()
         for _ in range(100):
             try:
                 line = self.backend.events.get_nowait()
@@ -462,21 +670,22 @@ class DesktopApp:
                 break
             self.log_widget.configure(state='normal')
             self.log_widget.insert('end', line + '\n')
+            self.view.observe(line)
             count = int(self.log_widget.index('end-1c').split('.')[0])
             if count > MAX_LOG_LINES:
                 self.log_widget.delete('1.0', f'{count - MAX_LOG_LINES}.0')
             self.log_widget.see('end')
             self.log_widget.configure(state='disabled')
         if self.backend.ready and self.backend.stopping_since is None:
-            self.status_var.set('Listening')
+            self._set_status('Listening')
         process = self.backend.process
         if process is not None:
             result = self.backend.poll()
             if result is not None:
-                self.status_var.set('Stopped' if result == 0 else 'Stopped with error')
+                self._set_status('Stopped' if result == 0 else 'Stopped with error')
                 self.backend.log('Listener exited.' if result == 0 else f'Listener exited with code {result}.')
                 self.running_controls(False)
-        if self.closing and self.backend.process is None:
+        if self.closing and self.backend.process is None and not self.importing:
             self.root.destroy()
             return
         self.root.after(150, self.poll)
@@ -487,12 +696,12 @@ class DesktopApp:
             return
         running = self.backend.process is not None and self.backend.process.poll() is None
         question = 'Stop the listener and its core, then close?' if running else 'Close and discard unsaved configuration edits?'
-        if (running or self.dirty) and not messagebox.askyesno('Close PS Portal On-Demand?', question, parent=self.root):
+        if (running or self.dirty or self.importing) and not messagebox.askyesno(self._t('Close PS Portal On-Demand?'), self._t(question), parent=self.root):
             return
         self.closing = True
         if running:
             self.stop()
-        else:
+        elif not self.importing:
             self.root.destroy()
 
 

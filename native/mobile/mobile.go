@@ -11,6 +11,9 @@ import (
 var mu sync.Mutex
 var current *engine.Engine
 
+// SubscriptionInfo returns only bounded accounting values provided by the server.
+func SubscriptionInfo(url string) string { return engine.SubscriptionInfo(url) }
+
 // Start validates configuration and starts the LAN listener. Subscription loading
 // and encrypted outbound adapters wake only when an external request arrives.
 func Start(configJSON string) error {

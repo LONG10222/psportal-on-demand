@@ -1,0 +1,270 @@
+test_validation_and_render (test_core.ConfigTests.test_validation_and_render) ... ok
+test_concurrent_wake_idle_and_rewake (test_core.CoreTests.test_concurrent_wake_idle_and_rewake) ... Core: starting
+Core: running
+Core: stopped
+Core: starting
+Core: running
+Core: stopped
+ok
+test_missing_fixed_node_stops_owned_core (test_core.CoreTests.test_missing_fixed_node_stops_owned_core) ... Core: starting
+Core: stopped
+Core startup failed: Fixed node is missing from the subscription
+ok
+test_occupied_backend_fails_without_touching_it (test_core.CoreTests.test_occupied_backend_fails_without_touching_it) ... Core: starting
+Core startup failed: Check executable, ports and configuration
+ok
+test_preferred_selection (test_core.CoreTests.test_preferred_selection) ... Core: starting
+Core: running
+Core: stopped
+ok
+test_refuses_other_owner (test_core.CoreTests.test_refuses_other_owner) ... ok
+test_startup_error_is_visible_and_redacted (test_core.CoreTests.test_startup_error_is_visible_and_redacted) ... ok
+test_loopback_fixture_never_performs_reverse_dns (test_core.FixtureServerTests.test_loopback_fixture_never_performs_reverse_dns) ... ok
+test_failed_download_redacts_url_and_preserves_cache (test_core.SubscriptionTests.test_failed_download_redacts_url_and_preserves_cache) ... ok
+test_redirects_fail_closed (test_core.SubscriptionTests.test_redirects_fail_closed) ... ok
+test_linked_liblzma_version_query_is_read_only_and_fail_closed (test_cpython_notices.CPythonNoticeTests.test_linked_liblzma_version_query_is_read_only_and_fail_closed) ... ok
+test_mac_notice_set_has_complete_exact_hashes_and_platform_binding (test_cpython_notices.CPythonNoticeTests.test_mac_notice_set_has_complete_exact_hashes_and_platform_binding) ... ok
+test_mac_rejects_unreviewed_versions_missing_or_changed_installed_notices (test_cpython_notices.CPythonNoticeTests.test_mac_rejects_unreviewed_versions_missing_or_changed_installed_notices) ... ok
+test_mac_retention_checks_versions_and_preserves_installed_notices (test_cpython_notices.CPythonNoticeTests.test_mac_retention_checks_versions_and_preserves_installed_notices) ... ok
+test_manifest_corruption_and_missing_notices_fail_closed (test_cpython_notices.CPythonNoticeTests.test_manifest_corruption_and_missing_notices_fail_closed) ... ok
+test_openssl3_version_uses_linked_release_string_not_legacy_tuple_fix (test_cpython_notices.CPythonNoticeTests.test_openssl3_version_uses_linked_release_string_not_legacy_tuple_fix) ... ok
+test_reviewed_notice_set_has_complete_exact_hashes (test_cpython_notices.CPythonNoticeTests.test_reviewed_notice_set_has_complete_exact_hashes) ... ok
+test_windows_requires_matching_components_and_installed_license (test_cpython_notices.CPythonNoticeTests.test_windows_requires_matching_components_and_installed_license) ... ok
+test_windows_runtime_hash_is_bound_to_installer_and_classified_separately (test_cpython_notices.CPythonNoticeTests.test_windows_runtime_hash_is_bound_to_installer_and_classified_separately) ... ok
+test_wrong_python_or_platform_never_creates_destination (test_cpython_notices.CPythonNoticeTests.test_wrong_python_or_platform_never_creates_destination) ... ok
+test_output_queue_is_bounded (test_desktop.BackendProcessTests.test_output_queue_is_bounded) ... ok
+test_oversize_record_is_dropped_as_a_whole (test_desktop.BackendProcessTests.test_oversize_record_is_dropped_as_a_whole) ... ok
+test_owned_child_stops_on_eof_and_can_restart (test_desktop.BackendProcessTests.test_owned_child_stops_on_eof_and_can_restart) ... ok
+test_collect_preserves_advanced_keys_and_parses_fields (test_desktop.DesktopHelpersTests.test_collect_preserves_advanced_keys_and_parses_fields) ... ok
+test_default_config_paths (test_desktop.DesktopHelpersTests.test_default_config_paths) ... ok
+test_invalid_config_does_not_replace_previous_file (test_desktop.DesktopHelpersTests.test_invalid_config_does_not_replace_previous_file) ... ok
+test_local_provider_can_replace_subscription_url (test_desktop.DesktopHelpersTests.test_local_provider_can_replace_subscription_url) ... ok
+test_logs_redact_urls_tokens_and_controls (test_desktop.DesktopHelpersTests.test_logs_redact_urls_tokens_and_controls) ... ok
+test_private_atomic_save_and_unknown_fields (test_desktop.DesktopHelpersTests.test_private_atomic_save_and_unknown_fields) ... ok
+test_read_rejects_large_and_non_object_files (test_desktop.DesktopHelpersTests.test_read_rejects_large_and_non_object_files) ... ok
+test_refuses_to_overwrite_symlink (test_desktop.DesktopHelpersTests.test_refuses_to_overwrite_symlink) ... ok
+test_source_and_frozen_commands_use_argument_arrays (test_desktop.DesktopHelpersTests.test_source_and_frozen_commands_use_argument_arrays) ... ok
+test_utf8_bom_is_accepted (test_desktop.DesktopHelpersTests.test_utf8_bom_is_accepted) ... ok
+test_ambiguous_response_framing_cannot_replace_cache (test_download.DownloadTests.test_ambiguous_response_framing_cannot_replace_cache) ... ok
+test_dns_error_empty_and_malformed_results_are_redacted (test_download.DownloadTests.test_dns_error_empty_and_malformed_results_are_redacted) ... ok
+test_empty_invalid_utf8_and_oversized_cannot_replace_cache (test_download.DownloadTests.test_empty_invalid_utf8_and_oversized_cannot_replace_cache) ... ok
+test_every_dns_address_must_be_public (test_download.DownloadTests.test_every_dns_address_must_be_public) ... ok
+test_monotonic_deadline_cannot_publish_late_body (test_download.DownloadTests.test_monotonic_deadline_cannot_publish_late_body) ... ok
+test_non200_redirect_and_compression_cannot_replace_cache (test_download.DownloadTests.test_non200_redirect_and_compression_cannot_replace_cache) ... ok
+test_pins_numeric_address_but_preserves_hostname_and_tls_sni (test_download.DownloadTests.test_pins_numeric_address_but_preserves_hostname_and_tls_sni) ... ok
+test_tls_error_closes_raw_socket_and_redacts_secret (test_download.DownloadTests.test_tls_error_closes_raw_socket_and_redacts_secret) ... ok
+test_truncated_content_length_cannot_replace_cache (test_download.DownloadTests.test_truncated_content_length_cannot_replace_cache) ... ok
+test_valid_chunked_response_and_truncated_chunk (test_download.DownloadTests.test_valid_chunked_response_and_truncated_chunk) ... ok
+test_watchdog_shuts_socket_during_blocked_headers (test_download.DownloadTests.test_watchdog_shuts_socket_during_blocked_headers) ... ok
+test_blank_local_provider_means_url (test_embedded.EmbeddedDispatchTests.test_blank_local_provider_means_url) ... ok
+test_embedded_does_not_require_external_core (test_embedded.EmbeddedDispatchTests.test_embedded_does_not_require_external_core) ... ok
+test_exited_child_cannot_mark_stopped_controller_ready (test_embedded.EmbeddedDispatchTests.test_exited_child_cannot_mark_stopped_controller_ready) ... ok
+test_external_is_default_and_still_requires_mihomo (test_embedded.EmbeddedDispatchTests.test_external_is_default_and_still_requires_mihomo) ... ok
+test_external_readiness_uses_original_message (test_embedded.EmbeddedDispatchTests.test_external_readiness_uses_original_message) ... ok
+test_failed_spawn_removes_private_config (test_embedded.EmbeddedDispatchTests.test_failed_spawn_removes_private_config) ... ok
+test_invalid_engine_and_executable_rejected (test_embedded.EmbeddedDispatchTests.test_invalid_engine_and_executable_rejected) ... ok
+test_json_readiness_matches_exact_engine_listener (test_embedded.EmbeddedDispatchTests.test_json_readiness_matches_exact_engine_listener) ... ok
+test_native_config_allowlist_and_unused_token_omission (test_embedded.EmbeddedDispatchTests.test_native_config_allowlist_and_unused_token_omission) ... ok
+test_native_requires_executable_permission (test_embedded.EmbeddedDispatchTests.test_native_requires_executable_permission) ... ok
+test_native_spawn_sanitizes_only_child_environment (test_embedded.EmbeddedDispatchTests.test_native_spawn_sanitizes_only_child_environment) ... ok
+test_native_strict_limits_do_not_change_external_validation (test_embedded.EmbeddedDispatchTests.test_native_strict_limits_do_not_change_external_validation) ... ok
+test_old_child_uses_original_secret_snapshot (test_embedded.EmbeddedDispatchTests.test_old_child_uses_original_secret_snapshot) ... ok
+test_old_readiness_during_restart_cannot_mark_replacement_ready (test_embedded.EmbeddedDispatchTests.test_old_readiness_during_restart_cannot_mark_replacement_ready) ... ok
+test_only_fixed_bundle_location_is_discovered (test_embedded.EmbeddedDispatchTests.test_only_fixed_bundle_location_is_discovered) ... ok
+test_source_and_frozen_native_commands_are_identical (test_embedded.EmbeddedDispatchTests.test_source_and_frozen_native_commands_are_identical) ... ok
+test_windows_native_rejects_batch_scripts (test_embedded.EmbeddedDispatchTests.test_windows_native_rejects_batch_scripts) ... ok
+test_cancel_close_preserves_running_app_then_confirm_stops (test_embedded.EngineFormTests.test_cancel_close_preserves_running_app_then_confirm_stops) ... ok
+test_duplicate_start_does_not_save_or_launch_again (test_embedded.EngineFormTests.test_duplicate_start_does_not_save_or_launch_again) ... ok
+test_mode_switch_enables_only_matching_executable (test_embedded.EngineFormTests.test_mode_switch_enables_only_matching_executable) ... ok
+test_running_engine_disables_all_executable_inputs (test_embedded.EngineFormTests.test_running_engine_disables_all_executable_inputs) ... ok
+test_cli_sigterm_stops_native (test_embedded.RealNativeDesktopTests.test_cli_sigterm_stops_native) ... ok
+test_desktop_parent_disappearance_closes_native_listener (test_embedded.RealNativeDesktopTests.test_desktop_parent_disappearance_closes_native_listener) ... ok
+test_frozen_cli_dispatch_native_and_eof (test_embedded.RealNativeDesktopTests.test_frozen_cli_dispatch_native_and_eof) ... skipped 'Set PSPORTAL_DUAL_BINARY to rebuilt desktop package'
+test_native_bind_failure_is_observed_and_cleaned (test_embedded.RealNativeDesktopTests.test_native_bind_failure_is_observed_and_cleaned) ... ok
+test_python_cli_parent_eof_stops_native (test_embedded.RealNativeDesktopTests.test_python_cli_parent_eof_stops_native) ... ok
+test_real_native_check_and_python_cli_dispatch (test_embedded.RealNativeDesktopTests.test_real_native_check_and_python_cli_dispatch) ... ok
+test_real_native_desktop_ready_reject_stop_restart_cleanup (test_embedded.RealNativeDesktopTests.test_real_native_desktop_ready_reject_stop_restart_cleanup) ... ok
+test_clash_cache_reader_returns_only_active_accounting_without_writing (test_existing_proxy.ExistingProxyConfigTests.test_clash_cache_reader_returns_only_active_accounting_without_writing) ... ok
+test_discovery_is_read_only_and_accepts_only_loopback_proxy (test_existing_proxy.ExistingProxyConfigTests.test_discovery_is_read_only_and_accepts_only_loopback_proxy) ... ok
+test_reuse_needs_no_core_or_subscription_and_rejects_self_loop (test_existing_proxy.ExistingProxyConfigTests.test_reuse_needs_no_core_or_subscription_and_rejects_self_loop) ... ok
+test_http_connect_and_stop_never_manage_the_existing_process (test_existing_proxy.ExistingProxyTransportTests.test_http_connect_and_stop_never_manage_the_existing_process) ... ok
+test_checksum_rejects_changed_archive (test_fetch_test_core.FetchTestCoreTests.test_checksum_rejects_changed_archive) ... ok
+test_gzip_payload_is_bounded (test_fetch_test_core.FetchTestCoreTests.test_gzip_payload_is_bounded) ... ok
+test_zip_reads_bytes_without_extracting_member_paths (test_fetch_test_core.FetchTestCoreTests.test_zip_reads_bytes_without_extracting_member_paths) ... ok
+test_frozen_window_initializes_and_closes_normally_while_stopped (test_frozen_window.FrozenNativeWindowTests.test_frozen_window_initializes_and_closes_normally_while_stopped) ... skipped 'Set PSPORTAL_FROZEN_WINDOW_TEST=1 and PSPORTAL_BINARY on native Windows/macOS'
+test_actual_window_start_stop_restart_and_close (test_gui.FrozenGuiTests.test_actual_window_start_stop_restart_and_close) ... skipped 'Set PSPORTAL_GUI_TEST=1 and PSPORTAL_BINARY under an isolated X11 display'
+test_embedded_window_start_stop_restart_and_close (test_gui.FrozenGuiTests.test_embedded_window_start_stop_restart_and_close) ... skipped 'Set PSPORTAL_GUI_TEST=1 and PSPORTAL_BINARY under an isolated X11 display'
+test_embedded_matches_exact_listener_with_either_json_spacing (test_gui.GuiReadinessRecordTests.test_embedded_matches_exact_listener_with_either_json_spacing) ... ok
+test_embedded_rejects_unrelated_or_malformed_records (test_gui.GuiReadinessRecordTests.test_embedded_rejects_unrelated_or_malformed_records) ... ok
+test_external_matches_complete_listener_prefix (test_gui.GuiReadinessRecordTests.test_external_matches_complete_listener_prefix) ... ok
+test_switching_live_listener_preserves_pid_inputs_dirty_page_and_logs (test_language_switch.HotLanguageWindowTests.test_switching_live_listener_preserves_pid_inputs_dirty_page_and_logs) ... ok
+test_appearance_and_language_preferences_preserve_each_other (test_language_switch.LanguagePreferencesTests.test_appearance_and_language_preferences_preserve_each_other) ... ok
+test_catalog_format_placeholders_match (test_language_switch.LanguagePreferencesTests.test_catalog_format_placeholders_match) ... ok
+test_diagnostics_are_not_interpreted_as_format_templates (test_language_switch.LanguagePreferencesTests.test_diagnostics_are_not_interpreted_as_format_templates) ... ok
+test_preferences_are_independent_of_proxy_config_and_private (test_language_switch.LanguagePreferencesTests.test_preferences_are_independent_of_proxy_config_and_private) ... ok
+test_difference_diagnostics_are_bounded_without_ignoring_bytes (test_macho_origin_proof.MachOOriginProofTests.test_difference_diagnostics_are_bounded_without_ignoring_bytes) ... ok
+test_other_platforms_never_claim_a_transformation_proof (test_macho_origin_proof.MachOOriginProofTests.test_other_platforms_never_claim_a_transformation_proof) ... skipped 'non-macOS fail-closed check'
+test_real_scratch_normalization_matches_and_detects_modified_code (test_macho_origin_proof.MachOOriginProofTests.test_real_scratch_normalization_matches_and_detects_modified_code) ... 4762 INFO: TclTkInfo: initializing cached Tcl/Tk info...
+ok
+test_rpath_matches_pinned_pyinstaller_directory_depth (test_macho_origin_proof.MachOOriginProofTests.test_rpath_matches_pinned_pyinstaller_directory_depth) ... ok
+test_changed_bytes_modes_links_and_extra_files_are_rejected (test_macos_archive.MacOSArchiveIntegrityTests.test_changed_bytes_modes_links_and_extra_files_are_rejected) ... ok
+test_real_layout_aliases_files_and_modes_are_exact (test_macos_archive.MacOSArchiveIntegrityTests.test_real_layout_aliases_files_and_modes_are_exact) ... ok
+test_unsafe_tar_paths_hardlinks_and_special_modes_are_rejected (test_macos_archive.MacOSArchiveIntegrityTests.test_unsafe_tar_paths_hardlinks_and_special_modes_are_rejected) ... ok
+test_layout_preserves_native_and_existing_frozen_discovery (test_macos_bundle_finalize.MacOSBundleFinalizeTests.test_layout_preserves_native_and_existing_frozen_discovery) ... ok
+test_nested_rewrite_and_final_verification_failure_are_hard_errors (test_macos_bundle_finalize.MacOSBundleFinalizeTests.test_nested_rewrite_and_final_verification_failure_are_hard_errors) ... ok
+test_outer_only_sign_and_strict_checks_preserve_nested_bytes (test_macos_bundle_finalize.MacOSBundleFinalizeTests.test_outer_only_sign_and_strict_checks_preserve_nested_bytes) ... ok
+test_wrong_native_hash_or_destination_is_rejected (test_macos_bundle_finalize.MacOSBundleFinalizeTests.test_wrong_native_hash_or_destination_is_rejected) ... ok
+test_extracted_app_launches_visible_and_quits_normally (test_macos_launchservices.MacOSLaunchServicesTests.test_extracted_app_launches_visible_and_quits_normally) ... skipped 'Requires an extracted macOS app and explicit LaunchServices acceptance'
+test_archive_rejects_privileged_modes_and_lost_owner_execute (test_macos_release_gate.MacOSReleaseGateTests.test_archive_rejects_privileged_modes_and_lost_owner_execute) ... ok
+test_companion_notice_duplicates_fail_closed (test_macos_release_gate.MacOSReleaseGateTests.test_companion_notice_duplicates_fail_closed) ... ok
+test_dependencies_are_exact_bundle_or_system_scope (test_macos_release_gate.MacOSReleaseGateTests.test_dependencies_are_exact_bundle_or_system_scope) ... ok
+test_empty_directories_are_bound_to_the_exact_tested_tree (test_macos_release_gate.MacOSReleaseGateTests.test_empty_directories_are_bound_to_the_exact_tested_tree) ... ok
+test_final_seal_and_extracted_launch_are_bound_to_exact_artifact (test_macos_release_gate.MacOSReleaseGateTests.test_final_seal_and_extracted_launch_are_bound_to_exact_artifact) ... ok
+test_final_seal_requires_exact_outer_signing_and_both_postarchive_checks (test_macos_release_gate.MacOSReleaseGateTests.test_final_seal_requires_exact_outer_signing_and_both_postarchive_checks) ... ok
+test_full_byte_proof_accepts_and_changed_regions_fail (test_macos_release_gate.MacOSReleaseGateTests.test_full_byte_proof_accepts_and_changed_regions_fail) ... ok
+test_native_alias_and_real_helper_require_identical_bytes_and_exact_layout (test_macos_release_gate.MacOSReleaseGateTests.test_native_alias_and_real_helper_require_identical_bytes_and_exact_layout) ... ok
+test_proofs_bind_pinned_source_packaged_hash_architecture_and_path (test_macos_release_gate.MacOSReleaseGateTests.test_proofs_bind_pinned_source_packaged_hash_architecture_and_path) ... ok
+test_symlink_alias_file_hash_is_bound_to_actual_target (test_macos_release_gate.MacOSReleaseGateTests.test_symlink_alias_file_hash_is_bound_to_actual_target) ... ok
+test_symlink_chains_resolve_but_escapes_and_cycles_fail (test_macos_release_gate.MacOSReleaseGateTests.test_symlink_chains_resolve_but_escapes_and_cycles_fail) ... ok
+test_synthetic_macos_receipt_uses_posix_paths_on_every_host (test_macos_release_gate.MacOSReleaseGateTests.test_synthetic_macos_receipt_uses_posix_paths_on_every_host) ... ok
+test_tar_binds_every_file_notice_and_exact_symlink (test_macos_release_gate.MacOSReleaseGateTests.test_tar_binds_every_file_notice_and_exact_symlink) ... ok
+test_unknown_origins_file_hash_mismatch_and_duplicate_evidence_fail (test_macos_release_gate.MacOSReleaseGateTests.test_unknown_origins_file_hash_mismatch_and_duplicate_evidence_fail) ... ok
+test_source_tk_embedded_start_stop_restart_close (test_native_tk.NativeTkWindowTests.test_source_tk_embedded_start_stop_restart_close) ... ok
+test_source_tk_external_start_stop_restart_close (test_native_tk.NativeTkWindowTests.test_source_tk_external_start_stop_restart_close) ... ok
+test_packaged_http_connect_idle_rewake_and_eof_cleanup (test_packaged.PackagedTests.test_packaged_http_connect_idle_rewake_and_eof_cleanup) ... skipped 'Set PSPORTAL_BINARY and MIHOMO_BINARY for packaged integration'
+test_configuration_listener_rejection_eof_cleanup_and_restart (test_packaged_startup.PackagedStartupTests.test_configuration_listener_rejection_eof_cleanup_and_restart) ... skipped 'Set PSPORTAL_BINARY for native packaged startup checks'
+test_allowed_lan (test_policy.PolicyTests.test_allowed_lan) ... ok
+test_backend_cannot_direct_or_bypass_resolution (test_policy.PolicyTests.test_backend_cannot_direct_or_bypass_resolution) ... ok
+test_denied_special_addresses (test_policy.PolicyTests.test_denied_special_addresses) ... ok
+test_external_boundaries (test_policy.PolicyTests.test_external_boundaries) ... ok
+test_names_and_ambiguous_numeric_hosts (test_policy.PolicyTests.test_names_and_ambiguous_numeric_hosts) ... ok
+test_all_local_pins_checked_numeric_address (test_policy.ResolveTests.test_all_local_pins_checked_numeric_address) ... ok
+test_any_denied_answer_fails_closed_regardless_of_order (test_policy.ResolveTests.test_any_denied_answer_fails_closed_regardless_of_order) ... ok
+test_empty_and_failed_resolution_fail_closed (test_policy.ResolveTests.test_empty_and_failed_resolution_fail_closed) ... ok
+test_literal_never_resolves (test_policy.ResolveTests.test_literal_never_resolves) ... ok
+test_malformed_or_scoped_answers_fail_closed (test_policy.ResolveTests.test_malformed_or_scoped_answers_fail_closed) ... ok
+test_public_and_mixed_answers_use_backend (test_policy.ResolveTests.test_public_and_mixed_answers_use_backend) ... ok
+test_frozen_linux_clears_override_without_original (test_process_env.EnvironmentTests.test_frozen_linux_clears_override_without_original) ... ok
+test_frozen_linux_restores_original_library_path_without_mutating_parent (test_process_env.EnvironmentTests.test_frozen_linux_restores_original_library_path_without_mutating_parent) ... ok
+test_frozen_path_removes_only_bundle_entries (test_process_env.EnvironmentTests.test_frozen_path_removes_only_bundle_entries) ... ok
+test_source_environment_is_unchanged (test_process_env.EnvironmentTests.test_source_environment_is_unchanged) ... ok
+test_launch_uses_array_and_sanitized_environment (test_process_env.LaunchTests.test_launch_uses_array_and_sanitized_environment) ... ok
+test_windows_frozen_clears_then_restores_dll_directory (test_process_env.WindowsLaunchContractTests.test_windows_frozen_clears_then_restores_dll_directory) ... ok
+test_windows_frozen_restores_after_spawn_error (test_process_env.WindowsLaunchContractTests.test_windows_frozen_restores_after_spawn_error) ... ok
+test_real_complete_profile_uses_its_own_group_and_rule_then_releases_core (test_profiles.CompleteProfileTransportTests.test_real_complete_profile_uses_its_own_group_and_rule_then_releases_core) ... 7737 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60487)>,)> is serving
+7738 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60490)>,)> is serving
+Core: starting
+7750 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=26642 running>
+7819 INFO: <_UnixSubprocessTransport pid=26642 running> exited with return code 0
+7826 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=26643 running>
+Core: running
+9743 INFO: <_UnixSubprocessTransport pid=26643 running> exited with return code 0
+Core: stopped
+ok
+test_complete_profile_ignores_stale_provider_fields (test_profiles.ProfileImportTests.test_complete_profile_ignores_stale_provider_fields) ... ok
+test_complete_profile_preserves_groups_rules_node_options_and_source (test_profiles.ProfileImportTests.test_complete_profile_preserves_groups_rules_node_options_and_source) ... ok
+test_connection_exports_contain_no_subscription_or_node_credentials (test_profiles.ProfileImportTests.test_connection_exports_contain_no_subscription_or_node_credentials) ... ok
+test_host_config_accepts_full_profile_without_subscription_and_rejects_embedded (test_profiles.ProfileImportTests.test_host_config_accepts_full_profile_without_subscription_and_rejects_embedded) ... ok
+test_host_overlay_accepts_common_profile_without_changing_source_or_resolver (test_profiles.ProfileImportTests.test_host_overlay_accepts_common_profile_without_changing_source_or_resolver) ... ok
+test_malformed_duplicate_recursive_and_unsafe_tags_are_rejected_without_secret_echo (test_profiles.ProfileImportTests.test_malformed_duplicate_recursive_and_unsafe_tags_are_rejected_without_secret_echo) ... ok
+test_provider_cannot_traverse_outside_selected_profile_directory (test_profiles.ProfileImportTests.test_provider_cannot_traverse_outside_selected_profile_directory) ... ok
+test_provider_file_is_snapshotted_and_relative_path_keeps_semantics (test_profiles.ProfileImportTests.test_provider_file_is_snapshotted_and_relative_path_keeps_semantics) ... ok
+test_system_features_are_rejected_instead_of_silently_removed (test_profiles.ProfileImportTests.test_system_features_are_rejected_instead_of_silently_removed) ... ok
+test_yaml_anchors_and_merge_are_supported_without_dropping_values (test_profiles.ProfileImportTests.test_yaml_anchors_and_merge_are_supported_without_dropping_values) ... ok
+test_connect_body_and_expectation_rejected (test_proxy.ParserTests.test_connect_body_and_expectation_rejected) ... ok
+test_connect_ipv6_and_query_only (test_proxy.ParserTests.test_connect_ipv6_and_query_only) ... ok
+test_limits (test_proxy.ParserTests.test_limits) ... ok
+test_rejects_ambiguous_authorities_and_unsupported_targets (test_proxy.ParserTests.test_rejects_ambiguous_authorities_and_unsupported_targets) ... ok
+test_rejects_smuggling_and_malformed_headers (test_proxy.ParserTests.test_rejects_smuggling_and_malformed_headers) ... ok
+test_removes_proxy_credentials_and_connection_listed_fields (test_proxy.ParserTests.test_removes_proxy_credentials_and_connection_listed_fields) ... ok
+test_rewrites_origin_and_absolute_form (test_proxy.ParserTests.test_rewrites_origin_and_absolute_form) ... ok
+test_bind_conflict_is_reported (test_proxy.ProxyNetworkTests.test_bind_conflict_is_reported) ... 9786 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60499)>,)> is serving
+ok
+test_chunked_body_normalization_and_trailer_removal (test_proxy.ProxyNetworkTests.test_chunked_body_normalization_and_trailer_removal) ... 9787 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60500)>,)> is serving
+9787 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60501)>,)> is serving
+ok
+test_denied_client_and_connection_limit (test_proxy.ProxyNetworkTests.test_denied_client_and_connection_limit) ... 9793 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60504)>,)> is serving
+9795 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60506)>,)> is serving
+ok
+test_direct_connect_uses_only_injected_numeric_destination (test_proxy.ProxyNetworkTests.test_direct_connect_uses_only_injected_numeric_destination) ... 9798 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60509)>,)> is serving
+9799 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60510)>,)> is serving
+ok
+test_dns_denial_and_errors_do_not_wake_core (test_proxy.ProxyNetworkTests.test_dns_denial_and_errors_do_not_wake_core) ... 9803 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60513)>,)> is serving
+ok
+test_expect_continue_and_malformed_body (test_proxy.ProxyNetworkTests.test_expect_continue_and_malformed_body) ... 9807 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60516)>,)> is serving
+9807 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60517)>,)> is serving
+ok
+test_external_connect_tunnel_and_half_close (test_proxy.ProxyNetworkTests.test_external_connect_tunnel_and_half_close) ... 9812 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60520)>,)> is serving
+9812 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60521)>,)> is serving
+ok
+test_external_http_streams_body_and_releases_core (test_proxy.ProxyNetworkTests.test_external_http_streams_body_and_releases_core) ... 9817 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60524)>,)> is serving
+9817 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60525)>,)> is serving
+ok
+test_failed_backend_connect_releases_core (test_proxy.ProxyNetworkTests.test_failed_backend_connect_releases_core) ... 9821 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60528)>,)> is serving
+9821 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60529)>,)> is serving
+ok
+test_headers_timeout_does_not_start_core (test_proxy.ProxyNetworkTests.test_headers_timeout_does_not_start_core) ... 9825 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60532)>,)> is serving
+ok
+test_lan_route_is_numeric_origin_form_without_core (test_proxy.ProxyNetworkTests.test_lan_route_is_numeric_origin_form_without_core) ... 9878 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60534)>,)> is serving
+9879 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60535)>,)> is serving
+ok
+test_loopback_metadata_and_localhost_rejected_before_core (test_proxy.ProxyNetworkTests.test_loopback_metadata_and_localhost_rejected_before_core) ... 9883 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60538)>,)> is serving
+ok
+test_malformed_chunk_releases_core_without_forwarding_extra_request (test_proxy.ProxyNetworkTests.test_malformed_chunk_releases_core_without_forwarding_extra_request) ... 9901 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60551)>,)> is serving
+9902 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60552)>,)> is serving
+ok
+test_mixed_denied_dns_cannot_start_backend (test_proxy.ProxyNetworkTests.test_mixed_denied_dns_cannot_start_backend) ... 9906 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60555)>,)> is serving
+ok
+test_pipelined_second_request_is_not_forwarded (test_proxy.ProxyNetworkTests.test_pipelined_second_request_is_not_forwarded) ... 9908 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60557)>,)> is serving
+9908 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60558)>,)> is serving
+ok
+test_shutdown_cancels_tunnels_and_releases_core (test_proxy.ProxyNetworkTests.test_shutdown_cancels_tunnels_and_releases_core) ... 9964 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60561)>,)> is serving
+9964 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60562)>,)> is serving
+ok
+test_startup_failure_has_no_leaked_reference (test_proxy.ProxyNetworkTests.test_startup_failure_has_no_leaked_reference) ... 10973 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60566)>,)> is serving
+ok
+test_truncated_content_length_fails_and_releases_core (test_proxy.ProxyNetworkTests.test_truncated_content_length_fails_and_releases_core) ... 10981 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60568)>,)> is serving
+10982 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60569)>,)> is serving
+ok
+test_only_physical_private_interface_and_current_subnet_are_selected (test_quick_setup.NetworkSetupTests.test_only_physical_private_interface_and_current_subnet_are_selected) ... ok
+test_port_is_kept_until_occupied_and_alternative_is_available (test_quick_setup.NetworkSetupTests.test_port_is_kept_until_occupied_and_alternative_is_available) ... ok
+test_one_click_imports_configures_starts_and_shows_wifi_guide (test_quick_setup.QuickSetupWindowTests.test_one_click_imports_configures_starts_and_shows_wifi_guide) ... ok
+test_real_core_http_connect_fixed_selection_and_idle (test_real_core.RealCoreTests.test_real_core_http_connect_fixed_selection_and_idle) ... 11434 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60579)>,)> is serving
+11435 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60582)>,)> is serving
+Core: starting
+11446 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=26646 running>
+11459 INFO: <_UnixSubprocessTransport pid=26646 running> exited with return code 0
+11467 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=26647 running>
+Core: running
+14446 INFO: <_UnixSubprocessTransport pid=26647 running> exited with return code 0
+Core: stopped
+ok
+test_api_set_loader_proof_overrides_unrelated_static_path (test_runtime_inventory.RuntimeInventoryTests.test_api_set_loader_proof_overrides_unrelated_static_path) ... ok
+test_api_set_proof_never_loads_arbitrary_names_or_paths (test_runtime_inventory.RuntimeInventoryTests.test_api_set_proof_never_loads_arbitrary_names_or_paths) ... ok
+test_component_labels_are_only_path_hints (test_runtime_inventory.RuntimeInventoryTests.test_component_labels_are_only_path_hints) ... ok
+test_file_magic_and_exact_hash (test_runtime_inventory.RuntimeInventoryTests.test_file_magic_and_exact_hash) ... ok
+test_known_bundle_layouts_preserve_exact_destination (test_runtime_inventory.RuntimeInventoryTests.test_known_bundle_layouts_preserve_exact_destination) ... ok
+test_license_names_include_component_prefixed_notices (test_runtime_inventory.RuntimeInventoryTests.test_license_names_include_component_prefixed_notices) ... ok
+test_output_cannot_modify_bundle_or_build (test_runtime_inventory.RuntimeInventoryTests.test_output_cannot_modify_bundle_or_build) ... ok
+test_output_does_not_overwrite_previous_evidence (test_runtime_inventory.RuntimeInventoryTests.test_output_does_not_overwrite_previous_evidence) ... ok
+test_packaged_notice_directory_keeps_component_named_text_and_manifests (test_runtime_inventory.RuntimeInventoryTests.test_packaged_notice_directory_keeps_component_named_text_and_manifests) ... ok
+test_pe_version_strings_preserve_origin_and_version_without_license_claim (test_runtime_inventory.RuntimeInventoryTests.test_pe_version_strings_preserve_origin_and_version_without_license_claim) ... ok
+test_toc_walk_collects_only_known_data_records (test_runtime_inventory.RuntimeInventoryTests.test_toc_walk_collects_only_known_data_records) ... ok
+test_windows_api_set_has_exact_system_host_evidence (test_runtime_inventory.RuntimeInventoryTests.test_windows_api_set_has_exact_system_host_evidence) ... skipped 'actual Windows API-set loader proof'
+test_invalid_values_are_ignored_and_overuse_clamps_to_zero (test_subscription_info.SubscriptionAccountingTests.test_invalid_values_are_ignored_and_overuse_clamps_to_zero) ... ok
+test_remaining_and_expiry_are_derived_only_from_real_header_values (test_subscription_info.SubscriptionAccountingTests.test_remaining_and_expiry_are_derived_only_from_real_header_values) ... ok
+test_unknown_fields_are_not_zero_or_unlimited (test_subscription_info.SubscriptionAccountingTests.test_unknown_fields_are_not_zero_or_unlimited) ... ok
+test_case_insensitive_environment_and_duplicate_prefix (test_windows_build_environment.WindowsBuildEnvironmentTests.test_case_insensitive_environment_and_duplicate_prefix) ... ok
+test_missing_or_relative_required_paths_fail_closed (test_windows_build_environment.WindowsBuildEnvironmentTests.test_missing_or_relative_required_paths_fail_closed) ... ok
+test_only_selected_python_and_windows_paths_reach_child (test_windows_build_environment.WindowsBuildEnvironmentTests.test_only_selected_python_and_windows_paths_reach_child) ... ok
+test_api_set_requires_actual_system_proof_and_no_jdk_imports (test_windows_release_gate.WindowsReleaseGateTests.test_api_set_requires_actual_system_proof_and_no_jdk_imports) ... ok
+test_archive_matches_every_tested_file_and_rejects_changes_or_extras (test_windows_release_gate.WindowsReleaseGateTests.test_archive_matches_every_tested_file_and_rejects_changes_or_extras) ... ok
+test_binary_inventory_must_match_unique_archived_file_hashes (test_windows_release_gate.WindowsReleaseGateTests.test_binary_inventory_must_match_unique_archived_file_hashes) ... ok
+test_exact_reviewed_runtime_accepts_and_changed_content_fails (test_windows_release_gate.WindowsReleaseGateTests.test_exact_reviewed_runtime_accepts_and_changed_content_fails) ... ok
+test_unknown_origin_and_unresolved_inventory_fail_closed (test_windows_release_gate.WindowsReleaseGateTests.test_unknown_origin_and_unresolved_inventory_fail_closed) ... ok
+test_windows_path_scope_is_case_insensitive_but_bounded (test_windows_release_gate.WindowsReleaseGateTests.test_windows_path_scope_is_case_insensitive_but_bounded) ... ok
+
+----------------------------------------------------------------------
+Ran 202 tests in 14.478s
+
+OK (skipped=9)

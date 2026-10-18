@@ -364,7 +364,7 @@ func downloadSubscription(ctx context.Context, rawURL string) ([]byte, error) {
 	if err != nil {
 		return nil, errors.New("invalid subscription URL")
 	}
-	request.Header.Set("User-Agent", "PSPortal-Native/0.2")
+	request.Header.Set("User-Agent", "clash.meta/1.19.32 PSPortal-Native/0.2")
 	response, err := client.Do(request)
 	if err != nil {
 		return nil, errors.New("subscription HTTPS download failed (public destination and no redirects required)")

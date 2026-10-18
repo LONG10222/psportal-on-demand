@@ -40,8 +40,29 @@ def validate(raw, path):
     if not isinstance(raw, dict):
         raise ValueError('Configuration must be an object')
     cfg = dict(DEFAULTS, **raw)
+    existing = cfg.get('existing_proxy_port')
+    if existing is not None:
+        if type(existing) is not int or not 1024 <= existing <= 65535 or existing == cfg['listen_port']:
+            raise ValueError('Existing proxy must use a distinct unprivileged loopback port')
+        if cfg['engine_mode'] != 'external':
+            raise ValueError('Existing proxy sharing requires external mode')
     if cfg['engine_mode'] not in ('external', 'embedded'):
         raise ValueError('engine_mode must be external or embedded')
+    profile = cfg.get('profile_file')
+    if profile:
+        from .profiles import read_profile, validate_host_profile, host_overlay
+        if cfg['engine_mode'] != 'external':
+            raise ValueError('Complete profiles require the external Mihomo engine')
+        if not isinstance(profile, str):
+            raise ValueError('profile_file must be an existing absolute YAML file')
+        profile = Path(profile).expanduser()
+        if not profile.is_absolute() or not profile.is_file():
+            raise ValueError('profile_file must be an existing absolute YAML file')
+        if type(cfg.get('host_profile_overlay', False)) is not bool:
+            raise ValueError('host_profile_overlay must be a boolean')
+        data = read_profile(profile)
+        validate_host_profile(host_overlay(data) if cfg.get('host_profile_overlay') else data)
+        cfg['profile_file'] = str(profile)
     for key in ('listen_port', 'backend_port', 'api_port'):
         if type(cfg[key]) is not int or not 1024 <= cfg[key] <= 65535:
             raise ValueError(key + ' must be an unprivileged TCP port')
@@ -66,6 +87,9 @@ def validate(raw, path):
             raise ValueError('listen_host must be an RFC1918 address, or 127.0.0.1 with only the localhost client')
         if not isinstance(clients, list) or not clients or not all(lan(x) for x in clients):
             raise ValueError('allowed_clients must contain specific RFC1918 IPv4 addresses')
+    if profile:
+        # Provider-only selection settings do not override a complete profile.
+        cfg['selection_mode'], cfg['preferred_node'] = 'auto', ''
     if cfg['selection_mode'] == 'preferred':
         cfg['selection_mode'] = 'prefer'
     if cfg['selection_mode'] not in ('auto', 'prefer', 'fixed'):
@@ -76,7 +100,7 @@ def validate(raw, path):
         raise ValueError('Reserved or invalid preferred_node')
     if cfg['selection_mode'] != 'auto' and not cfg['preferred_node']:
         raise ValueError('preferred_node is required for prefer/fixed mode')
-    seed = cfg.get('subscription_file')
+    seed = None if profile else cfg.get('subscription_file')
     if seed not in (None, ''):
         if not isinstance(seed, str):
             raise ValueError('subscription_file must be an existing absolute file no larger than 10 MiB')
@@ -87,7 +111,7 @@ def validate(raw, path):
     else:
         seed = None
         cfg.pop('subscription_file', None)
-    for key in (('health_url',) if seed else ('subscription_url', 'health_url')):
+    for key in (('health_url',) if seed or profile or existing else ('subscription_url', 'health_url')):
         value = cfg.get(key)
         try:
             url = urlsplit(value)
@@ -99,12 +123,12 @@ def validate(raw, path):
             valid = False
         if not valid:
             raise ValueError(key + ' must be an HTTPS URL without userinfo or fragment')
-    if cfg['engine_mode'] == 'external':
+    if cfg['engine_mode'] == 'external' and not existing:
         core = Path(cfg.get('core_path', '')).expanduser()
         if not core.is_absolute() or not core.is_file():
             raise ValueError('core_path must be an absolute path to an existing Mihomo executable')
         cfg['core_path'] = str(core)
-    else:
+    elif cfg['engine_mode'] == 'embedded':
         _validate_embedded(cfg, bool(seed))
     cfg['data_dir'] = str(Path(cfg.get('data_dir', Path(path).resolve().parent / 'runtime')).expanduser().resolve())
     return cfg

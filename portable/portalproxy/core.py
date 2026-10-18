@@ -90,7 +90,7 @@ def download_subscription(url, destination):
         path = parsed.path or '/'
         if parsed.query:
             path += '?' + parsed.query
-        connection.request('GET', path, headers={'User-Agent':'PSPortal-OnDemand/0.1', 'Accept-Encoding':'identity'})
+        connection.request('GET', path, headers={'User-Agent':'clash.meta/1.19.32 PSPortal-OnDemand/0.1', 'Accept-Encoding':'identity'})
         response = connection.getresponse()
         if response.status != 200:
             raise CoreError('Subscription requires HTTP 200; redirects are disabled')
@@ -124,6 +124,8 @@ def download_subscription(url, destination):
             raise CoreError('Subscription is empty')
         data.decode('utf-8-sig')
         atomic_private(destination, data)
+        from .subscription_info import from_headers
+        return from_headers(response.headers, url)
     except CoreError:
         raise
     except Exception:
@@ -187,6 +189,8 @@ class CoreManager:
             return json.loads(data) if data else {}
 
     async def _select(self):
+        if self.config.get('profile_file'):
+            return  # Imported groups/rules retain their own selection semantics.
         proxies = await asyncio.to_thread(self._request, '/proxies')
         group = proxies.get('proxies', {}).get('PORTAL', {})
         names = group.get('all', [])
@@ -232,7 +236,10 @@ class CoreManager:
                     probe.bind(('127.0.0.1', port))
                 finally:
                     probe.close()
-            if self.config.get('subscription_file'):
+            if self.config.get('profile_file'):
+                from .profiles import render_profile
+                operation = asyncio.to_thread(render_profile, self.config, self.secret, self.runtime)
+            elif self.config.get('subscription_file'):
                 def copy_provider():
                     with open(self.config['subscription_file'], 'rb') as stream:
                         data = stream.read(10 * 1024 * 1024 + 1)
@@ -245,16 +252,16 @@ class CoreManager:
                 operation = asyncio.to_thread(download_subscription, self.config['subscription_url'], self.runtime / 'providers/subscription.yaml')
             download = asyncio.create_task(operation)
             try:
-                await asyncio.shield(download)
+                generated = await asyncio.shield(download)
             except asyncio.CancelledError:
-                # urllib runs in a worker thread; let its bounded I/O finish before
-                # deleting private runtime files or allowing another cold start.
+                # Wait for bounded import/provider I/O before cleanup/replacement.
                 try:
                     await download
                 except Exception:
                     pass
                 raise
-            atomic_private(self.runtime / 'config.json', json.dumps(render(self.config, self.secret)).encode())
+            rendered = generated if self.config.get('profile_file') else render(self.config, self.secret)
+            atomic_private(self.runtime / 'config.json', json.dumps(rendered).encode())
             args = (self.config['core_path'], '-d', str(self.runtime), '-f', str(self.runtime / 'config.json'))
             check = await launch_external(*args, '-t')
             try:

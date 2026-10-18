@@ -29,7 +29,11 @@ async def serve(config, desktop_child=False):
     core = None
     proxy = None
     try:
-        core = CoreManager(config)
+        if config.get('existing_proxy_port'):
+            from .existing_proxy import ExistingProxy
+            core = ExistingProxy(config)
+        else:
+            core = CoreManager(config)
         proxy = ProxyServer(config, core)
         await proxy.start()
         core.start_monitor()

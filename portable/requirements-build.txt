@@ -1,3 +1,5 @@
-# Build-only dependency. Runtime backend uses the Python standard library.
+# Include the YAML importer in desktop bundles.
+-r requirements-runtime.txt
+# Build-only dependency.
 # Review and intentionally update this pin before a public release.
 PyInstaller==6.16.0

@@ -10,6 +10,7 @@ Authoritative license sources:
 - Tcl: https://github.com/tcltk/tcl/blob/core-9-0-branch/license.terms
 - Tk: https://github.com/tcltk/tk/blob/core-9-0-branch/license.terms
 - PyInstaller: https://github.com/pyinstaller/pyinstaller/blob/v6.16.0/COPYING.txt
+- PyYAML 6.0.3 (MIT): the desktop profile importer uses this pinned dependency. Its complete notice is retained in `PyYAML-LICENSE.txt`; bundled C-extension components must also be included in the exact-runtime inventory.
 - Mihomo (not bundled): https://github.com/MetaCubeX/mihomo/blob/Meta/LICENSE
 
 Release gate: audit the exact bundled native libraries and retain their complete matching license files before any public redistribution. The set depends on the Python installation and target OS; builds without a completed exact-runtime inventory remain gated. Check Tcl/Tk, OpenSSL, compression, ffi, graphics/font and platform runtime libraries where present. Do not assume a link substitutes for a required copyright notice.

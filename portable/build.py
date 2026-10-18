@@ -41,6 +41,8 @@ def main(argv=None):
         parser.error('PyInstaller is missing. Install requirements-build.txt in a local build virtualenv first.')
     if importlib.util.find_spec('tkinter') is None:
         parser.error('This Python has no Tk support. Install a Tk-enabled Python before building.')
+    if importlib.util.find_spec('yaml') is None:
+        parser.error('PyYAML is missing. Install requirements-runtime.txt before building.')
     if not args.skip_tests:
         subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-v'], cwd=root, check=True)
     build_env = dict(os.environ)
@@ -77,6 +79,7 @@ def main(argv=None):
     shutil.copy2(root / 'docs' / 'THIRD-PARTY-NOTICES.md', notices / 'THIRD-PARTY-NOTICES.md')
     for filename in ('Tcl-license.terms', 'Tk-license.terms'):
         shutil.copy2(root / 'docs' / filename, notices / filename)
+    shutil.copy2(root / 'docs' / 'PyYAML-LICENSE.txt', notices / 'PyYAML-LICENSE.txt')
     python_license = Path(sysconfig.get_path('stdlib')) / 'LICENSE.txt'
     if not python_license.is_file():
         python_license = Path(sys.base_prefix) / 'LICENSE.txt'

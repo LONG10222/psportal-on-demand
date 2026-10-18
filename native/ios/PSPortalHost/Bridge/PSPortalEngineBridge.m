@@ -14,5 +14,6 @@
 }
 + (void)stop { MobileStop(); }
 + (NSString *)statusJSON { return MobileStatus(); }
++ (NSString *)subscriptionInfo:(NSString *)url { return MobileSubscriptionInfo(url); }
 @end
 

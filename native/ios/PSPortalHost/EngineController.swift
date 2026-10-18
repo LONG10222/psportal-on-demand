@@ -5,12 +5,18 @@ protocol EngineDriver {
     func start(configJSON: String) -> String?
     func stop()
     func statusJSON() -> String
+    func subscriptionInfo(url: String) -> String
+}
+
+extension EngineDriver {
+    func subscriptionInfo(url: String) -> String { "{}" }
 }
 
 final class EmbeddedEngineDriver: EngineDriver {
     func start(configJSON: String) -> String? { PSPortalEngineBridge.start(configJSON: configJSON) }
     func stop() { PSPortalEngineBridge.stop() }
     func statusJSON() -> String { PSPortalEngineBridge.statusJSON() }
+    func subscriptionInfo(url: String) -> String { PSPortalEngineBridge.subscriptionInfo(url: url) }
 }
 
 /// Calls are serialized off the UI thread. A Stop requested during Start is
@@ -18,7 +24,16 @@ final class EmbeddedEngineDriver: EngineDriver {
 final class EngineController {
     private let queue = DispatchQueue(label: "org.psportal.host.engine", qos: .userInitiated)
     private let driver: EngineDriver
+    private let infoQueue = DispatchQueue(label: "org.psportal.host.subscription-info", qos: .utility)
     init(driver: EngineDriver = EmbeddedEngineDriver()) { self.driver = driver }
+
+    func subscriptionInfo(url: String, completion: @escaping @MainActor (SubscriptionAccounting?) -> Void) {
+        infoQueue.async {
+            let raw = self.driver.subscriptionInfo(url: url)
+            let info = raw.data(using: .utf8).flatMap { try? JSONDecoder().decode(SubscriptionAccounting.self, from: $0) }
+            DispatchQueue.main.async { completion(info) }
+        }
+    }
 
     func start(json: String, completion: @escaping @MainActor (String?) -> Void) {
         queue.async {
@@ -57,5 +72,20 @@ struct EngineStatus: Decodable {
         case "stopped": return "Listening; outbound pool will wake on demand"
         default: return "Listening; waiting for engine status"
         }
+    }
+}
+
+struct SubscriptionAccounting: Decodable {
+    let upload: UInt64?
+    let download: UInt64?
+    let total: UInt64?
+    let expire: UInt64?
+    var used: UInt64? {
+        guard let upload, let download, upload <= UInt64.max-download else { return nil }
+        return upload+download
+    }
+    var remaining: UInt64? {
+        guard let total, total>0, let used else { return nil }
+        return used>=total ? 0 : total-used
     }
 }

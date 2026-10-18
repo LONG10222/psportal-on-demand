@@ -6,6 +6,31 @@ import UIKit
 /// These mocks test orchestration only. They do not prove transport works.
 final class ProxyLifecycleTests: XCTestCase {
     @MainActor
+    func testLanguageAndAppearanceSwitchWithoutRestartOrSettingsLoss() async {
+        let harness = LifecycleHarness()
+        let model = harness.model
+        model.start()
+        for _ in 0..<100 {
+            if model.state == .running { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(model.state, .running)
+        let before = model.settings
+        model.language = "en"
+        model.darkAppearance = false
+        XCTAssertTrue(model.localizedMessage.contains("Listening"))
+        model.language = "zh"
+        model.darkAppearance = true
+        XCTAssertTrue(model.localizedMessage.contains("监听"))
+        XCTAssertEqual(model.settings, before)
+        XCTAssertEqual(harness.driver.snapshot().starts, 1)
+        XCTAssertTrue(harness.driver.snapshot().running)
+        model.stop()
+        await harness.waitUntilStopped()
+        harness.removeFiles()
+    }
+
+    @MainActor
     func testRepeatedStartIsIgnoredAndImmediateStopWins() async {
         let harness = LifecycleHarness()
         let model = harness.model
