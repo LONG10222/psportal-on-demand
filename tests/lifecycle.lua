@@ -48,7 +48,7 @@ local function run(spec)
         core_name='mock-core', api_port=19091, backend_port=18680, bind='192.168.50.2',
         port=18679, allowed_ip='192.168.50.30', local_dns='192.168.50.1',
         health_url='https://example.invalid/health', idle_seconds=spec.idle or 10,
-        wakeup_timeout=spec.timeout or 60}
+        wakeup_timeout=spec.timeout or 60,selection_mode=spec.selection_mode or 'auto',preferred_node=spec.preferred_node or ''}
     local constants = {EAGAIN=11, EWOULDBLOCK=11, EINPROGRESS=115, ECONNREFUSED=111,
         EINTR=4, ECHILD=10, ESRCH=3, SIGTERM=15, SIGINT=2, SIGHUP=1, SIGPIPE=13, SIGKILL=9}
     local function event(kind, detail)
@@ -117,7 +117,9 @@ local function run(spec)
         if not readable(self) then return nil, constants.EAGAIN end
         local data = self.kind=='client' and self.spec.data or (self.spec.response or response)
         if self.kind=='api' then
-            data='HTTP/1.1 200 OK\r\n\r\n'..(self.sent:find('GET /proxies/PORTAL ',1,true) and 'mock-group' or 'mock-node')
+            assert(self.sent:find('GET /proxies HTTP/1.1',1,true)==1,'child uses only read-only proxy map endpoint')
+            local body='{"mock-proxies":true}'
+            data='HTTP/1.1 200 OK\r\nContent-Length: '..#body..'\r\n\r\n'..body
         end
         if self.read_at > #data then self.eof_returned=true; return '' end
         local result = data:sub(self.read_at, self.read_at+limit-1)
@@ -148,6 +150,7 @@ local function run(spec)
     local n = {const=constants, bit={band=band}}
     function n.umask() return true end
     function n.signal() return true end
+    function n.getuid() return 0 end
     function n.getpid() return w.child_started_at and 901 or 900 end
     function n.getppid() return spec.parent_lost_at and w.time>=spec.parent_lost_at and 1 or 900 end
     function n.setsid() w.session_created=true; return not spec.setsid_failure end
@@ -234,7 +237,15 @@ local function run(spec)
         end
         return ready
     end
-    local memory_files={}
+    local memory_files={[cfg.api_header]='Authorization: Bearer fake-test-only\n'}
+    function n.open_flags(...) return table.concat({...},',') end
+    function n.open(path,flags,mode)
+        equal(flags,'wronly,creat,excl','cache uses exclusive creation')
+        equal(mode,'600','cache mode is private before writing')
+        if memory_files[path] then return nil end
+        memory_files[path]=''
+        return {write=function(_,data) memory_files[path]=memory_files[path]..data; return #data end,close=function() return true end}
+    end
     local function process_stat(pid,group)
         local fields={'S','1',tostring(group)}
         for i=4,19 do fields[i]='0' end
@@ -242,14 +253,18 @@ local function run(spec)
         return pid..' (mock lua) '..table.concat(fields,' ')..'\n'
     end
     local fs = {
-        readfile=function(path)
+        readfile=function(path,limit)
             if path=='mock-policy' then return 'mock-json' end
             if path=='/proc/900/stat' then
                 if w.child_started_at and spec.parent_lost_at and w.time>=spec.parent_lost_at then return nil end
                 return process_stat(900,900)
             end
             if path=='/proc/901/stat' and w.child_started_at then return process_stat(901,w.session_created and 901 or 900) end
-            return memory_files[path]
+            local value=memory_files[path]; return value and (limit and value:sub(1,limit) or value)
+        end,
+        lstat=function(path)
+            if path=='/mock' or path==cfg.run_dir then return {type='dir',uid=0,modestr='rwx------',size=0} end
+            if memory_files[path] then return {type='reg',uid=0,modestr='rw-------',size=#memory_files[path]} end
         end,
         stat=function(path) return memory_files[path] and {size=#memory_files[path]} or nil end,
         writefile=function(path,data) memory_files[path]=data; return true end,
@@ -265,11 +280,18 @@ local function run(spec)
         w.stops[#w.stops+1]=w.time; w.core_running=false; event('stop'); return 0
     end}
     local json = {parse=function(value)
-            if value=='mock-group' then w.health_queries=(w.health_queries or 0)+1; return {now='mock-route'} end
-            if value=='mock-node' then return {extra={[cfg.health_url]={alive=spec.child_healthy~=false,history={{delay=1}}}}} end
+            if value=='{"mock-proxies":true}' then
+                w.health_queries=(w.health_queries or 0)+1
+                local terminal={type=spec.child_type or 'Shadowsocks',extra={[cfg.health_url]={alive=spec.child_healthy~=false,history={{delay=spec.child_delay or 1}}}}}
+                return {proxies=spec.child_proxies or {PORTAL={type='Selector',now='AUTO',all={'AUTO'}},
+                    AUTO={type='Fallback',now='mock-route',all={'mock-route'}},['mock-route']=terminal}}
+            end
             equal(value,'mock-json','parse mock policy'); return cfg
         end,
-        stringify=function(value) w.statuses[#w.statuses+1]=copy(value); return 'mock-status' end}
+        stringify=function(value)
+            if value.version==1 then w.node_snapshot=copy(value); return '{"mock-cache":true}' end
+            w.statuses[#w.statuses+1]=copy(value); return 'mock-status'
+        end}
     local util = {ubus=function(_,_,_) return {[cfg.core_name]={instances={main={running=w.core_running,pid=2000}}}} end}
     local environment = {assert=assert,error=error,ipairs=ipairs,pairs=pairs,next=next,pcall=pcall,
         select=select,tonumber=tonumber,tostring=tostring,type=type,math=math,string=string,
@@ -289,7 +311,7 @@ local function run(spec)
         assert(mode=='a' or mode=='w','unexpected mock file mode')
         return {write=function(_,...) return true end,close=function() return true end}
     end}
-    environment.os={date=function() return 'mock-time' end,rename=function() return true end,
+    environment.os={time=function() return 1700000000+math.floor(w.time) end,date=function() return 'mock-time' end,rename=function() return true end,
         exit=function(code)
             if spec.child and w.child_started_at then w.child_exit=code; error(CHILD_EXIT,0) end
             error(spec.name..': launcher unexpectedly exited with '..tostring(code),0)
@@ -297,7 +319,7 @@ local function run(spec)
     local modules={nixio=n,['nixio.fs']=fs,['luci.jsonc']=json,['luci.util']=util,['luci.sys']=sys}
     environment.require=function(name)
         if modules[name] then return modules[name] end
-        assert(name=='protocol' or name=='lifecycle' or name=='dns' or name=='startup_owner','unmocked module: '..name)
+        assert(name=='protocol' or name=='lifecycle' or name=='dns' or name=='startup_owner' or name=='core_api' or name=='node_status','unmocked module: '..name)
         modules[name]=load_sandboxed(source..name..'.lua',environment)(); return modules[name]
     end
     load_sandboxed(source..'ondemand.lua',environment)()
@@ -449,6 +471,8 @@ check(child.listener.closed,'child closes inherited listener')
 check(child.clients[1].closed and child.clients[2].closed,'child closes all inherited clients')
 check(child.connections[1].closed,'child closes inherited LAN upstream')
 check((child.health_queries or 0)>0,'child checks selected route health')
+check(child.node_snapshot and child.node_snapshot.current.name=='mock-route','readiness child publishes actual node snapshot')
+equal(#child.node_snapshot.current.path,3,'readiness walks nested groups')
 
 local orphan=run{name='child checks parent before service start',child=true,parent_lost_at=0,until_time=5,
     clients={{at=0,data=external()}}}
@@ -460,6 +484,7 @@ local existing=run{name='existing core still requires healthy route',child=true,
 equal(existing.child_exit,1,'unhealthy existing core cannot satisfy readiness')
 equal(existing.starts,nil,'existing core is not redundantly started')
 check((existing.health_queries or 0)>0,'existing core route health is checked')
+check(existing.node_snapshot and not existing.node_snapshot.ready and #existing.node_snapshot.nodes==1,'unhealthy first wake caches node names without releasing readiness')
 check(existing.time>=existing.child_started_at+2,'unhealthy child actually exhausts readiness timeout')
 
 local lost=run{name='old child exits without stopping successor core',child=true,parent_lost_at=1.5,
@@ -467,5 +492,23 @@ local lost=run{name='old child exits without stopping successor core',child=true
 equal(lost.child_exit,1,'child fails after parent disappears')
 equal(lost.starts,1,'child started service before parent disappeared')
 equal(#lost.stops,1,'orphaned worker cannot stop a successor core')
+
+for _,kind in ipairs({'Direct','Compatible','Reject','Pass','DNS'}) do
+    local rejected=run{name='child rejects reserved terminal type '..kind,child=true,child_type=kind,timeout=1,until_time=5,
+        clients={{at=0,data=external()}}}
+    equal(rejected.child_exit,1,'special terminal never satisfies readiness: '..kind)
+    check(rejected.node_snapshot and not rejected.node_snapshot.ready,'failed readiness caches only unready state')
+end
+local wrong_fixed=run{name='fixed mode rejects different healthy terminal',child=true,selection_mode='fixed',preferred_node='another-node',
+    timeout=1,until_time=5,clients={{at=0,data=external()}}}
+equal(wrong_fixed.child_exit,1,'fixed actual-name mismatch fails closed')
+check(wrong_fixed.node_snapshot and not wrong_fixed.node_snapshot.ready,'wrong fixed route cache is marked unready')
+check(#wrong_fixed.node_snapshot.nodes==1,'missing fixed preference still caches replacement choices')
+local fixed=run{name='fixed mode resolves exact healthy terminal',child=true,selection_mode='fixed',preferred_node='mock-route',
+    timeout=1,until_time=5,clients={{at=0,data=external()}}}
+equal(fixed.child_exit,0,'exact fixed actual node passes readiness')
+local latest_failed=run{name='zero latest delay is not ready',child=true,child_delay=0,timeout=1,until_time=5,
+    clients={{at=0,data=external()}}}
+equal(latest_failed.child_exit,1,'zero latest delay fails closed')
 
 print('Passed '..assertions..' listener assertions across '..scenarios..' mocked scenarios')

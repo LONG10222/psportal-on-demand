@@ -31,10 +31,13 @@ check(policy.allowed_ip==options.client_ip and policy.idle_seconds==60,'one clie
 check(policy.port~=core.port and policy.api_port~=core.port,'separate listener/backend/API ports')
 check(core['proxy-groups'][1].type=='fallback','fallback group')
 check(core['proxy-groups'][1].filter:find('Hong',1,true)<core['proxy-groups'][1].filter:find('Japan',1,true),'HK before Japan')
-check(core['proxy-groups'][1].filter:sub(-2)=='.*','other regions remain available')
+check(core['proxy-groups'][1].filter:find('`^(?!REJECT$).*`^REJECT$',1,true)~=nil,'other regions precede reject sentinel')
 check(core['proxy-groups'][1].filter:find('\\bHK\\b',1,true)~=nil,'word-boundary regex survives serialization')
 check(core['proxy-groups'][1]['empty-fallback']=='REJECT','empty provider fails closed')
-check(core['proxy-providers'].SUBSCRIPTION.url==options.subscription_url,'only supplied subscription')
+check(core['proxy-providers'].SUBSCRIPTION.type=='file' and core['proxy-providers'].SUBSCRIPTION.url==nil,'private file provider; core cannot fetch subscription URL')
+check(core['proxy-providers'].SUBSCRIPTION['exclude-type']=='direct|compatible|pass|dns','provider direct types excluded before adapter parsing')
+check(core['proxy-groups'][1].proxies[1]=='REJECT' and #core['proxy-groups'][1].proxies==1,'static reject sentinel avoids implicit direct fallback')
+check(core.profile['store-selected']==false,'user intent is independent of core selection cache')
 local rules={}; for _,rule in ipairs(core.rules) do
     rules[rule]=true
     check(not rule:find(',DIRECT',1,true),'backend must not route client requests directly')

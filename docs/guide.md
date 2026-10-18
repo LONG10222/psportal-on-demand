@@ -24,7 +24,8 @@ Settings are stored in `/etc/config/portalproxy`. Use `portalproxy setup` to edi
 | `health_interval` | `60` | Node check interval, seconds |
 | `health_timeout` | `5000` | Node check timeout, milliseconds |
 | `health_url` | `https://connectivitycheck.gstatic.com/generate_204` | Check endpoint returning HTTP 204 |
-| `subscription_interval` | `21600` | Provider refresh interval, seconds |
+| `selection_mode` | `auto` | auto, preferred, fixed |
+| `preferred_node` | empty | Exact saved node name |
 | `doh_url` | `https://1.1.1.1/dns-query` | External DNS through the selected node |
 | `routing_mark` | `0` | Outbound socket mark |
 | `core_path` | `/usr/libexec/portalproxy/mihomo` | Independent core executable |
@@ -49,7 +50,7 @@ Portal background requests, keepalives, and failed retries also count as activit
 
 A Mihomo `fallback` group selects Hong Kong first, Japan second, and other regions last. Nodes within each region keep their subscription order. Region matching uses node names: Chinese names, HK/JP tags, flags, Hong Kong, and Japan. Requests fail when no node is available.
 
-Health checks and provider refresh run only while the core is active. Subscriptions download directly; use DNS servers reachable on your network for `bootstrap_dns`. The setup wizard can import existing YAML as an initial provider cache.
+Health checks run only while active. Subscription downloads are now explicit via `portalproxy subscription-update`, with pinned HTTPS/public IPv4 and a file provider. A running core may reload changed files immediately. See [node preferences](node-preferences.zh-CN.md).
 
 ## OpenClash
 

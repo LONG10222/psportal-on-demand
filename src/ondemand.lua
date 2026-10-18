@@ -9,6 +9,8 @@ local protocol = require 'protocol'
 local lifecycle = require 'lifecycle'
 local dns = require 'dns'
 local ownership = require 'startup_owner'
+local core_api = require 'core_api'
+local node_status = require 'node_status'
 local policy_path = assert(arg[1], 'policy required')
 local cfg = assert(json.parse(assert(fs.readfile(policy_path))), 'Invalid policy')
 n.umask('077')
@@ -71,46 +73,13 @@ local function stop_core(reason)
     log('core_off reason='..reason..' external_idle_seconds='..tostring(last_external>0 and now()-last_external or 0))
     save(reason)
 end
-local function api_get(path)
-    local f=io.open(cfg.api_header,'r'); if not f then return nil end
-    local auth=f:read('*l'); f:close()
-    local s=n.socket('inet','stream')
-    if not s then return nil end
-    if not s:connect('127.0.0.1',cfg.api_port) then s:close(); return nil end
-    s:send('GET '..path..' HTTP/1.1\r\nHost: localhost\r\n'..auth..'\r\nConnection: close\r\n\r\n')
-    s:setblocking(false)
-    local response=''
-    for _=1,12 do
-        local polls={{fd=s,events=IN}}; local count=n.poll(polls,100)
-        if count and count>0 then
-            local data=s:recv(8192)
-            if data=='' then break end
-            if data then response=response..data end
-        end
-        if #response>65536 then break end
-    end
-    s:close()
-    local split=response:find('\r\n\r\n',1,true); if not split then return nil end
-    local headers,body=response:sub(1,split-1),response:sub(split+4)
-    if headers:lower():find('transfer-encoding: chunked',1,true) then
-        local chunks={}; local p=1
-        while true do
-            local at=body:find('\r\n',p,true); if not at then return nil end
-            local size=tonumber(body:sub(p,at-1):match('^%x+'),16); if not size then return nil end
-            if size==0 then break end
-            p=at+2; if #body<p+size-1 then return nil end
-            chunks[#chunks+1]=body:sub(p,p+size-1); p=p+size+2
-        end
-        body=table.concat(chunks)
-    end
-    return json.parse(body)
-end
-local function route_ready()
-    local g=api_get('/proxies/PORTAL'); if not g or not g.now then return false end
-    local encoded=g.now:gsub('[^%w%-%._~]',function(c) return string.format('%%%02X',c:byte()) end)
-    local p=api_get('/proxies/'..encoded)
-    local h=p and p.extra and p.extra[cfg.health_url]
-    return h and h.alive and h.history and #h.history>0 and h.history[#h.history].delay>0
+local function route_ready(owner)
+    local snapshot=node_status.collect(cfg)
+    if not snapshot or not ownership.valid(cfg,owner) then return false end
+    -- Readiness children alone refresh automatically. Cached CLI reads and
+    -- explicit controller reads never renew the listener's external idle timer.
+    if not node_status.write(cfg,snapshot) then return false end
+    return snapshot.ready and ownership.valid(cfg,owner)
 end
 -- This function runs only in the readiness child. It may block on procd/API.
 local function await_core(owner)
@@ -120,10 +89,8 @@ local function await_core(owner)
     local deadline=now()+(cfg.wakeup_timeout or 12)
     while now()<deadline do
         if not ownership.valid(cfg,owner) then return false end
-        local s=n.socket('inet','stream')
-        local connected=s and s:connect('127.0.0.1',cfg.backend_port)
-        if s then s:close() end
-        if connected and route_ready() then return ownership.valid(cfg,owner) end
+        local connected=core_api.probe(cfg.backend_port,{timeout_ms=500})
+        if connected and route_ready(owner) then return ownership.valid(cfg,owner) end
         n.nanosleep(0,100000000)
     end
     return false

@@ -19,6 +19,7 @@ if [ -z "$ROOT" ]; then
 fi
 rm -f "$ROOT/etc/init.d/portalproxy" "$ROOT/etc/init.d/portalproxy-core" "$ROOT/usr/sbin/portalproxy"
 rm -rf "$ROOT/usr/libexec/portalproxy"
+rm -f "$ROOT/usr/lib/lua/luci/controller/portalproxy.lua" "$ROOT/usr/lib/lua/luci/model/cbi/portalproxy.lua"
 if [ "$PURGE" = 1 ]; then
     rm -f "$ROOT/etc/config/portalproxy"
     rm -rf "$ROOT/etc/portalproxy"

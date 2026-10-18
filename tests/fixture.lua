@@ -22,8 +22,8 @@ while true do
                 if l.role=='lan' then status,body='200 OK','LAN fixture\n'
                 elseif l.role=='api' then
                     status='200 OK'
-                    if request:find('GET /proxies/PORTAL ',1,true) then body=json.stringify({now='HK fixture',type='Fallback'})
-                    else body=json.stringify({extra={[c.health_url]={alive=true,history={{delay=1}}}}}) end
+                    body=json.stringify({proxies={PORTAL={type='Fallback',now='HK fixture',all={'HK fixture'}},
+                        ['HK fixture']={type='Shadowsocks',extra={[c.health_url]={alive=true,history={{delay=1}}}}}}})
                 end
                 local response='HTTP/1.1 '..status..'\r\nContent-Length: '..#body..'\r\nConnection: close\r\n\r\n'..body
                 local offset=0

@@ -1,0 +1,8 @@
+.venv-build/
+build/
+dist/
+release/
+__pycache__/
+*.py[cod]
+config.json
+runtime/

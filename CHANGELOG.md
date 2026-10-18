@@ -1,3 +1,11 @@
+## Unreleased: subscription and node preferences
+
+- Persist auto/preferred/fixed intent independently, with exact-name filters and explicit REJECT sentinel
+- Add optional authenticated legacy LuCI controls, root CLI and cache-only node status
+- Resolve actual terminal nodes before readiness, with fixed-name equality and no direct terminal
+- Explicit bounded/pinned HTTPS subscription fetch replaces automatic HTTP provider; live file reload can change routes
+- Mock-only verification; actual OpenWrt/Mihomo/LuCI acceptance and deployment remain separate
+
 # Changelog
 
 ## Unreleased

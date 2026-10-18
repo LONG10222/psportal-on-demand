@@ -1,0 +1,30 @@
+# INACTIVE DRAFT: intentionally outside .github/workflows.
+# Review before activation. No publishing/artifact-upload step is included.
+name: Portable native build (draft)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-14, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: portable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Inspect build platform and Tk imports
+        run: python -c "import sys, platform, tkinter; print(sys.version); print(platform.platform()); print(platform.machine()); print(tkinter.TkVersion)"
+      - name: Install pinned build dependency from package registry
+        run: python -m pip install -r requirements-build.txt
+      - name: Run tests and build local archive
+        run: python build.py
+      # Native UI, firewall, real Mihomo, Portal and signing tests remain manual.
+      # Add architecture-specific jobs only after testing those targets.

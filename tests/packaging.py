@@ -38,6 +38,16 @@ class PackagingTests(unittest.TestCase):
             subprocess.run(['sh', str(ROOT / 'uninstall.sh'), '--root', str(target), '--purge'], check=True, stdout=subprocess.PIPE)
             self.assertFalse(configuration.exists())
 
+    def test_optional_luci_sources_and_commands(self):
+        for relative in ('controller/portalproxy.lua', 'model/cbi/portalproxy.lua'):
+            self.assertTrue((ROOT / 'luci' / relative).is_file())
+            self.assertIn(relative, (ROOT / 'install.sh').read_text())
+            self.assertIn(relative, (ROOT / 'uninstall.sh').read_text())
+        shell = (ROOT / 'files/portalproxy').read_text()
+        for command in ('nodes)', 'nodes-refresh)', 'prefer)', 'subscription-update)', 'apply)'):
+            self.assertIn(command, shell)
+        self.assertNotIn('subscription_url', (ROOT / 'src/nodes.lua').read_text())
+
     def test_repository_has_no_runtime_payloads(self):
         forbidden = {'.env', 'api-header', 'api-secret', 'status.json', 'policy.json', 'config.yaml'}
         for path in ROOT.rglob('*'):
