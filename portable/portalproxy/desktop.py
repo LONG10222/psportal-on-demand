@@ -349,6 +349,12 @@ class DesktopApp:
         self._imported_url = None
         self._imported_file = None
         self.subscription_message = ''
+        self.core_message = ''
+        self.setting_up = False
+        self.setup_events = queue.Queue()
+        self.discovery_events = queue.Queue()
+        self._discovery_pending = False
+        self._next_discovery = 0
         self.import_events = queue.Queue()
         self.command_id = 0
         self.pending_command = None
@@ -363,9 +369,9 @@ class DesktopApp:
         self.inputs = []
         self.engine_inputs = {}
         self.profile_selection_inputs = []
-        from .existing_proxy import detect_system_proxy, read_clash_accounting
+        from .existing_proxy import detect_system_proxy
         self.existing_proxy = detect_system_proxy()
-        self.clash_info = None  # Read account metadata only after explicitly choosing linked mode.
+        self.clash_info = None
         from .desktop_view import DesktopView
         self.view = DesktopView(self)
         self.load()
@@ -504,7 +510,8 @@ class DesktopApp:
             self.backend.log('Appearance preference could not be saved.')
 
     def engine_controls(self):
-        running = (self.backend.process is not None and self.backend.process.poll() is None) or self.importing
+        running = ((self.backend.process is not None and self.backend.process.poll() is None)
+                   or self.importing or getattr(self, 'setting_up', False))
         mode = self.vars['engine_mode'].get() if 'engine_mode' in self.vars else 'external'
         for key, widgets in self.engine_inputs.items():
             active = mode == ('embedded' if key == 'native_path' else 'external')
@@ -531,6 +538,11 @@ class DesktopApp:
         defaults = dict(config.DEFAULTS, listen_host='', allowed_clients=[], core_path='', subscription_url='',
                         native_path=str(config.bundled_native_path() or ''))
         defaults.update(self.raw)
+        from .core_setup import discover_core
+        discovered = discover_core(self.path, defaults.get('core_path', ''))
+        if discovered:
+            defaults['core_path'] = discovered
+        self.core_message = ''
         source = self.raw.get('profile_file') or self.raw.get('subscription_file')
         self._imported_url = None
         self._imported_file = None
@@ -570,6 +582,89 @@ class DesktopApp:
         self.engine_controls()
         self.view.refresh()
 
+    def setup_core(self):
+        """Reuse one stable core, or explicitly download a verified Windows core."""
+        if self.closing or self.importing or self.setting_up or self.backend.process is not None:
+            return
+        from .core_setup import discover_core, can_install, install_core, RELEASES
+        found = discover_core(self.path)
+        if found:
+            self.vars['core_path'].set(found)
+            self.core_message = 'Core selected automatically. Start sharing when ready.'
+            self.view.refresh()
+            return
+        if not can_install():
+            import webbrowser
+            webbrowser.open(RELEASES)
+            self.core_message = 'Choose the Mihomo executable for your system from the official releases.'
+            self.view.refresh()
+            return
+        self.setting_up = True
+        self.core_message = 'Downloading and verifying Mihomo…'
+        self.running_controls(True)
+        self.stop_button.configure(state='disabled')
+        path = self.path
+        def worker():
+            try:
+                result = install_core(path)
+            except Exception:
+                self.setup_events.put((path, None))
+            else:
+                self.setup_events.put((path, result))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def open_clash(self):
+        from .core_setup import discover_clash
+        executable = discover_clash()
+        if executable:
+            try:
+                subprocess.Popen([str(executable)], creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            except OSError:
+                self.core_message = 'Could not open Clash. Open it manually and enable its system proxy.'
+                self.view.refresh()
+        else:
+            import webbrowser
+            webbrowser.open('https://github.com/clash-verge-rev/clash-verge-rev/releases')
+
+    def _poll_setup(self):
+        try:
+            path, result = self.setup_events.get_nowait()
+        except queue.Empty:
+            return
+        self.setting_up = False
+        if path == self.path:
+            if result:
+                self.vars['core_path'].set(result)
+                self.core_message = 'Core selected automatically. Start sharing when ready.'
+            else:
+                self.core_message = 'Core setup failed. Check your network, retry or choose a local core.'
+        self.running_controls(False)
+
+    def _poll_discovery(self):
+        """Refresh cached Clash accounting off the Tk thread; never call its controller."""
+        try:
+            proxy, info = self.discovery_events.get_nowait()
+        except queue.Empty:
+            pass
+        else:
+            self._discovery_pending = False
+            self.existing_proxy, self.clash_info = proxy, info
+            if self.raw.get('existing_proxy_port'):
+                self.view.subscription_info = info
+            self.view.refresh()
+        if not self.closing and not self._discovery_pending and time.monotonic() >= self._next_discovery:
+            self._discovery_pending = True
+            self._next_discovery = time.monotonic() + 10
+            def worker():
+                from .existing_proxy import detect_system_proxy, read_clash_accounting
+                try:
+                    proxy = detect_system_proxy()
+                    info = read_clash_accounting() if proxy else None
+                except Exception:
+                    proxy, info = None, None
+                self.discovery_events.put((proxy, info))
+            threading.Thread(target=worker, daemon=True).start()
+
     def choose_config(self):
         from tkinter import filedialog, messagebox
         if self.dirty and not messagebox.askyesno(self._t('Discard unsaved edits?'), self._t('Open another configuration and discard these unsaved edits?'), parent=self.root):
@@ -583,6 +678,7 @@ class DesktopApp:
         from tkinter import filedialog
         name = filedialog.askopenfilename(title=self._t('Choose your verified Mihomo executable'), parent=self.root)
         if name:
+            self.core_message = ''
             self.vars['core_path'].set(name)
 
     def choose_provider(self):
@@ -659,16 +755,17 @@ class DesktopApp:
         return 'break'
 
     def quick_start(self):
-        if self.importing or self.backend.process is not None:
+        if self.importing or self.setting_up or self.backend.process is not None:
             return
         existing = self.raw.get('existing_proxy_port')
-        if existing:
-            if self._configure_lan((existing,)):
-                self.start()
-                if self.backend.process is not None:
-                    self.view.show('LAN sharing')
+        if existing and not self.vars['subscription_url'].get().strip():
+            self.use_existing_proxy()
             return
         if not self.subscription_ready():
+            if (self.existing_proxy and not self.vars['subscription_url'].get().strip()
+                    and not self.vars['profile_file'].get().strip() and not self.vars['subscription_file'].get().strip()):
+                self.use_existing_proxy()
+                return
             self.subscription_message = 'Paste a subscription first. Importing never starts sharing.'
             self.view.refresh()
             return
@@ -706,7 +803,7 @@ class DesktopApp:
             return False
 
     def use_existing_proxy(self):
-        if self.importing or self.backend.process is not None: return
+        if self.importing or self.setting_up or self.backend.process is not None: return
         from .existing_proxy import detect_system_proxy, read_clash_accounting
         self.existing_proxy = detect_system_proxy()
         if not self.existing_proxy:
@@ -718,6 +815,7 @@ class DesktopApp:
         self.vars['engine_mode'].set('external')
         self.vars['profile_file'].set('')
         self.vars['subscription_file'].set('')
+        self.vars['subscription_url'].set('')
         self.vars['selection_mode'].set('auto')
         self.vars['preferred_node'].set('')
         self.raw['existing_proxy_port'] = port
@@ -967,7 +1065,7 @@ class DesktopApp:
 
     def start(self):
         from tkinter import messagebox
-        if self.closing or self.importing:
+        if self.closing or self.importing or self.setting_up:
             return
         if self.backend.process is not None and self.backend.process.poll() is None:
             return
@@ -1060,6 +1158,8 @@ class DesktopApp:
         self.view.refresh()
 
     def poll(self):
+        self._poll_setup()
+        self._poll_discovery()
         self._poll_import()
         self._poll_updates()
         self._poll_runtime()

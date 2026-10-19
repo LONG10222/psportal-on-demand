@@ -24,6 +24,7 @@ class SubscriptionWorkflowTests(unittest.TestCase):
         self.path.write_text(json.dumps(dict(core_path=sys.executable)), encoding='utf-8')
         with patch('portalproxy.existing_proxy.detect_system_proxy', return_value=None):
             self.app = DesktopApp(self.root, self.path)
+        self.app._next_discovery = float('inf')  # These fixtures inject discovery results explicitly.
         self.app.set_language('zh')
         self.addCleanup(self.close_window)
         self.url = 'https://fixture.example/subscription?token=never-log-this'
@@ -183,7 +184,9 @@ class SubscriptionWorkflowTests(unittest.TestCase):
                                  self.root.winfo_rooty() + self.root.winfo_height())
             self.assertEqual(str(button['state']), 'normal')
         self.app.raw['existing_proxy_port'] = 17897
-        with patch.object(self.app, '_configure_lan', return_value=True) as configure, patch.object(self.app, 'start') as start:
+        for key in ('subscription_url', 'profile_file', 'subscription_file'):
+            self.app.vars[key].set('')
+        with patch('portalproxy.existing_proxy.detect_system_proxy', return_value={'host':'127.0.0.1','port':17897}), patch.object(self.app, '_configure_lan', return_value=True) as configure, patch.object(self.app, 'start') as start:
             self.app.quick_start()
         configure.assert_called_once_with((17897,)); start.assert_called_once()
 
@@ -199,6 +202,67 @@ class SubscriptionWorkflowTests(unittest.TestCase):
         self.assertNotIn('192.168.50.2', self.app.view.guide_var.get())
         self.assertEqual(str(self.app.view.guide_copy_button['state']), 'disabled')
         self.assertEqual(str(self.app.view.guide_export_button['state']), 'disabled')
+
+    def test_auto_link_uses_current_proxy_but_never_steals_pending_subscription(self):
+        self.app.existing_proxy = {'host':'127.0.0.1', 'port':17897}
+        current = {'host':'127.0.0.1', 'port':17898}
+        with patch('portalproxy.existing_proxy.detect_system_proxy', return_value=current), \
+                patch.object(self.app, '_configure_lan', return_value=True) as configure, \
+                patch.object(self.app, 'start') as start:
+            self.app.quick_start()
+            configure.assert_called_once_with((17898,))
+            start.assert_called_once()
+            self.assertEqual(self.app.raw['existing_proxy_port'], 17898)
+        self.app.vars['subscription_url'].set(self.url)
+        with patch.object(self.app, 'use_existing_proxy') as link:
+            self.app.quick_start()
+            link.assert_not_called()
+            self.assertEqual(self.app.vars['subscription_url'].get(), self.url)
+        self.app.raw.pop('existing_proxy_port')
+        with patch.object(self.app, 'use_existing_proxy') as link:
+            self.app.quick_start()
+            link.assert_not_called()
+
+    def test_account_refresh_keeps_direct_subscription_and_disables_auto_link_on_pending_url(self):
+        self.paste()
+        direct = self.app.view.subscription_info
+        proxy = {'host':'127.0.0.1', 'port':17897}
+        info = {'upload':10, 'download':20, 'total':999, 'source_kind':'clash-cache'}
+        self.app._next_discovery = float('inf')
+        self.app.discovery_events.put((proxy, info))
+        self.app._poll_discovery()
+        self.assertIs(self.app.view.subscription_info, direct)
+        self.assertEqual(self.app.clash_info, info)
+        self.assertIn('缓存', self.app.view.clash_var.get())
+        self.app.raw['existing_proxy_port'] = proxy['port']
+        self.app.discovery_events.put((proxy, None))
+        self.app._poll_discovery()
+        self.assertIsNone(self.app.view.subscription_info)
+        self.assertIn('暂时没有', self.app.view.clash_var.get())
+
+    def test_one_click_setup_is_single_flight_and_never_starts_listener(self):
+        entered, release = threading.Event(), threading.Event()
+        def install(path):
+            entered.set()
+            if not release.wait(5): raise TimeoutError()
+            return sys.executable
+        with patch('portalproxy.core_setup.discover_core', return_value=None), \
+                patch('portalproxy.core_setup.can_install', return_value=True), \
+                patch('portalproxy.core_setup.install_core', side_effect=install) as download:
+            try:
+                self.app.setup_core()
+                self.assertTrue(entered.wait(3))
+                self.app.setup_core(); self.app.quick_start()
+                self.assertEqual(download.call_count, 1)
+                self.assertEqual(str(self.app.view.quick_button['state']), 'disabled')
+            finally:
+                release.set()
+            deadline = time.monotonic() + 5
+            while self.app.setting_up and time.monotonic() < deadline:
+                self.root.update(); time.sleep(.01)
+        self.assertFalse(self.app.setting_up)
+        self.assertIsNone(self.app.backend.process)
+        self.assertEqual(self.app.vars['core_path'].get(), sys.executable)
 
 
 if __name__ == '__main__':

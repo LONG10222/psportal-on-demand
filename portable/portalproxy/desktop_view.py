@@ -452,6 +452,8 @@ class DesktopView:
         self.choose_core_button = self.button(core, 'Choose Mihomo…', command=self.app.choose_core)
         self.choose_core_button.pack(side='left')
         self.app.engine_inputs['core_path'].append(self.choose_core_button)
+        self.auto_core_button = self.button(core, 'Set up automatically', command=self.app.setup_core)
+        self.auto_core_button.pack(side='left', padx=(8, 0))
         self.core_note_var = tk.StringVar()
         ttk.Label(core, textvariable=self.core_note_var, style='Portal.CardNote.TLabel', wraplength=440).pack(side='left', padx=12)
         self.core_setup = core
@@ -481,14 +483,14 @@ class DesktopView:
             ttk.Label(frame, textvariable=var, style='Portal.Metric.TLabel', wraplength=200).pack(anchor='w', pady=(14, 0))
         metrics.grid_remove()
         hero = ttk.Frame(page, padding=18, style='Portal.Card.TFrame')
-        hero.grid(row=1, column=0, sticky='ew')
+        hero.grid(row=2, column=0, sticky='ew', pady=(12, 0))
         self.hero_var = tk.StringVar()
         self.hero_note_var = tk.StringVar()
         ttk.Label(hero, textvariable=self.hero_var, style='Portal.Metric.TLabel', wraplength=690).pack(anchor='w')
         ttk.Label(hero, textvariable=self.hero_note_var, style='Portal.CardNote.TLabel', wraplength=690,
                   justify='left').pack(anchor='w', pady=(8, 0))
         panel = self.runtime_panel = ttk.Frame(page, padding=18, style='Portal.Card.TFrame')
-        panel.grid(row=2, column=0, sticky='ew', pady=18)
+        panel.grid(row=3, column=0, sticky='ew', pady=18)
         panel.columnconfigure(0, weight=1)
         self.label(panel, 'Connection address', style='Portal.CardNote.TLabel').grid(row=0, column=0, sticky='w')
         self.address_var = tk.StringVar()
@@ -502,13 +504,22 @@ class DesktopView:
         self.button(actions, 'Copy address', command=self.app.copy_address).pack(fill='x')
         self.nodes_button = self.button(actions, 'Proxies', command=lambda: self.show('Proxies'))
         self.nodes_button.pack(fill='x', pady=(8, 0))
+        self.runtime_subscription_label = ttk.Label(panel, textvariable=self.subscription_var,
+            style='Portal.CardNote.TLabel', wraplength=680, justify='left')
+        self.runtime_subscription_label.grid(row=4, column=0, columnspan=2, sticky='w', pady=(14, 0))
         note = ttk.Frame(page, padding=22, style='Portal.Card.TFrame')
-        note.grid(row=3, column=0, sticky='ew')
+        note.grid(row=5, column=0, sticky='ew')
         self.label(note, 'Opening or switching language never starts a connection.', style='Portal.CardNote.TLabel', wraplength=680).pack(anchor='w')
         self.label(note, 'Stop the listener before editing configuration. Language and navigation stay available.',
                    style='Portal.CardNote.TLabel', wraplength=680).pack(anchor='w', pady=(10, 0))
         panel.grid_remove()
         note.grid_remove()
+        self.clash_card = ttk.Frame(page, padding=18, style='Portal.Card.TFrame')
+        self.clash_card.grid(row=4, column=0, sticky='ew', pady=(12, 0))
+        self.clash_var = tk.StringVar()
+        ttk.Label(self.clash_card, textvariable=self.clash_var, style='Portal.Card.TLabel',
+                  wraplength=680, justify='left').pack(anchor='w')
+        self.button(self.clash_card, 'Open Clash', command=self.app.open_clash).pack(anchor='w', pady=(10, 0))
 
     def set_advanced(self, enabled):
         self.advanced = bool(enabled)
@@ -707,9 +718,11 @@ class DesktopView:
             'Paste once to import and save. Sharing starts only when you click Start sharing.'))
         from pathlib import Path
         core_path = self.app.vars['core_path'].get().strip()
-        self.core_note_var.set(self.tr('Core ready: {name}', name=Path(core_path).name)
-            if core_path and Path(core_path).is_file() else self.tr('Choose the Windows/macOS/Linux Mihomo executable before starting.'))
-        idle = not self.app.importing and self.app.backend.process is None
+        self.core_note_var.set(self.tr(self.app.core_message) if self.app.core_message else
+            self.tr('Core ready: {name}', name=Path(core_path).name)
+            if core_path and Path(core_path).is_file() else self.tr('Core missing. Click Set up automatically or choose a local executable.'))
+        idle = not self.app.importing and not self.app.setting_up and self.app.backend.process is None
+        self.auto_core_button.configure(state='normal' if idle else 'disabled')
         sharing = self.app.backend.ready and self.app.backend.stopping_since is None
         for button in (self.guide_copy_button, self.guide_export_button):
             button.configure(state='normal' if sharing else 'disabled')
@@ -717,16 +730,25 @@ class DesktopView:
         self.start_var.set(self.tr('Start listener' if self.advanced else 'Start sharing'))
         mode = self.app.vars['engine_mode'].get()
         executable = self.app.vars['native_path' if mode == 'embedded' else 'core_path'].get().strip()
-        can_start = self.advanced or self.app.raw.get('existing_proxy_port') or (
+        configured_link = self.app.raw.get('existing_proxy_port') and not self.app.vars['subscription_url'].get().strip()
+        can_start = self.advanced or configured_link or (
             self.app.subscription_ready() and executable and Path(executable).is_file())
+        auto_link = (self.app.existing_proxy and not self.app.vars['subscription_url'].get().strip()
+                and not self.app.vars['profile_file'].get().strip() and not self.app.vars['subscription_file'].get().strip())
+        if auto_link:
+            can_start = True
         self.quick_button.configure(state='normal' if idle and can_start else 'disabled')
         self.refresh_button.configure(state='normal' if idle and self.app.vars['subscription_url'].get().strip() else 'disabled')
-        if self.app.raw.get('existing_proxy_port') or self.app.vars['engine_mode'].get() != 'external':
+        if self.app.raw.get('existing_proxy_port') or auto_link or self.app.vars['engine_mode'].get() != 'external':
             self.core_setup.grid_remove()
         else:
             self.core_setup.grid()
         from .subscription_info import display, usage_percent
         self.subscription_var.set(display(self.subscription_info, self.language))
+        if self.app.raw.get('existing_proxy_port') or not self.subscription_info:
+            self.runtime_subscription_label.grid_remove()
+        else:
+            self.runtime_subscription_label.grid()
         percent = usage_percent(self.subscription_info)
         if percent is None:
             self.quota_bar.grid_remove()
@@ -735,6 +757,22 @@ class DesktopView:
             self.quota_bar.grid()
         existing = self.app.existing_proxy
         self.link_var.set(self.tr('Detected local HTTP proxy: {host}:{port}', **existing) if existing else self.tr('No local HTTP system proxy detected.'))
+        linked = bool(self.app.raw.get('existing_proxy_port'))
+        if self.app.backend.process is None:
+            self.import_card.grid(row=1 if auto_link or linked else 0)
+        self.clash_card.grid(row=0 if auto_link or linked else 4)
+        if existing or linked:
+            self.clash_card.grid()
+            message = self.tr('Existing proxy selected; nodes and core are managed in Clash.' if linked else
+                'Local proxy detected. Start sharing to reuse it without importing a subscription or choosing a core.')
+            if self.app.clash_info:
+                message += '\n\n' + display(self.app.clash_info, self.language)
+            else:
+                message += '\n' + self.tr('Clash quota is unavailable. Open Clash to update its subscription; cached details refresh every 10 seconds.')
+            self.clash_var.set(message)
+        else:
+            self.clash_card.grid()
+            self.clash_var.set(self.tr('No local proxy detected. Paste your subscription above, or open Clash and enable its system proxy.'))
         self.quick_note_var.set(self.tr('Detect the LAN address and keep port 10081 when available. Devices on the current local subnet will be allowed to connect.') +
             ('\n' + self.tr('Current local subnet: {subnet}', subnet=self.setup_network) if self.setup_network else ''))
         self.title.set(self.tr(self.page))

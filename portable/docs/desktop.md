@@ -1,6 +1,6 @@
 # Portable desktop app: Linux-priority preview, Windows and macOS build paths
 
-This is an implementation and native build path, not a signed or fully native-accepted release. One Tk desktop window can select either the established Python listener with separate Mihomo (`external`, the default), or the experimental shared native engine (`embedded`). External mode still uses a separately supplied trusted Mihomo executable with `-post-up` readiness support (tested with official v1.19.32). Embedded mode uses the project's native executable with Mihomo adapters linked into that one process. No installer, TUN adapter, administrator service, system proxy, router change, firewall change, automatic startup, or downloaded core is added by the app.
+This is an implementation and native build path, not a signed or fully native-accepted release. One Tk desktop window can select either the established Python listener with separate Mihomo (`external`, the default), or the experimental shared native engine (`embedded`). External mode still uses a separately supplied trusted Mihomo executable with `-post-up` readiness support (tested with official v1.19.32). Embedded mode uses the project's native executable with Mihomo adapters linked into that one process. No installer, TUN adapter, administrator service, system proxy, router change, firewall change or automatic startup is added by the app. An explicit automatic-setup action can download checksum-pinned official Mihomo v1.19.32 on Windows x64; opening the app never downloads or starts it.
 
 The application must remain running on an awake computer on the Portal's LAN. Normal Portal use permits only configured exact private LAN IPv4 clients. An optional development-only mode binds to `127.0.0.1` and requires the sole allowed client to be `127.0.0.1`; a real Portal cannot reach that loopback listener. Keep the Portal's IP stable with an existing DHCP reservation. The local Mihomo proxy and controller bind to loopback; the Portal-facing HTTP listener binds only to the configured private LAN address.
 
@@ -104,3 +104,12 @@ private session directory, as documented in [runtime controls](runtime-controls.
 - [PyInstaller executable/runtime paths](https://pyinstaller.org/en/stable/runtime-information.html)
 - [PyInstaller external-process environment guidance](https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html#launching-external-programs-from-the-frozen-application)
 - [Python subprocess process/pipe handling](https://docs.python.org/3/library/subprocess.html)
+
+
+## Automatic Windows setup
+
+The desktop keeps an explicitly configured core, then searches its managed versioned core directory, a frozen app sibling Mihomo and known Clash Verge stable-core install locations. It never chooses alpha builds or searches arbitrary PATH entries. Missing explicit paths are reported instead of silently replaced. “Set up automatically” repairs the choice, reusing a known stable executable first; otherwise Windows x64 downloads the official compatible v1.19.32 archive and verifies pinned SHA-256 before an atomic install. Other systems open the official release page. Download failure keeps the previous executable, gives inline retry/manual-selection guidance, and never starts sharing.
+
+With no imported or pending subscription, Start sharing automatically reuses a detected loopback system HTTP proxy. Every linked restart re-detects its current port. A pending new subscription is never replaced by this automatic choice. Existing Clash retains its core and node controls. “Open Clash” opens the installed Windows Clash Verge, or its official releases if unavailable.
+
+A separate existing-client card refreshes read-only Clash Verge subscription cache data every 10 seconds off the UI thread, including upload/download, used/total/remaining quota, expiry, remaining days and cache timestamp. It remains visible during sharing and cannot overwrite an independent subscription's accounting. Cache figures are explicitly not live traffic rates; other Clash distributions may not provide this cache format. Direct subscription accounting also remains visible after starting.

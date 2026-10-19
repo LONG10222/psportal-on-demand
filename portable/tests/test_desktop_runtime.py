@@ -298,7 +298,7 @@ class ViewNavigationTests(unittest.TestCase):
 class DesktopLifecycleTests(unittest.TestCase):
     def app(self):
         app = object.__new__(DesktopApp)
-        app.closing = app.importing = False
+        app.closing = app.importing = app.setting_up = False
         app.raw = {}
         app.path = Path('/unused-offline-fixture.json')
         app.vars = {'subscription_url': SimpleNamespace(get=lambda: '')}

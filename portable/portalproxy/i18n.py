@@ -6,6 +6,20 @@ from pathlib import Path
 import tempfile
 
 ZH = {
+    '{days} days remaining': '剩余 {days} 天',
+    'Uploaded: {upload} · Downloaded: {download}': '已上传：{upload} · 已下载：{download}',
+    'No local proxy detected. Paste your subscription above, or open Clash and enable its system proxy.': '未检测到本机代理。请在上方粘贴订阅，或打开 Clash 并开启它的系统代理；本页会自动识别。',
+    'Could not open Clash. Open it manually and enable its system proxy.': '无法打开 Clash，请手动打开并开启它的系统代理。',
+    'Set up automatically': '自动配置核心',
+    'Open Clash': '打开 Clash',
+    'Core missing. Click Set up automatically or choose a local executable.': '缺少 Mihomo 核心，请点击“自动配置核心”，也可以手动选择。',
+    'Core selected automatically. Start sharing when ready.': '已自动选择稳定版核心，可以启动共享。',
+    'Downloading and verifying Mihomo…': '正在下载并校验 Mihomo，请稍候…',
+    'Core setup failed. Check your network, retry or choose a local core.': '核心配置失败，请检查网络后重试，或手动选择本地核心。',
+    'Choose the Mihomo executable for your system from the official releases.': '已打开官方发布页，请下载对应系统的 Mihomo 并选择其可执行文件。',
+    'Existing proxy selected; nodes and core are managed in Clash.': '正在复用已有代理，节点与核心由 Clash 管理，无需重复配置。',
+    'Local proxy detected. Start sharing to reuse it without importing a subscription or choosing a core.': '检测到本机代理。未导入订阅时，点击“启动共享”即可自动复用，无需再次导入订阅或选择核心。',
+    'Clash quota is unavailable. Open Clash to update its subscription; cached details refresh every 10 seconds.': '暂时没有可读取的 Clash 订阅额度，请打开 Clash 更新订阅；本页每 10 秒自动刷新缓存信息。',
     '1. Import subscription · 2. Start sharing': '1. 导入订阅　2. 启动共享',
     'Paste link': '粘贴链接', 'Start sharing': '启动共享',
     'Refresh subscription': '刷新订阅', 'Choose Mihomo…': '选择 Mihomo 核心…',
