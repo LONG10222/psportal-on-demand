@@ -263,7 +263,9 @@ def discover_lan() -> dict:
         try:
             def read(command):
                 return subprocess.run(command, capture_output=True, text=True, encoding='utf-8',
-                                      timeout=5, check=True, shell=False).stdout
+                                      timeout=5, check=True, shell=False,
+                                      **({'creationflags': getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)}
+                                         if sys.platform == 'win32' else {})).stdout
             if sys.platform == 'win32':
                 return parse_windows_interfaces(read(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', _WINDOWS_LAN_QUERY]))
             return parse_linux_interfaces(read(['ip', '-j', '-4', 'address', 'show']),

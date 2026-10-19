@@ -1,6 +1,7 @@
 """Clash-inspired local desktop layout. No networking or lifecycle ownership."""
 from __future__ import annotations
 import tkinter as tk
+import sys
 from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 from . import i18n
@@ -65,8 +66,12 @@ class DesktopView:
         self.scroll_canvases = []
         self._styles()
         root.title('PS Portal On-Demand')
-        root.geometry('1120x800')
-        root.minsize(1040, 740)
+        width = min(1120, max(640, root.winfo_screenwidth() - 64))
+        height = min(800, max(480, root.winfo_screenheight() - 100))
+        left = max(0, (root.winfo_screenwidth() - width) // 2)
+        top = max(0, (root.winfo_screenheight() - height - 100) // 2)
+        root.geometry(f'{width}x{height}+{left}+{top}')
+        root.minsize(min(1040, width), min(740, height))
         root.configure(background=self.palette['page'])
         root.protocol('WM_DELETE_WINDOW', app.close)
         root.columnconfigure(1, weight=1)
@@ -201,8 +206,10 @@ class DesktopView:
                    wraplength=680, style='Portal.CardNote.TLabel', justify='left').grid(row=2, column=0, columnspan=3, sticky='w')
         actions = ttk.Frame(guide, style='Portal.Card.TFrame')
         actions.grid(row=3, column=0, columnspan=3, sticky='w', pady=(18, 0))
-        self.button(actions, 'Copy address', command=app.copy_address).pack(side='left')
-        self.button(actions, 'Export connection guide…', command=app.export_guide).pack(side='left', padx=8)
+        self.guide_copy_button = self.button(actions, 'Copy address', command=app.copy_address)
+        self.guide_copy_button.pack(side='left')
+        self.guide_export_button = self.button(actions, 'Export connection guide…', command=app.export_guide)
+        self.guide_export_button.pack(side='left', padx=8)
         self.lan_runtime_var = tk.StringVar()
         ttk.Label(guide, textvariable=self.lan_runtime_var, style='Portal.CardNote.TLabel',
                   wraplength=680).grid(row=4, column=0, columnspan=3, sticky='w', pady=(16, 0))
@@ -244,7 +251,7 @@ class DesktopView:
         logs = self.frames['Logs']; logs.rowconfigure(0, weight=1)
         app.log_widget = ScrolledText(logs, height=16, state='disabled', wrap='word',
             background='#101a30', foreground='#dce5f4', insertbackground='white',
-            relief='flat', borderwidth=0, padx=18, pady=16, font=('Menlo', 11))
+            relief='flat', borderwidth=0, padx=18, pady=16, font=('Consolas' if sys.platform == 'win32' else 'Menlo', 11))
         app.log_widget.grid(row=0, column=0, sticky='nsew')
         self.label(logs, 'Original diagnostics, with sensitive values redacted.', style='Portal.Note.TLabel').grid(row=1, column=0, sticky='w', pady=12)
 
@@ -252,7 +259,10 @@ class DesktopView:
         footer.grid(row=3, column=0, sticky='ew', pady=(18, 0))
         app.save_button = self.button(footer, 'Save / validate', command=app.save)
         app.save_button.pack(side='left')
-        app.start_button = self.button(footer, 'Start listener', command=app.start, style='Portal.Accent.TButton')
+        self.start_var = tk.StringVar()
+        app.start_button = ttk.Button(footer, textvariable=self.start_var,
+            command=lambda: app.start() if self.advanced else app.quick_start(), style='Portal.Accent.TButton')
+        self.quick_button = app.start_button
         app.start_button.pack(side='left', padx=10)
         self.stop_var = tk.StringVar()
         app.stop_button = ttk.Button(footer, textvariable=self.stop_var, command=app.stop, state='disabled')
@@ -279,17 +289,18 @@ class DesktopView:
             accent='#3189fa')
         style = ttk.Style(self.root)
         style.theme_use('clam')
-        style.configure('.', font=('Helvetica Neue', 12), background=c['card'], foreground=c['text'])
+        font = 'Microsoft YaHei UI' if sys.platform == 'win32' else 'Helvetica Neue'
+        style.configure('.', font=(font, 11 if sys.platform == 'win32' else 12), background=c['card'], foreground=c['text'])
         for name, bg in (('Page', 'page'), ('Side', 'side'), ('Card', 'card')):
             style.configure('Portal.' + name + '.TFrame', background=c[bg])
-        style.configure('Portal.Title.TLabel', background=c['page'], foreground=c['text'], font=('Helvetica Neue', 25, 'bold'))
-        style.configure('Portal.Brand.TLabel', background=c['side'], foreground=c['accent'], font=('Helvetica Neue', 18, 'bold'))
-        style.configure('Portal.SideNote.TLabel', background=c['side'], foreground=c['note'], font=('Helvetica Neue', 11))
+        style.configure('Portal.Title.TLabel', background=c['page'], foreground=c['text'], font=(font, 25, 'bold'))
+        style.configure('Portal.Brand.TLabel', background=c['side'], foreground=c['accent'], font=(font, 18, 'bold'))
+        style.configure('Portal.SideNote.TLabel', background=c['side'], foreground=c['note'], font=(font, 11))
         style.configure('Portal.Note.TLabel', background=c['page'], foreground=c['note'])
         style.configure('Portal.Card.TLabel', background=c['card'], foreground=c['text'])
-        style.configure('Portal.CardTitle.TLabel', background=c['card'], foreground=c['text'], font=('Helvetica Neue', 14, 'bold'))
-        style.configure('Portal.CardNote.TLabel', background=c['card'], foreground=c['note'], font=('Helvetica Neue', 11))
-        style.configure('Portal.Metric.TLabel', background=c['card'], foreground=c['text'], font=('Helvetica Neue', 19, 'bold'))
+        style.configure('Portal.CardTitle.TLabel', background=c['card'], foreground=c['text'], font=(font, 14, 'bold'))
+        style.configure('Portal.CardNote.TLabel', background=c['card'], foreground=c['note'], font=(font, 11))
+        style.configure('Portal.Metric.TLabel', background=c['card'], foreground=c['text'], font=(font, 19, 'bold'))
         style.configure('Portal.Status.TLabel', background=c['page'], foreground=c['accent'])
         for name, bg, fg in (('Nav', 'side', 'note'), ('Selected', 'selected', 'text')):
             style.configure('Portal.' + name + '.TButton', background=c[bg], foreground=c[fg], borderwidth=0, anchor='w', padding=(14, 10))
@@ -399,6 +410,9 @@ class DesktopView:
                 normal = 'readonly'
             else:
                 entry = ttk.Entry(parent, textvariable=variable, show='•' if key == 'subscription_url' else '', width=38)
+                if key == 'subscription_url':
+                    entry.bind('<<Paste>>', self.app.paste_subscription)
+                    entry.bind('<Return>', lambda _: self.app.import_subscription())
                 normal = 'normal'
             entry.grid(row=row, column=1, columnspan=1 if key in ('core_path', 'native_path', 'subscription_file', 'profile_file') else 2, sticky='ew')
             self.app.inputs.append((entry, normal))
@@ -416,24 +430,41 @@ class DesktopView:
                     self.app.engine_inputs[key].append(browse)
 
     def _overview(self):
-        page = self.frames['Overview']
-        quick = self.card(page, 'Paste your subscription to get started.')
-        entry = ttk.Entry(quick, textvariable=self.app.vars['subscription_url'], show='•')
+        page = self.scroll_page(self.frames['Overview'], 'Overview')
+        quick = self.import_card = self.card(page, '1. Import subscription · 2. Start sharing')
+        entry = self.subscription_entry = ttk.Entry(quick, textvariable=self.app.vars['subscription_url'], show='•')
         entry.grid(row=1, column=0, columnspan=2, sticky='ew', padx=(0, 12))
+        entry.bind('<<Paste>>', self.app.paste_subscription)
+        entry.bind('<Return>', lambda _: self.app.import_subscription())
         quick.columnconfigure(0, weight=1)
         self.app.inputs.append((entry, 'normal'))
-        self.quick_button = self.button(quick, 'Prepare & start', command=self.app.quick_start, style='Portal.Accent.TButton')
-        self.quick_button.grid(row=1, column=2, sticky='e')
+        self.paste_button = self.button(quick, 'Paste link', command=self.app.paste_subscription)
+        self.paste_button.grid(row=1, column=2, sticky='e')
+        self.import_note_var = tk.StringVar()
+        ttk.Label(quick, textvariable=self.import_note_var, style='Portal.CardNote.TLabel', wraplength=680,
+                  justify='left').grid(row=2, column=0, columnspan=3, sticky='w', pady=(10, 0))
+        actions = ttk.Frame(quick, style='Portal.Card.TFrame')
+        actions.grid(row=3, column=0, columnspan=3, sticky='ew', pady=(14, 0))
+        self.refresh_button = self.button(actions, 'Refresh subscription', command=lambda: self.app.import_subscription(force=True))
+        self.refresh_button.pack(side='left')
+        core = ttk.Frame(quick, style='Portal.Card.TFrame')
+        core.grid(row=4, column=0, columnspan=3, sticky='ew', pady=(12, 0))
+        self.choose_core_button = self.button(core, 'Choose Mihomo…', command=self.app.choose_core)
+        self.choose_core_button.pack(side='left')
+        self.app.engine_inputs['core_path'].append(self.choose_core_button)
+        self.core_note_var = tk.StringVar()
+        ttk.Label(core, textvariable=self.core_note_var, style='Portal.CardNote.TLabel', wraplength=440).pack(side='left', padx=12)
+        self.core_setup = core
         self.quick_note_var = tk.StringVar()
         ttk.Label(quick, textvariable=self.quick_note_var, style='Portal.CardNote.TLabel', wraplength=680,
-                  justify='left').grid(row=2, column=0, columnspan=3, sticky='w', pady=(12, 0))
+                  justify='left').grid(row=8, column=0, columnspan=3, sticky='w', pady=(12, 0))
         self.subscription_var = tk.StringVar()
         ttk.Label(quick, textvariable=self.subscription_var, style='Portal.Card.TLabel', wraplength=680,
-                  justify='left').grid(row=3, column=0, columnspan=3, sticky='w', pady=(14, 0))
+                  justify='left').grid(row=5, column=0, columnspan=3, sticky='w', pady=(14, 0))
         self.quota_bar = ttk.Progressbar(quick, style='Portal.Horizontal.TProgressbar', maximum=100)
-        self.quota_bar.grid(row=4, column=0, columnspan=3, sticky='ew', pady=(10, 0))
+        self.quota_bar.grid(row=6, column=0, columnspan=3, sticky='ew', pady=(10, 0))
         link = ttk.Frame(quick, style='Portal.Card.TFrame')
-        link.grid(row=5, column=0, columnspan=3, sticky='ew', pady=(16, 0))
+        link.grid(row=7, column=0, columnspan=3, sticky='ew', pady=(16, 0))
         self.link_button = self.button(link, 'Share existing Clash / system proxy', command=self.app.use_existing_proxy)
         self.link_button.pack(side='left')
         self.link_var = tk.StringVar()
@@ -487,10 +518,11 @@ class DesktopView:
                 button.pack(fill='x', pady=4, ipady=7, before=self.advanced_button)
         for section in self.advanced_sections:
             section.grid() if self.advanced else section.grid_remove()
-        for button in (self.app.save_button, self.app.start_button):
-            button.pack_forget()
-            if self.advanced:
-                button.pack(side='left', padx=(0, 10), before=self.app.stop_button)
+        self.app.save_button.pack_forget()
+        if self.advanced:
+            self.app.save_button.pack(side='left', padx=(0, 10), before=self.app.start_button)
+        self.app.start_button.pack_forget()
+        self.app.start_button.pack(side='left', padx=(0, 10), before=self.app.stop_button)
         if not self.advanced and self.page not in ('Overview', 'Proxies', 'Devices', 'LAN sharing'):
             self.show('Overview')
         self.refresh()
@@ -670,7 +702,29 @@ class DesktopView:
                     self.rule_table.insert('', 'end', values=(rule,))
             self._preview_rendered = self.preview
         self.advanced_var.set(self.tr('Simple view' if self.advanced else 'Advanced settings…'))
-        self.stop_var.set(self.tr('Cancel preparation' if self.app.importing else 'Stop'))
+        self.stop_var.set(self.tr('Cancel import' if self.app.importing else 'Stop sharing'))
+        self.import_note_var.set(self.tr(self.app.subscription_message or
+            'Paste once to import and save. Sharing starts only when you click Start sharing.'))
+        from pathlib import Path
+        core_path = self.app.vars['core_path'].get().strip()
+        self.core_note_var.set(self.tr('Core ready: {name}', name=Path(core_path).name)
+            if core_path and Path(core_path).is_file() else self.tr('Choose the Windows/macOS/Linux Mihomo executable before starting.'))
+        idle = not self.app.importing and self.app.backend.process is None
+        sharing = self.app.backend.ready and self.app.backend.stopping_since is None
+        for button in (self.guide_copy_button, self.guide_export_button):
+            button.configure(state='normal' if sharing else 'disabled')
+        self.import_card.grid() if self.app.backend.process is None else self.import_card.grid_remove()
+        self.start_var.set(self.tr('Start listener' if self.advanced else 'Start sharing'))
+        mode = self.app.vars['engine_mode'].get()
+        executable = self.app.vars['native_path' if mode == 'embedded' else 'core_path'].get().strip()
+        can_start = self.advanced or self.app.raw.get('existing_proxy_port') or (
+            self.app.subscription_ready() and executable and Path(executable).is_file())
+        self.quick_button.configure(state='normal' if idle and can_start else 'disabled')
+        self.refresh_button.configure(state='normal' if idle and self.app.vars['subscription_url'].get().strip() else 'disabled')
+        if self.app.raw.get('existing_proxy_port') or self.app.vars['engine_mode'].get() != 'external':
+            self.core_setup.grid_remove()
+        else:
+            self.core_setup.grid()
         from .subscription_info import display, usage_percent
         self.subscription_var.set(display(self.subscription_info, self.language))
         percent = usage_percent(self.subscription_info)
@@ -697,13 +751,14 @@ class DesktopView:
         address = f'{host.get()}:{port.get()}' if host and host.get() and port and port.get() else self.tr('Not configured')
         self.address_var.set(address)
         self._refresh_runtime(address)
-        if host and host.get() and port and port.get():
+        if self.app.backend.ready and host and host.get() and port and port.get():
             self.runtime_panel.grid()
         else:
             self.runtime_panel.grid_remove()
         self._refresh_nodes()
         self.guide_var.set(self.tr('Server: {host}\nPort: {port}', host=host.get(), port=port.get())
-                           if host and host.get() and port and port.get() else self.tr('Prepare the subscription on Overview first.'))
+                           if self.app.backend.ready and host and host.get() and port and port.get()
+                           else self.tr('Start sharing to see the connection address.'))
         if self.preview:
             message = self.tr('Provider nodes: {nodes} · groups: {groups} · rules: {rules}', **{k: self.preview[k] for k in ('nodes', 'groups', 'rules')})
             if self.preview['kind'] == 'profile':
@@ -724,9 +779,16 @@ class DesktopView:
         ready = self.status in ('Listening', 'Forwarding')
         title = ('Devices are using the proxy' if isinstance(devices, int) and devices > 0
                  else 'Ready · waiting for a device') if ready else self.status
+        if not ready and not app.importing and self.status == 'Stopped' and app.subscription_ready():
+            title = 'Subscription ready · sharing is off'
+        elif not ready and not app.importing and self.status == 'Stopped':
+            title = 'Sharing is off'
         self.hero_var.set(self.tr(title))
-        self.hero_note_var.set(self.tr(self.core_state if not app.raw.get('existing_proxy_port')
-                                      else 'Managed by existing client'))
+        note = self.core_state if not app.raw.get('existing_proxy_port') else 'Managed by existing client'
+        if not ready and not app.importing and self.status == 'Stopped':
+            note = ('The subscription is saved; no need to paste it again.' if app.subscription_ready()
+                    else 'Import a subscription or choose an existing local proxy.')
+        self.hero_note_var.set(self.tr(note))
         self.connection_count_var.set(counts)
         self.lan_runtime_var.set(counts)
         self.client_summary.set(counts + ' · ' + self.tr('Errors: {count}', count=statistics.get('errors', 0)))

@@ -445,15 +445,25 @@ type timedConn struct {
 	timeout time.Duration
 	// Set only by the single reader before header parsing, preventing a
 	// slow client from extending the total header timeout one byte at a time.
-	readLimit time.Time
+	readLimit  time.Time
+	readClosed atomic.Bool
 }
 
 func (c *timedConn) Read(b []byte) (int, error) {
+	if c.readClosed.Load() {
+		return 0, net.ErrClosed
+	}
 	deadline := time.Now().Add(c.timeout)
 	if !c.readLimit.IsZero() && c.readLimit.Before(deadline) {
 		deadline = c.readLimit
 	}
 	_ = c.Conn.SetReadDeadline(deadline)
+	if c.readClosed.Load() {
+		// CloseRead may have raced with the deadline refresh above. Never
+		// let a new read restore the idle timeout after cancellation.
+		_ = c.Conn.SetReadDeadline(time.Now())
+		return 0, net.ErrClosed
+	}
 	return c.Conn.Read(b)
 }
 func (c *timedConn) Write(b []byte) (int, error) {
@@ -461,10 +471,16 @@ func (c *timedConn) Write(b []byte) (int, error) {
 	return c.Conn.Write(b)
 }
 func (c *timedConn) CloseRead() error {
+	c.readClosed.Store(true)
+	// Socket shutdown alone need not cancel a pending asynchronous read on
+	// Windows. An expired deadline wakes Go's poller without closing writes.
+	err := c.Conn.SetReadDeadline(time.Now())
 	if half, ok := c.Conn.(interface{ CloseRead() error }); ok {
-		return half.CloseRead()
+		if closeErr := half.CloseRead(); closeErr != nil {
+			return closeErr
+		}
 	}
-	return c.Conn.SetReadDeadline(time.Now())
+	return err
 }
 func (c *timedConn) CloseWrite() error { return closeWriteUpstream(c.Conn) }
 

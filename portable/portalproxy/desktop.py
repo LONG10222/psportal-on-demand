@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -67,6 +68,14 @@ def read_config(path: Path) -> dict:
 
 def save_config(path: Path, values: dict) -> None:
     """Validate and atomically replace a private file; never leave partial JSON."""
+    _write_config(path, values, validate=True)
+
+
+def _write_config(path: Path, values: dict, *, validate=False) -> None:
+    """Retain an imported source even before LAN/core setup is complete.
+
+    A draft is never executable acceptance: Start still calls save_config.
+    """
     path = path.expanduser().absolute()
     if path.is_symlink():
         raise ValueError('Choose a regular configuration file, not a symbolic link')
@@ -77,7 +86,8 @@ def save_config(path: Path, values: dict) -> None:
         with os.fdopen(fd, 'w', encoding='utf-8', newline='\n') as stream:
             json.dump(values, stream, ensure_ascii=False, indent=2)
             stream.write('\n')
-        config.load(temporary)  # Field-only validation messages; no network or execution.
+        if validate:
+            config.load(temporary)  # Field validation; no network or execution.
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
@@ -336,6 +346,9 @@ class DesktopApp:
         self.closing = False
         self.importing = False
         self.quick_start_pending = False
+        self._imported_url = None
+        self._imported_file = None
+        self.subscription_message = ''
         self.import_events = queue.Queue()
         self.command_id = 0
         self.pending_command = None
@@ -352,7 +365,7 @@ class DesktopApp:
         self.profile_selection_inputs = []
         from .existing_proxy import detect_system_proxy, read_clash_accounting
         self.existing_proxy = detect_system_proxy()
-        self.clash_info = read_clash_accounting() if self.existing_proxy else None
+        self.clash_info = None  # Read account metadata only after explicitly choosing linked mode.
         from .desktop_view import DesktopView
         self.view = DesktopView(self)
         self.load()
@@ -361,7 +374,17 @@ class DesktopApp:
     def _changed(self, *_):
         if not self.loading:
             if _ and 'subscription_url' in self.vars and str(self.vars['subscription_url']) == _[0]:
-                self.view.subscription_info = None
+                if not self.subscription_ready():
+                    self.view.subscription_info = None
+                    self.subscription_message = 'Link changed. Press Enter or paste to import before starting.'
+                else:
+                    self.subscription_message = 'Subscription imported. Start sharing when ready.'
+                    source = Path(self.vars['profile_file'].get() or self.vars['subscription_file'].get())
+                    metadata = source.with_suffix(source.suffix + '.info.json')
+                    try:
+                        self.view.subscription_info = read_config(metadata) if metadata.is_file() and metadata.stat().st_size <= 8192 else None
+                    except (OSError, ValueError):
+                        self.view.subscription_info = None
             self.dirty = True
             self.engine_controls()
             self.view.refresh()
@@ -509,6 +532,15 @@ class DesktopApp:
                         native_path=str(config.bundled_native_path() or ''))
         defaults.update(self.raw)
         source = self.raw.get('profile_file') or self.raw.get('subscription_file')
+        self._imported_url = None
+        self._imported_file = None
+        self.subscription_message = ''
+        if isinstance(source, str) and source and Path(source).is_file():
+            url = self.raw.get('subscription_url', '').strip()
+            fingerprint = self.raw.get('desktop_import_url_sha256')
+            if not fingerprint or fingerprint == hashlib.sha256(url.encode('utf-8')).hexdigest():
+                self._imported_url, self._imported_file = url, source
+                self.subscription_message = 'Subscription imported. Start sharing when ready.'
         if source:
             try:
                 metadata = Path(source).with_suffix(Path(source).suffix + '.info.json')
@@ -516,7 +548,9 @@ class DesktopApp:
                     self.view.subscription_info = read_config(metadata)
             except (ValueError, OSError):
                 pass
-        elif self.raw.get('existing_proxy_port') or not self.raw.get('subscription_url'):
+        elif self.raw.get('existing_proxy_port'):
+            from .existing_proxy import read_clash_accounting
+            self.clash_info = read_clash_accounting()
             self.view.subscription_info = self.clash_info
         self.loading = True
         for key, variable in self.vars.items():
@@ -564,7 +598,7 @@ class DesktopApp:
         if name:
             self._use_imported_file(Path(name), full=True)
 
-    def _use_imported_file(self, path, full=False):
+    def _use_imported_file(self, path, full=False, subscription_url=None):
         from tkinter import messagebox
         from .profiles import inspect_profile, read_profile, validate_host_profile, host_overlay
         try:
@@ -584,6 +618,11 @@ class DesktopApp:
             if str(path.absolute()) != (self.raw.get('profile_file') or self.raw.get('subscription_file')):
                 self.raw.pop('node_policies', None)
             self.raw.pop('existing_proxy_port', None)
+            if subscription_url is None:
+                self.raw.pop('desktop_import_url_sha256', None)
+            self.vars['subscription_url'].set(subscription_url or '')
+            self._imported_url = (subscription_url or '').strip()
+            self._imported_file = str(path.absolute())
             try:
                 metadata = path.with_suffix(path.suffix + '.info.json')
                 self.view.subscription_info = read_config(metadata) if metadata.is_file() and metadata.stat().st_size <= 8192 else None
@@ -595,15 +634,49 @@ class DesktopApp:
             messagebox.showerror(self._t('Cannot inspect provider'), self._t(str(error)), parent=self.root)
             return False
 
+    def subscription_ready(self):
+        """The current URL and selected snapshot must describe the same import."""
+        source = self.vars.get('profile_file') and self.vars['profile_file'].get().strip()
+        source = source or (self.vars.get('subscription_file') and self.vars['subscription_file'].get().strip())
+        url = self.vars['subscription_url'].get().strip() if 'subscription_url' in self.vars else ''
+        if not source or not Path(source).is_file():
+            return False
+        return not url or (url == self._imported_url and source == self._imported_file)
+
+    def paste_subscription(self, event=None):
+        """One explicit clipboard read replaces the field, then imports once."""
+        if self.closing or self.importing or self.backend.process is not None:
+            return 'break'
+        try:
+            value = self.root.clipboard_get().strip()
+        except Exception:
+            self.subscription_message = 'The clipboard has no text. Paste an HTTPS subscription link.'
+            self.view.refresh()
+            return 'break'
+        if self.vars['subscription_url'].get().strip() != value:
+            self.vars['subscription_url'].set(value)
+        self.import_subscription()
+        return 'break'
+
     def quick_start(self):
         if self.importing or self.backend.process is not None:
             return
+        existing = self.raw.get('existing_proxy_port')
+        if existing:
+            if self._configure_lan((existing,)):
+                self.start()
+                if self.backend.process is not None:
+                    self.view.show('LAN sharing')
+            return
+        if not self.subscription_ready():
+            self.subscription_message = 'Paste a subscription first. Importing never starts sharing.'
+            self.view.refresh()
+            return
         self.raw.pop('existing_proxy_port', None)
         if not self._configure_lan(): return
-        self.quick_start_pending = True
-        self.import_subscription()
-        if not self.importing:
-            self.quick_start_pending = False
+        self.start()
+        if self.backend.process is not None:
+            self.view.show('LAN sharing')
 
     def _configure_lan(self, reserved=()):
         from tkinter import messagebox
@@ -666,19 +739,25 @@ class DesktopApp:
         except (OSError, ValueError) as error:
             messagebox.showerror(self._t('Cannot inspect provider'), self._t(str(error)), parent=self.root)
 
-    def import_subscription(self):
+    def import_subscription(self, *, force=False):
         if self.closing or self.importing or self.backend.process is not None:
             return
         from tkinter import messagebox
         from urllib.parse import urlsplit
         url = self.vars['subscription_url'].get().strip()
+        if not force and url and self.subscription_ready():
+            self.subscription_message = 'Already imported. Start sharing or refresh explicitly.'
+            self.view.refresh()
+            return
         try:
             parsed = urlsplit(url)
             if (parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or parsed.fragment
+                    or len(url) > 8192 or not 1 <= (parsed.port or 443) <= 65535
                     or any(ord(c) <= 32 for c in url)):
                 raise ValueError()
         except ValueError:
-            messagebox.showerror(self._t('Check configuration'), self._t('Enter a valid HTTPS subscription URL.'), parent=self.root)
+            self.subscription_message = 'Enter a valid HTTPS subscription URL.'
+            self.view.refresh()
             return
         self.importing = True
         self._import_generation += 1
@@ -688,7 +767,8 @@ class DesktopApp:
         # or send the user back from a page they visited while it was running.
         owner_path = self.path
         navigation = self.view.navigation_generation
-        self._active_import = (generation, cancelled, owner_path, navigation)
+        self._active_import = (generation, cancelled, owner_path, navigation, url)
+        self.subscription_message = 'Importing subscription…'
         self.running_controls(True)
         self._set_status('Preparing')
         self.backend.log(self._t('Importing subscription…'))
@@ -748,10 +828,11 @@ class DesktopApp:
         self.quick_start_pending = False
         self.running_controls(False)
         self._set_status('Stopped')
+        self.subscription_message = 'Import cancelled. Paste again to retry.'
+        self.view.refresh()
         self.backend.log(self._t('Preparation cancelled.'))
 
     def _poll_import(self):
-        from tkinter import messagebox
         while True:
             try:
                 generation, path, error = self.import_events.get_nowait()
@@ -766,18 +847,37 @@ class DesktopApp:
         self._active_import = None
         self.importing = False
         self.running_controls(self.backend.process is not None)
-        pending, self.quick_start_pending = self.quick_start_pending, False
+        self.quick_start_pending = False
         if error:
             self._set_status('Stopped with error')
-            messagebox.showerror(self._t('Cannot inspect provider'), self._t(error), parent=self.root)
+            self.subscription_message = ('Refresh failed. Previous import is still available.'
+                if self.subscription_ready() else error)
+            self.backend.log(self._t(error))
         else:
             self._set_status('Stopped')
-            if self._use_imported_file(path) and pending and self._configure_lan():
-                self.start()
-                if self.view.navigation_generation == active[3]:
-                    self.view.show('LAN sharing')
-            elif self.backend.process is None:
-                self._set_status('Stopped')
+            url = active[4]
+            if self._use_imported_file(path, subscription_url=url):
+                draft = dict(self.raw, subscription_url=url,
+                    profile_file=self.vars['profile_file'].get(),
+                    subscription_file=self.vars['subscription_file'].get(),
+                    desktop_import_url_sha256=hashlib.sha256(url.encode('utf-8')).hexdigest())
+                try:
+                    _write_config(self.path, draft)
+                    self.raw = draft
+                    values = self.collect()
+                    defaults = dict(config.DEFAULTS, allowed_clients=[], **{
+                        key: '' for key in ('listen_host', 'core_path', 'native_path', 'subscription_url')})
+                    defaults.update(draft)
+                    self.dirty = any(values[key] != defaults.get(key, '') for key in self.vars)
+                    self.set_language(self.view.language)
+                    self.set_theme(self.view.theme)
+                    self.subscription_message = 'Subscription imported. Start sharing when ready.'
+                except (OSError, ValueError):
+                    self.subscription_message = 'Imported for this session. Could not save; check file permissions.'
+            else:
+                self._discard_import(path)
+                self.subscription_message = 'Subscription import failed. Check the URL and connection.'
+        self.view.refresh()
 
     def copy_address(self):
         from tkinter import messagebox
@@ -853,6 +953,8 @@ class DesktopApp:
     def running_controls(self, running: bool):
         self.view.quick_button.configure(state='disabled' if running else 'normal')
         self.view.link_button.configure(state='disabled' if running else 'normal')
+        self.view.paste_button.configure(state='disabled' if running else 'normal')
+        self.view.refresh_button.configure(state='disabled' if running else 'normal')
         self.start_button.configure(state='disabled' if running else 'normal')
         self.save_button.configure(state='disabled' if running else 'normal')
         self.choose_button.configure(state='disabled' if running else 'normal')
@@ -868,6 +970,13 @@ class DesktopApp:
         if self.closing or self.importing:
             return
         if self.backend.process is not None and self.backend.process.poll() is None:
+            return
+        source = (self.vars.get('profile_file') and self.vars['profile_file'].get().strip()) or (
+            self.vars.get('subscription_file') and self.vars['subscription_file'].get().strip())
+        if (self.vars['subscription_url'].get().strip() and source
+                and not self.subscription_ready() and not self.raw.get('existing_proxy_port')):
+            self.subscription_message = 'Link changed. Press Enter or paste to import before starting.'
+            self.view.refresh()
             return
         if not self.save():
             return

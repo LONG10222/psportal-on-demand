@@ -9,12 +9,20 @@ The application must remain running on an awake computer on the Portal's LAN. No
 1. Install a current supported Python 3.10–3.13 from [python.org](https://www.python.org/downloads/windows/) with the Python launcher and Tcl/Tk components.
 2. Obtain Mihomo for this machine's architecture from its [official upstream releases](https://github.com/MetaCubeX/mihomo/releases), verify its published integrity information, and extract it to a local folder. A Windows machine needs the Windows executable, not an OpenWrt/Linux binary.
 3. Extract this project. Double-click `portable/launchers/windows.cmd`, or open a terminal in `portable` and run `py -3 -m portalproxy.desktop`.
-4. Fill in this computer's private LAN IPv4, the Portal's private IPv4, the Mihomo executable path and your own HTTPS subscription URL. Node selection is `auto`, `prefer` or `fixed`; the latter two require the exact node name. The URL is hidden in the form. Alternatively choose a local Clash/Mihomo provider YAML file (maximum 10 MiB); a nonempty file path takes precedence over the URL and avoids a subscription download. Clear it to resume using the URL.
-5. Select **Save / validate**, then **Start listener**. Read the status log: a running process is not proof that the listener is ready; wait for `Proxy ready ...`. Save validates local configuration without fetching the subscription. A real external request triggers the core and either the subscription fetch or local provider copy.
+4. Use **Paste link** or paste into the subscription field. One paste replaces the previous field contents, imports and privately saves a local snapshot; it never starts a listener. If typing manually, press Enter to import. Repeating the same accepted link does not download again. Use **Refresh subscription** explicitly to update the snapshot and quota metadata.
+5. Choose the trusted Mihomo executable using the visible home-page control, then click **Start sharing** in the fixed footer. It detects the physical LAN once and validates configuration before launching. Stop/restart and reopening the window reuse the saved snapshot. A changed link must be imported before its old snapshot can be used to start. Advanced settings retain exact IP allowlists, local file selection, **Save / validate**, and **Start listener** for manual configurations. Wait for the listener's actual ready state before configuring devices.
 6. In the Portal's current Wi-Fi advanced settings, keep automatic IP/gateway/DNS and set its manual HTTP proxy to this computer's LAN IPv4 and the configured proxy port, normally `10081`.
 7. If Windows prompts for firewall access, review it yourself. Permit only the required application/inbound listener on your trusted private network, ideally scoped to the Portal's address. Do not allow public-network access. The app never changes firewall policy.
 
 Use **Stop** before leaving. Closing the window asks to stop the listener and its owned core. Closing the controller's stdin also signals shutdown if its desktop parent disappears. If shutdown takes longer than expected, keep the window open and check the native acceptance steps. Repeated Start cannot launch a duplicate child from the same window. External mode separately locks its runtime directory; both modes fail if their listener address/port is already in use.
+
+An imported subscription is saved as a private draft even before choosing a core
+or configuring the LAN. It still must pass full validation on Start. A fingerprint
+binds the accepted URL to the selected snapshot; it does not replace profile/core
+validation. Account metadata from another Clash installation is shown only in
+explicitly linked mode. Import failures stay inline and do not move the current
+page. Refresh failures retain the previous snapshot. This GUI cache behavior does
+not change URL-only CLI configurations, which still fetch on a cold core start.
 
 ## Choose an engine in the same app
 

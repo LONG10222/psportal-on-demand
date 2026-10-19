@@ -46,7 +46,7 @@ en1: flags=1
 
 @unittest.skipUnless(os.environ.get('PSPORTAL_TK_TEST') == '1', 'Real Tk quick setup opt-in')
 class QuickSetupWindowTests(unittest.TestCase):
-    def test_one_click_imports_configures_starts_and_shows_wifi_guide(self):
+    def test_paste_imports_once_and_start_reuses_the_saved_subscription(self):
         import tkinter as tk
         root = tk.Tk(); app = None
         try:
@@ -63,10 +63,26 @@ class QuickSetupWindowTests(unittest.TestCase):
                     target.write_text('proxies: []\n')
                     return {'upload':1000000000,'download':2000000000,'total':10000000000,'expire':2000000000}
                 with (patch('portalproxy.setup.discover_lan', return_value=dict(host='127.0.0.1',clients=['127.0.0.1'],subnet='loopback-fixture')),
-                      patch('portalproxy.core.download_subscription', side_effect=download)):
+                      patch('portalproxy.core.download_subscription', side_effect=download) as fetch,
+                      patch.object(root, 'clipboard_get', return_value='https://fixture.example/opaque-token')):
+                    app.view.paste_button.invoke()
+                    app.paste_subscription()  # Repeated paste during import is ignored.
+                    end = time.monotonic()+15
+                    while time.monotonic()<end and app.importing:
+                        root.update(); time.sleep(.02)
+                    self.assertFalse(app.importing)
+                    self.assertTrue(app.subscription_ready())
+                    self.assertIsNone(app.backend.process, 'Paste must never start sharing')
+                    self.assertNotEqual(app.view.page, 'LAN sharing')
+                    self.assertEqual(fetch.call_count, 1)
+                    self.assertTrue(path.is_file(), 'Import is saved before starting')
+                    self.assertEqual(json.loads(path.read_text(encoding='utf-8'))['subscription_url'],
+                                     'https://fixture.example/opaque-token')
+                    app.paste_subscription()  # Same completed import is reused, too.
+                    self.assertEqual(fetch.call_count, 1)
                     app.view.quick_button.invoke()
                     end = time.monotonic()+15
-                    while time.monotonic()<end and not app.backend.ready:
+                    while time.monotonic()<end and (not app.backend.ready or '127.0.0.1' not in app.view.guide_var.get()):
                         root.update(); time.sleep(.02)
                     self.assertTrue(app.backend.ready, app.log_widget.get('1.0','end'))
                     self.assertEqual(app.vars['listen_host'].get(), '127.0.0.1')
@@ -74,11 +90,13 @@ class QuickSetupWindowTests(unittest.TestCase):
                     self.assertEqual(app.view.page, 'LAN sharing')
                     self.assertFalse(app.view.advanced)
                     self.assertIn('127.0.0.1', app.view.guide_var.get())
+                    self.assertEqual(str(app.view.guide_copy_button['state']), 'normal')
                     self.assertIn('6.52 GiB', app.view.subscription_var.get())
                     app.set_language('zh')
                     self.assertIn('剩余', app.view.subscription_var.get())
                     self.assertIn('6.52 GiB', app.view.subscription_var.get())
                     self.assertNotIn('opaque-token', app.log_widget.get('1.0', 'end'))
+                    self.assertEqual(fetch.call_count, 1)
                 app.stop()
                 end=time.monotonic()+15
                 while time.monotonic()<end and app.backend.process is not None:

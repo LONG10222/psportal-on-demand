@@ -76,6 +76,7 @@ class HotLanguageWindowTests(unittest.TestCase):
                         if predicate(): return
                         time.sleep(.02)
                     self.fail(app.log_widget.get('1.0', 'end'))
+                app.view.set_advanced(True)  # Preserve the explicit loopback fixture configuration.
                 app.start_button.invoke()
                 wait(lambda: app.status_var.get() == 'Listening')
                 process = app.backend.process
