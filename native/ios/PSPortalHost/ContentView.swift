@@ -467,7 +467,7 @@ struct ContentView: View {
             }
             Section {
                 Button(t("开源许可与开发限制", "Licenses and development limits")) { showLicenses = true }
-                Text(t("手机仅需导入订阅，无需另开代理应用。当前不支持后台共享；真实热点与游戏机尚待验证。", "Import a subscription; no second proxy app is needed. Background sharing is unavailable; physical hotspots and game consoles remain unverified."))
+                Text(t("手机仅需导入订阅，无需另开代理应用。默认前台共享；iOS 26+ 真机可主动申请限时后台实验，系统可提前结束。真实热点与游戏机尚待验证。", "Import a subscription; no second proxy app is needed. Sharing is foreground by default; real iOS 26+ devices can request a timed background experiment that the system may end early. Physical hotspots and game consoles remain unverified."))
                     .font(.caption).foregroundStyle(.secondary)
             } header: { Text(t("关于星渡", "About StarPass")) }
         }
@@ -502,7 +502,7 @@ private struct LicensesView: View {
             }.padding()
             List {
                 Text("This native application links Mihomo v1.19.32 and is GPL-3.0-only. The original project's MIT notice is preserved separately. No App Store compatibility or distribution approval is claimed.")
-                Text("Foreground-only development app. No VPN, Packet Tunnel, background hosting, downloaded executable, or full iOS parity is provided. HTTP/CONNECT is supported by the shared engine; a real Portal session still needs device testing.")
+                Text("Development app with foreground sharing by default and an opt-in, system-granted timed background experiment on real iOS 26+ devices. No VPN, Packet Tunnel, permanent background hosting, downloaded executable, or full iOS parity is provided. HTTP/CONNECT is supported by the shared engine; real background, hotspot and Portal sessions still need device testing.")
                 ForEach(["GPL-3.0", "THIRD-PARTY-NOTICES", "ENGINE-NOTICES", "PROJECT-MIT"], id: \.self) { name in
                     DisclosureGroup(name) {
                         Text(licenseText(name)).font(.caption.monospaced()).textSelection(.enabled)

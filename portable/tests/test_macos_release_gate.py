@@ -8,7 +8,8 @@ import tempfile
 import unittest
 from yaml_packaging_fixtures import add_yaml_evidence
 from scripts.verify_macos_release import (APP_EXECUTABLE, NATIVE_EXECUTABLE, NATIVE_RESOURCE_ALIAS, NATIVE_COMPATIBILITY_LINKS, METHOD,
-    companion_candidates, resolve_bundle_path, verify_archive, verify_inventory, verify_final_seal, within_posix)
+    BRANDING_COMPATIBILITY_LINKS, companion_candidates, resolve_bundle_path, reviewed_branding_files,
+    verify_archive, verify_inventory, verify_final_seal, within_posix)
 
 
 class MacOSReleaseGateTests(unittest.TestCase):
@@ -35,7 +36,45 @@ class MacOSReleaseGateTests(unittest.TestCase):
             files=[dict(path=b['path'],sha256=b['sha256']) for b in binaries], symlinks=copy.deepcopy(reviewed['expected_bundle_symlinks']),
             runtime=dict(python='3.13.15 (exact)',pyinstaller='6.16.0',base_prefix='/Python'))
         add_yaml_evidence(report, 'darwin')
+        report['symlinks'].extend(dict(path=path, target=target) for path, target in BRANDING_COMPATIBILITY_LINKS.items())
+        report['files'].extend(dict(path=path, sha256=sha) for path, sha in reviewed_branding_files().items())
         return report,reviewed
+
+    def test_branding_link_requires_exact_reviewed_target_and_no_extra_links(self):
+        report,reviewed=self.fixture()
+        binaries,files,links=verify_inventory(report,reviewed)
+        self.assertEqual(links['Contents/Frameworks/assets'], '../Resources/assets')
+        self.assertEqual(resolve_bundle_path('Contents/Frameworks/assets/branding/starpass-64.png',links),
+                         'Contents/Resources/assets/branding/starpass-64.png')
+        for mutation in ('missing','target','absolute','extra'):
+            report,reviewed=self.fixture()
+            if mutation=='missing':
+                report['symlinks']=[item for item in report['symlinks'] if item['path']!='Contents/Frameworks/assets']
+            elif mutation=='extra':
+                report['symlinks'].append(dict(path='Contents/Frameworks/other-assets',target='../Resources/assets'))
+            else:
+                for item in report['symlinks']:
+                    if item['path']=='Contents/Frameworks/assets':
+                        item['target']='/outside' if mutation=='absolute' else '../Resources/native'
+            with self.subTest(mutation=mutation),self.assertRaisesRegex(ValueError,'symlink topology'):
+                verify_inventory(report,reviewed)
+
+    def test_branding_file_set_and_hashes_are_bound_to_retained_source(self):
+        target='Contents/Resources/assets/branding/starpass-64.png'
+        for mutation in ('missing','changed','dock-icon','extra','alias-file'):
+            report,reviewed=self.fixture()
+            if mutation=='missing':
+                report['files']=[item for item in report['files'] if item['path']!=target]
+            elif mutation in ('extra','alias-file'):
+                path=('Contents/Resources/assets/unreviewed.dat' if mutation=='extra' else
+                      'Contents/Frameworks/assets/branding/starpass-64.png')
+                report['files'].append(dict(path=path,sha256='f'*64))
+            else:
+                path='Contents/Resources/starpass.icns' if mutation=='dock-icon' else target
+                for item in report['files']:
+                    if item['path']==path:item['sha256']='f'*64
+            with self.subTest(mutation=mutation),self.assertRaisesRegex(ValueError,'branding files'):
+                verify_inventory(report,reviewed)
 
     def test_full_byte_proof_accepts_and_changed_regions_fail(self):
         report,reviewed=self.fixture()

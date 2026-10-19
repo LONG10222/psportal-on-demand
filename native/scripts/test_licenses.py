@@ -13,7 +13,8 @@ import licenses
 
 class MetadataRetryTests(unittest.TestCase):
     def setUp(self):
-        self.stderr = contextlib.redirect_stderr(io.StringIO())
+        self.diagnostics = io.StringIO()
+        self.stderr = contextlib.redirect_stderr(self.diagnostics)
         self.stderr.__enter__()
         self.addCleanup(self.stderr.__exit__, None, None, None)
 
@@ -34,6 +35,159 @@ class MetadataRetryTests(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError): licenses.network_output(['go'])
         self.assertEqual(run.call_count, 3)
         self.assertEqual([c.args[0] for c in sleep.call_args_list], [2, 4])
+
+    @patch('licenses.time.sleep')
+    @patch('licenses.subprocess.run')
+    def test_download_json_error_retries_with_empty_stderr(self, run, sleep):
+        command = ['go', 'mod', 'download', '-json', 'github.com/mdlayher/packet@v1.1.2']
+        message = 'github.com/mdlayher/packet@v1.1.2: proxy.golang.org: i/o timeout'
+        failed = json.dumps(dict(Path='github.com/mdlayher/packet', Version='v1.1.2', Error=message))
+        complete = json.dumps(dict(Dir='/module/cache/packet@v1.1.2'))
+        env = {'GOOS': 'linux', 'GOARCH': 'arm64'}
+        run.side_effect = [subprocess.CalledProcessError(1, command, output=failed, stderr=''),
+                           subprocess.CompletedProcess(command, 0, complete, '')]
+        self.assertEqual(licenses.network_output(command, env=env), complete)
+        self.assertEqual(run.call_count, 2)
+        for call in run.call_args_list:
+            self.assertEqual(call.args[0], command)
+            self.assertEqual(call.kwargs['env'], env)
+            self.assertEqual(call.kwargs['cwd'], licenses.ROOT)
+            self.assertEqual(call.kwargs['timeout'], 120)
+            self.assertTrue(call.kwargs['check'])
+        self.assertIn(message, self.diagnostics.getvalue())
+        sleep.assert_called_once_with(2)
+
+    @patch('licenses.time.sleep')
+    @patch('licenses.subprocess.run')
+    def test_json_error_exhaustion_preserves_exception_and_output(self, run, sleep):
+        failed = json.dumps(dict(Error='503 Service Unavailable'))
+        error = subprocess.CalledProcessError(1, ['go'], output=failed, stderr='')
+        run.side_effect = error
+        with self.assertRaises(subprocess.CalledProcessError) as caught:
+            licenses.network_output(['go'])
+        self.assertIs(caught.exception, error)
+        self.assertEqual(caught.exception.stdout, failed)
+        self.assertEqual(run.call_count, 3)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [2, 4])
+        self.assertEqual(self.diagnostics.getvalue().count('503 Service Unavailable'), 3)
+
+    @patch('licenses.time.sleep')
+    @patch('licenses.subprocess.run')
+    def test_go_list_json_error_object_is_retryable(self, run, sleep):
+        failed = json.dumps(dict(Path='example/ready')) + '\n' + json.dumps(dict(Error=dict(Err='connection reset')))
+        run.side_effect = [subprocess.CalledProcessError(1, ['go'], output=failed, stderr=''),
+                           subprocess.CompletedProcess(['go'], 0, 'complete', '')]
+        self.assertEqual(licenses.network_output(['go']), 'complete')
+        sleep.assert_called_once_with(2)
+
+    @patch('licenses.time.sleep')
+    @patch('licenses.subprocess.run')
+    def test_fatal_stderr_overrides_transient_json_stdout(self, run, sleep):
+        error = subprocess.CalledProcessError(1, ['go'], output=json.dumps(dict(Error='i/o timeout')),
+                                              stderr='checksum mismatch')
+        run.side_effect = error
+        with self.assertRaises(subprocess.CalledProcessError) as caught:
+            licenses.network_output(['go'])
+        self.assertIs(caught.exception, error)
+        self.assertIn('checksum mismatch', self.diagnostics.getvalue())
+        self.assertIn('i/o timeout', self.diagnostics.getvalue())
+        self.assertEqual(run.call_count, 1)
+        sleep.assert_not_called()
+
+    @patch('licenses.time.sleep')
+    @patch('licenses.subprocess.run')
+    def test_stdout_fatal_errors_override_transient_stderr_or_json(self, run, sleep):
+        for fatal in licenses.FATAL:
+            for output in (json.dumps(dict(Error=fatal+'; i/o timeout')),
+                           json.dumps(dict(Error='i/o timeout'))+'\n'+json.dumps(dict(Error=fatal)),
+                           fatal+'; i/o timeout'):
+                with self.subTest(fatal=fatal, output=output):
+                    run.reset_mock()
+                    error = subprocess.CalledProcessError(1, ['go'], output=output, stderr='connection reset')
+                    run.side_effect = error
+                    with self.assertRaises(subprocess.CalledProcessError) as caught:
+                        licenses.network_output(['go'])
+                    self.assertIs(caught.exception, error)
+                    self.assertEqual(run.call_count, 1)
+        sleep.assert_not_called()
+
+    @patch('licenses.time.sleep')
+    @patch('licenses.subprocess.run')
+    def test_unstructured_or_non_error_stdout_never_justifies_retry(self, run, sleep):
+        for output in ('i/o timeout', '{"Error": "i/o timeout"',
+                       '{"Error": "i/o timeout"}\npartial',
+                       json.dumps(dict(Path='example/no such host', Error='unsupported target')),
+                       json.dumps(dict(Error=['i/o timeout'])), json.dumps(['i/o timeout']),
+                       json.dumps(dict(Error=dict(Detail='i/o timeout'))),
+                       '['*2000+'"i/o timeout"'+']'*2000):
+            with self.subTest(output=output):
+                run.reset_mock()
+                error = subprocess.CalledProcessError(1, ['go'], output=output, stderr='')
+                run.side_effect = error
+                with self.assertRaises(subprocess.CalledProcessError) as caught:
+                    licenses.network_output(['go'])
+                self.assertIs(caught.exception, error)
+                self.assertEqual(run.call_count, 1)
+        sleep.assert_not_called()
+
+    @patch('licenses.time.sleep')
+    @patch('licenses.subprocess.run')
+    def test_stdout_diagnostics_are_bounded_without_truncating_classification(self, run, sleep):
+        limit = licenses.STDOUT_DIAGNOSTIC_LIMIT
+        output = 'begin\n'+'a'*limit+'checksum mismatch'+'b'*limit+'\nend'
+        error = subprocess.CalledProcessError(1, ['go'], output=output, stderr='i/o timeout')
+        run.side_effect = error
+        with self.assertRaises(subprocess.CalledProcessError) as caught:
+            licenses.network_output(['go'])
+        self.assertIs(caught.exception, error)
+        self.assertEqual(caught.exception.stdout, output)
+        diagnostic = self.diagnostics.getvalue()
+        self.assertIn('begin\n', diagnostic)
+        self.assertIn('\nend', diagnostic)
+        self.assertIn('[stdout truncated]', diagnostic)
+        self.assertLess(len(diagnostic), limit+150)
+        self.assertEqual(run.call_count, 1)
+        sleep.assert_not_called()
+
+    @patch('licenses.time.sleep')
+    @patch('licenses.subprocess.run')
+    def test_json_diagnostic_prefers_error_over_large_metadata(self, run, sleep):
+        message = 'unsupported target'
+        output = json.dumps(dict(Info='a'*(licenses.STDOUT_DIAGNOSTIC_LIMIT*2), Error=message))
+        run.side_effect = subprocess.CalledProcessError(1, ['go'], output=output, stderr='')
+        with self.assertRaises(subprocess.CalledProcessError): licenses.network_output(['go'])
+        self.assertIn(message, self.diagnostics.getvalue())
+        self.assertLess(len(self.diagnostics.getvalue()), 100)
+        self.assertEqual(run.call_count, 1)
+        sleep.assert_not_called()
+
+    @patch('licenses.time.sleep')
+    @patch('licenses.subprocess.run')
+    def test_large_json_error_is_bounded_but_classified_in_full(self, run, sleep):
+        limit = licenses.STDOUT_DIAGNOSTIC_LIMIT
+        message = 'begin\n'+'a'*limit+'checksum mismatch'+'b'*limit+'\nend: i/o timeout'
+        output = json.dumps(dict(Error=message))
+        error = subprocess.CalledProcessError(1, ['go'], output=output, stderr='')
+        run.side_effect = error
+        with self.assertRaises(subprocess.CalledProcessError) as caught:
+            licenses.network_output(['go'])
+        self.assertIs(caught.exception, error)
+        self.assertIn('begin\n', self.diagnostics.getvalue())
+        self.assertIn('\nend: i/o timeout', self.diagnostics.getvalue())
+        self.assertIn('[stdout truncated]', self.diagnostics.getvalue())
+        self.assertLess(len(self.diagnostics.getvalue()), limit+150)
+        self.assertEqual(run.call_count, 1)
+        sleep.assert_not_called()
+
+    @patch('licenses.time.sleep')
+    @patch('licenses.subprocess.run')
+    def test_success_returns_untouched_stdout_and_preserves_stderr(self, run, sleep):
+        output = json.dumps(dict(Path='example/complete', Dir='/module/cache'))+'\n'
+        run.return_value = subprocess.CompletedProcess(['go'], 0, output, 'go: download progress\n')
+        self.assertEqual(licenses.network_output(['go']), output)
+        self.assertEqual(self.diagnostics.getvalue(), 'go: download progress\n')
+        run.assert_called_once()
+        sleep.assert_not_called()
 
     @patch('licenses.time.sleep')
     @patch('licenses.subprocess.run')

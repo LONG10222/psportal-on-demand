@@ -23,6 +23,11 @@ NATIVE_COMPATIBILITY_LINKS = {
     'Contents/MacOS/native': '../Resources/native',
     NATIVE_RESOURCE_ALIAS: '../../MacOS/psportal-native',
 }
+# Exact PyInstaller 6.16.0 data layout observed in the StarPass macOS inventory.
+# This supplements app-owned resources without changing the pinned runtime map.
+BRANDING_COMPATIBILITY_LINKS = {
+    'Contents/Frameworks/assets': '../Resources/assets',
+}
 METHOD = 'pinned-pyinstaller-transform-and-signature-removal'
 
 
@@ -95,6 +100,24 @@ def verified_origin(binary, source, source_sha, packaged, kind):
     return False
 
 
+def reviewed_branding_files():
+    """Bind the app's data icons and Dock ICNS to retained source asset hashes."""
+    manifest = json.loads((ROOT.parent / 'native/assets/branding/manifest.json').read_text(encoding='utf-8'))
+    source_prefix = 'assets/branding/desktop/'
+    expected = {}
+    for path, entry in manifest['outputs'].items():
+        if not path.startswith(source_prefix):
+            continue
+        name = path.removeprefix(source_prefix)
+        require(safe_relative(name) and '/' not in name and re.fullmatch('[0-9a-f]{64}', entry['sha256']),
+                'Invalid retained branding asset identity')
+        expected['Contents/Resources/assets/branding/' + name] = entry['sha256']
+    require(len(expected) == 11 and 'Contents/Resources/assets/branding/starpass.icns' in expected,
+            'Retained desktop branding asset set differs from review')
+    expected['Contents/Resources/starpass.icns'] = expected['Contents/Resources/assets/branding/starpass.icns']
+    return expected
+
+
 def verify_inventory(report, reviewed):
     require(report.get('inventory_complete') is True and not report.get('issues'), 'Runtime inventory has unresolved issues')
     require(reviewed.get('architecture') == 'arm64' and reviewed.get('python_version') == '3.13.15' and
@@ -114,10 +137,16 @@ def verify_inventory(report, reviewed):
     links = {key: value['target'] for key, value in unique_records(report.get('symlinks', []), 'symlink').items()}
     expected_links = {key: value['target'] for key, value in unique_records(reviewed['expected_bundle_symlinks'], 'reviewed symlink').items()}
     expected_links['Contents/Resources/yaml'] = '../Frameworks/yaml'
+    expected_links.update(BRANDING_COMPATIBILITY_LINKS)
     require(links == expected_links and all(links.get(path) == target for path, target in NATIVE_COMPATIBILITY_LINKS.items()),
             'Bundle symlink topology differs from review')
     for path in links:
         resolve_bundle_path(path, links)
+    actual_branding = {path: entry['sha256'] for path, entry in files.items()
+                      if path.startswith(('Contents/Resources/assets/', 'Contents/Frameworks/assets/')) or
+                      path == 'Contents/Resources/starpass.icns'}
+    require(actual_branding == reviewed_branding_files(),
+            'Bundled branding files differ from retained asset manifest')
     require(reviewed['expected_binary_path_count'] == 64 and len(binaries) == 65 and
             set(binaries) == set(reviewed['runtime_files']) | {yaml_path, APP_EXECUTABLE, NATIVE_EXECUTABLE, NATIVE_RESOURCE_ALIAS}, 'Unexpected frozen binaries')
     require(binaries[NATIVE_EXECUTABLE]['sha256'] == binaries[NATIVE_RESOURCE_ALIAS]['sha256'] and
