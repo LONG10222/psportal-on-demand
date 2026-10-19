@@ -8,6 +8,7 @@
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
+| `core_mode` | `standalone` | 独立自管核心；`openclash` 只读复用外部核心，详见[联动指南](openclash-linked.zh-CN.md) |
 | `enabled` | 配置前 `0` | 向导完成后设为 `1` |
 | `listen_ip` | 必填 | 软路由已有的局域网 IPv4 |
 | `client_ip` | 必填 | 唯一允许接入的客户端 IPv4 |
@@ -50,6 +51,8 @@ Portal 的后台请求、保活和失败重试也会触发启动或延长运行�
 健康检查只在核心运行期间执行。订阅改为明确执行 `portalproxy subscription-update`，安全下载到文件缓存，不自动定时更新。运行中的核心可能立即重载换线。详见[节点偏好与验收](node-preferences.zh-CN.md)。
 
 ## OpenClash 共存
+
+以下指独立核心共存。现在也可显式选择无需第二核心的[OpenClash 联动模式](openclash-linked.zh-CN.md)，其认证、DNS、最终规则与空闲行为不同。
 
 核心、配置、订阅缓存和管理 API 与 OpenClash 分开。安装器复制已有核心，不依赖 OpenClash 进程运行。
 

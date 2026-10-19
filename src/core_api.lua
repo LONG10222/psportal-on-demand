@@ -29,7 +29,8 @@ function M.encode_name(name)
     if type(name)~='string' or #name==0 or #name>256 then return nil end
     return (name:gsub('[^A-Za-z0-9%-%._~]',function(c) return string.format('%%%02X',c:byte()) end))
 end
-local function allowed_path(path)
+local function allowed_path(path,cfg)
+    if path=='/configs' and cfg.core_mode=='openclash' then return true end
     if path=='/proxies' then return true end
     local name=type(path)=='string' and path:match('^/proxies/([A-Za-z0-9%%._~%-]+)$')
     if not name or #name>768 or name:gsub('%%%x%x',''):find('%%') then return false end
@@ -145,13 +146,16 @@ function M.probe(port,opts)
     local ok,err=connect(socket,port,budget(opts)); socket:close(); return ok,err
 end
 function M.get(cfg,path,opts)
-    if type(cfg)~='table' or not valid_port(cfg.api_port) or not allowed_path(path) then return nil,'invalid API request' end
-    local auth,why=auth_header(cfg.api_header); if not auth then return nil,why end
+    if type(cfg)~='table' or not valid_port(cfg.api_port) or not allowed_path(path,cfg) then return nil,'invalid API request' end
+    local auth,why
+    if cfg.core_mode=='openclash' then auth,why=require('openclash').auth(cfg)
+    else auth,why=auth_header(cfg.api_header) end
+    if auth==nil then return nil,why end
     local socket=n.socket('inet','stream'); if not socket then return nil,'socket unavailable' end
     local b=budget(opts)
     local function finish(value,err) socket:close(); return value,err end
     local ok,err=connect(socket,cfg.api_port,b); if not ok then return finish(nil,err) end
-    local request='GET '..path..' HTTP/1.1\r\nHost: 127.0.0.1:'..cfg.api_port..'\r\n'..auth..'\r\nAccept: application/json\r\nConnection: close\r\n\r\n'
+    local request='GET '..path..' HTTP/1.1\r\nHost: 127.0.0.1:'..cfg.api_port..'\r\n'..(auth~='' and auth..'\r\n' or '')..'Accept: application/json\r\nConnection: close\r\n\r\n'
     local offset=1
     while offset<=#request do
         local ready,reason=wait_socket(socket,OUT,b)

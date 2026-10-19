@@ -135,4 +135,17 @@ for pos=1,#valid do
             'safe mutation at byte '..pos..' value '..byte)
     end
 end
+for _,fake in ipairs({'198.18.0.1','198.19.255.254'}) do
+    local ip,denied=dns.parse_response(response({a(fake)}),id,question,true)
+    check(ip==nil and denied==false,'linked fake-IP is forwarded by name, never dialed')
+    expect(response({a(fake)}),nil,true,'standalone fake-IP remains denied')
+    local _,bad=dns.parse_response(response({a(fake),a('127.0.0.1')}),id,question,true)
+    check(bad,'linked fake-IP never masks forbidden answers')
+    local _,broken=dns.parse_response(response({a(fake)}):sub(1,-2),id,question,true)
+    check(broken,'linked fake-IP cannot mask malformed packets')
+end
+for _,reserved in ipairs({'198.17.0.1','198.20.0.1','169.254.169.254','0.0.0.0'}) do
+    local ip,denied=dns.parse_response(response({a(reserved)}),id,question,true)
+    check(ip==nil and (protocol.destination(reserved)=='external' or denied),'linked exception does not relax other ranges')
+end
 print('Passed '..count..' DNS response assertions')

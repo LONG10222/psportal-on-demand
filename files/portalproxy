@@ -23,6 +23,8 @@ case "${1:-status}" in
         trap 'exit 129' HUP
         trap 'exit 130' INT
         trap 'exit 143' TERM
+        prompt 'Core mode: standalone or openclash (reuse OpenClash without managing it)' "$(get_option core_mode)"; core_mode="${reply:-standalone}"
+        case "$core_mode" in standalone|openclash) ;; *) echo 'Invalid core mode' >&2; exit 1 ;; esac
         detected_ip="$(uci -q get network.lan.ipaddr 2>/dev/null || true)"
         detected_ip="${detected_ip%%/*}"
         old_ip="$(get_option listen_ip)"
@@ -35,6 +37,8 @@ case "${1:-status}" in
         prompt 'Working bootstrap DNS IPv4 addresses, separated by spaces' "${dns:-$local_dns}"; bootstrap_dns="$reply"
         prompt 'HTTP proxy port' "$(get_option listen_port)"; listen_port="${reply:-10081}"
         prompt 'External idle timeout in seconds' "$(get_option idle_seconds)"; idle_seconds="${reply:-60}"
+        subscription_url=''; seed_file=''; routing_mark=0
+        if [ "$core_mode" = standalone ]; then
         printf 'HTTPS Clash/Mihomo subscription URL (hidden; empty keeps existing): '
         stty -echo
         IFS= read -r subscription_url
@@ -44,15 +48,21 @@ case "${1:-status}" in
         mark="$(get_option routing_mark)"
         if [ "${mark:-0}" = 0 ] && [ -f /etc/init.d/openclash ]; then mark=6666; fi
         prompt 'Outbound routing mark (6666 for common OpenClash builds, 0 disables)' "${mark:-0}"; routing_mark="$reply"
-        printf '%s\n' "$listen_ip" "$client_ip" "$local_dns" "$bootstrap_dns" "$listen_port" "$idle_seconds" "$subscription_url" "$seed_file" "$routing_mark" > "$setup_file"
+        fi
+        printf '%s\n' "$listen_ip" "$client_ip" "$local_dns" "$bootstrap_dns" "$listen_port" "$idle_seconds" "$subscription_url" "$seed_file" "$routing_mark" "$core_mode" > "$setup_file"
         /usr/bin/lua /usr/libexec/portalproxy/configure.lua "$setup_file"
         /usr/bin/lua /usr/libexec/portalproxy/render.lua
         /etc/init.d/portalproxy-core disable
         /etc/init.d/portalproxy enable
         /etc/init.d/portalproxy restart
         printf 'Portal HTTP proxy: %s:%s\n' "$listen_ip" "$listen_port"
-        echo 'Listener enabled at boot. The core starts only for external requests.'
-        echo 'Import a seed or run portalproxy subscription-update before the first external request.'
+        if [ "$core_mode" = openclash ]; then
+            echo 'Listener enabled. OpenClash must already be running; its rules and DNS control final routes, including DIRECT.'
+            echo 'Idle closes only our sessions. Manage nodes and subscriptions in OpenClash. HTTP proxy does not carry game UDP.'
+        else
+            echo 'Listener enabled at boot. The core starts only for external requests.'
+            echo 'Import a seed or run portalproxy subscription-update before the first external request.'
+        fi
         ;;
     nodes) exec /usr/bin/lua /usr/libexec/portalproxy/nodes.lua list ;;
     nodes-refresh) exec /usr/bin/lua /usr/libexec/portalproxy/nodes.lua refresh ;;

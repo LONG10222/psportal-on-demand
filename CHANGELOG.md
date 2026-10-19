@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased — 2026-10-19：iStoreOS / OpenClash 只读联动
+
+- 新增显式 `core_mode=openclash`；保留独立 Mihomo 按需启动/空闲关闭，联动仅管理自己的入口和会话，不启停外部核心
+- 只读使用有效 UCI 覆盖层发现 HTTP/mixed/controller 端口；回环认证、运行端口漂移、代理认证豁免和冲突检查有界且不泄露密钥
+- OpenClash 模式/任意策略组只读快照，不假设 PORTAL 组，不捏造实际出口或游戏延迟；可选节点列表失败不阻断已验证入口
+- 严格解析的公开域名 fake-IP 回答转交原域名；字面假地址、本地域名、危险回答及畸形包仍拒绝
+- `--openclash` 无核心安装，配置保留；LuCI/CLI 明确模式、保存/应用与外部管理边界，独立订阅操作在联动时拒绝
+- 新增可重复源码包/校验清单和 GitHub Actions 产物；模拟/暂存测试不等于 iStoreOS/OpenWrt 实机、IPK/APK 或游戏 UDP 支持
+- 同步主 README 的 Android 面板、iOS 四页/有界后台实验及平台矩阵，不改客户端源码、Apple 工作或图标
+- [详细行为、安装与未验证范围](docs/openclash-linked.zh-CN.md)
+
 ## Unreleased — 2026-10-19：最新上传构建校验
 
 - 以最新 iOS 四页界面和限时后台实验为基线，保留用户更新

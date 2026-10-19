@@ -13,6 +13,7 @@ local core_api = require 'core_api'
 local node_status = require 'node_status'
 local policy_path = assert(arg[1], 'policy required')
 local cfg = assert(json.parse(assert(fs.readfile(policy_path))), 'Invalid policy')
+local linked = cfg.core_mode == 'openclash'
 n.umask('077')
 n.signal(n.const.SIGTERM, 'dfl')
 n.signal(n.const.SIGINT, 'dfl')
@@ -33,6 +34,12 @@ end
 local function core_pid()
     local t = util.ubus('service', 'list', {name=cfg.core_name}) or {}
     local i = t[cfg.core_name] and t[cfg.core_name].instances
+    if linked and type(i)=='table' then
+        for _,instance in pairs(i) do
+            if type(instance)=='table' and instance.running then return instance.pid end
+        end
+        return nil
+    end
     return i and i.main and i.main.running and i.main.pid or nil
 end
 local function save(reason)
@@ -41,8 +48,9 @@ local function save(reason)
         if not s.dead and s.kind == 'external' then ext=ext+1 end
         if not s.dead and s.kind == 'local' then lan=lan+1 end
     end
-    local t = {launcher_pid=n.getpid(), core_running=core_on and core_pid()~=nil,
-        core_pid=core_on and core_pid() or nil, core_starting=startup_pid~=nil, idle_timeout=cfg.idle_seconds,
+    local t = {launcher_pid=n.getpid(), core_mode=linked and 'openclash' or 'standalone',
+        session_active=core_on, core_managed=not linked,core_running=(linked or core_on) and core_pid()~=nil,
+        core_pid=(linked or core_on) and core_pid() or nil, core_starting=startup_pid~=nil, idle_timeout=cfg.idle_seconds,
         idle_seconds=core_on and math.max(0,now()-last_external) or 0,
         external_connections=ext, local_connections=lan, reason=reason,
         counters=counters, allowed_ip=cfg.allowed_ip, port=cfg.port}
@@ -66,11 +74,11 @@ end
 local function stop_core(reason)
     kill_startup()
     for _,s in ipairs(sessions) do if s.kind=='external' then close_session(s) end end
-    sys.call(cfg.core_service..' stop >/dev/null 2>&1')
+    if not linked then sys.call(cfg.core_service..' stop >/dev/null 2>&1') end
     core_on=false
     lifecycle.complete(life,now(),false)
     if reason=='idle' then counters.idle_stops=counters.idle_stops+1 end
-    log('core_off reason='..reason..' external_idle_seconds='..tostring(last_external>0 and now()-last_external or 0))
+    log((linked and 'linked_sessions_closed reason=' or 'core_off reason=')..reason..' external_idle_seconds='..tostring(last_external>0 and now()-last_external or 0))
     save(reason)
 end
 local function route_ready(owner)
@@ -78,14 +86,14 @@ local function route_ready(owner)
     if not snapshot or not ownership.valid(cfg,owner) then return false end
     -- Readiness children alone refresh automatically. Cached CLI reads and
     -- explicit controller reads never renew the listener's external idle timer.
-    if not node_status.write(cfg,snapshot) then return false end
+    if not node_status.write(cfg,snapshot) and not linked then return false end
     return snapshot.ready and ownership.valid(cfg,owner)
 end
 -- This function runs only in the readiness child. It may block on procd/API.
 local function await_core(owner)
     if not ownership.valid(cfg,owner) then return false end
     local cold=not core_pid()
-    if cold and sys.call(cfg.core_service..' start >/dev/null 2>&1')~=0 then return false end
+    if not linked and cold and sys.call(cfg.core_service..' start >/dev/null 2>&1')~=0 then return false end
     local deadline=now()+(cfg.wakeup_timeout or 12)
     while now()<deadline do
         if not ownership.valid(cfg,owner) then return false end
@@ -113,7 +121,7 @@ local function launch_startup()
     end
     startup_pid=pid; startup_killed=false; startup_generation=owner
     counters.starts=counters.starts+1
-    log('core_start external_request')
+    log(linked and 'linked_readiness external_request' or 'core_start external_request')
     return true
 end
 local function word(v) return string.char(math.floor(v/256)%256,v%256) end
@@ -134,7 +142,7 @@ local function resolve_private(host)
     s:close()
     local chosen,denied=nil,false
     if data and peer==cfg.local_dns and port==53 then
-        chosen,denied=dns.parse_response(data,id,question)
+        chosen,denied=dns.parse_response(data,id,question,linked and host:find('.',1,true)~=nil and not host:match('%.lan$') and not host:match('%.local$'))
     end
     local size=0; for _ in pairs(cache) do size=size+1 end
     if size>256 then cache={} end
@@ -255,12 +263,12 @@ local function read_side(s,side)
 end
 local function main()
     ownership.cancel(cfg)
-    sys.call(cfg.core_service..' stop >/dev/null 2>&1')
+    if not linked then sys.call(cfg.core_service..' stop >/dev/null 2>&1') end
     core_on=false
     generation=assert(ownership.begin(cfg),'Cannot establish startup ownership')
     server=assert(n.bind(cfg.bind,cfg.port,'inet','stream'))
     assert(server:listen(32)); assert(server:setblocking(false))
-    log('listener_ready core_off'); save('waiting')
+    log(linked and 'listener_ready external_core_unmanaged' or 'listener_ready core_off'); save('waiting')
     local loop_count=0
     while true do
         advance_startup()

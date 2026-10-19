@@ -3,11 +3,13 @@ set -eu
 BASE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 ROOT=''
 CORE=''
+LINKED=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --root) [ "$#" -ge 2 ] || exit 2; ROOT="$2"; shift 2 ;;
+        --openclash) LINKED=1; shift ;;
         --core) [ "$#" -ge 2 ] || exit 2; CORE="$2"; shift 2 ;;
-        *) echo 'Usage: sh install.sh [--core /path/to/mihomo] [--root /staging/directory]' >&2; exit 2 ;;
+        *) echo 'Usage: sh install.sh [--openclash | --core /path/to/mihomo] [--root /staging/directory]' >&2; exit 2 ;;
     esac
 done
 ROOT="${ROOT%/}"
@@ -20,12 +22,12 @@ if [ -z "$ROOT" ]; then
         echo 'Missing Lua dependencies. See the README dependency section.' >&2; exit 1;
     }
 fi
-if [ -z "$CORE" ]; then
+if [ "$LINKED" = 0 ] && [ -z "$CORE" ]; then
     for candidate in "$ROOT/usr/libexec/portalproxy/mihomo" /etc/openclash/core/clash_meta /usr/bin/mihomo; do
         if [ -x "$candidate" ]; then CORE="$candidate"; break; fi
     done
 fi
-[ -n "$CORE" ] && [ -x "$CORE" ] || { echo 'Provide a compatible Mihomo executable with --core.' >&2; exit 1; }
+[ "$LINKED" = 1 ] || { [ -n "$CORE" ] && [ -x "$CORE" ]; } || { echo 'Provide a compatible Mihomo executable with --core.' >&2; exit 1; }
 umask 077
 if [ -f "$ROOT/etc/config/portalproxy" ]; then
     mkdir -p "$ROOT/etc/portalproxy-backups"
@@ -45,8 +47,11 @@ for file in "$BASE"/src/*.lua; do cp "$file" "$ROOT/usr/libexec/portalproxy/"; d
 cp "$BASE/files/portalproxy.init" "$ROOT/etc/init.d/portalproxy"
 cp "$BASE/files/portalproxy-core.init" "$ROOT/etc/init.d/portalproxy-core"
 cp "$BASE/files/portalproxy" "$ROOT/usr/sbin/portalproxy"
-[ -f "$ROOT/etc/config/portalproxy" ] || cp "$BASE/files/portalproxy.config" "$ROOT/etc/config/portalproxy"
-if [ "$CORE" != "$ROOT/usr/libexec/portalproxy/mihomo" ]; then cp "$CORE" "$ROOT/usr/libexec/portalproxy/mihomo"; fi
+if [ ! -f "$ROOT/etc/config/portalproxy" ]; then
+    cp "$BASE/files/portalproxy.config" "$ROOT/etc/config/portalproxy"
+    [ "$LINKED" = 0 ] || sed -i "s/option core_mode 'standalone'/option core_mode 'openclash'/" "$ROOT/etc/config/portalproxy"
+fi
+if [ "$LINKED" = 0 ] && [ "$CORE" != "$ROOT/usr/libexec/portalproxy/mihomo" ]; then cp "$CORE" "$ROOT/usr/libexec/portalproxy/mihomo"; fi
 chmod 700 "$ROOT/usr/libexec/portalproxy/"* "$ROOT/etc/init.d/portalproxy" "$ROOT/etc/init.d/portalproxy-core" "$ROOT/usr/sbin/portalproxy"
 chmod 600 "$ROOT/etc/config/portalproxy"
 # Optional legacy LuCI interface; CLI works without luci-compat.
@@ -59,7 +64,8 @@ fi
 
 if [ -z "$ROOT" ]; then
     /etc/init.d/portalproxy-core disable
-    echo 'Installed. Run: portalproxy setup'
+    echo 'Installed. Run: portalproxy setup (choose standalone or openclash explicitly)'
+    [ "$LINKED" = 0 ] || echo 'No core copied. Existing configuration was preserved; choose openclash in setup.'
 else
     echo 'Staging install complete. No services were started or enabled.'
 fi

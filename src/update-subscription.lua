@@ -85,6 +85,7 @@ local function main()
     assert(not arg[1], 'Subscription update takes no arguments')
     assert(n.getuid()==0, 'Subscription update requires root')
     local uci=require 'uci'.cursor()
+    assert(uci:get('portalproxy','main','core_mode')~='openclash','Manage linked subscriptions in OpenClash')
     stage='configuration validation'
     local options={subscription_url=uci:get('portalproxy','main','subscription_url'),
         subscription_user_agent=uci:get('portalproxy','main','subscription_user_agent')}

@@ -6,15 +6,16 @@ local uci = require 'uci'.cursor()
 local config = require 'config'
 local f = assert(io.open(assert(arg[1]),'r'))
 local values = {}
-local keys = {'listen_ip','client_ip','local_dns','bootstrap_dns','listen_port','idle_seconds','subscription_url','seed_file','routing_mark'}
+local keys = {'listen_ip','client_ip','local_dns','bootstrap_dns','listen_port','idle_seconds','subscription_url','seed_file','routing_mark','core_mode'}
 for _,key in ipairs(keys) do values[key] = f:read('*l') or '' end
 f:close()
 local ok,err = pcall(function()
     local options = uci:get_all('portalproxy','main') or {}
     for _,key in ipairs(keys) do if key ~= 'seed_file' and values[key] ~= '' then options[key] = values[key] end end
     config.validate(options)
+    if options.core_mode=='openclash' then config.render(options,nil,nil,require('openclash').discover()) end
     local seed
-    if values.seed_file ~= '' then
+    if options.core_mode~='openclash' and values.seed_file ~= '' then
         local st = fs.stat(values.seed_file)
         assert(st and st.type == 'reg' and st.size > 0 and st.size <= 5242880, 'Seed must be a regular Clash/Mihomo YAML file, at most 5 MiB')
         seed = assert(fs.readfile(values.seed_file))

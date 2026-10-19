@@ -12,22 +12,34 @@
 桌面不会自动修改系统代理、VPN、DNS 或防火墙；Android 本机代理仍需系统 VPN 授权。
 
 
-PS Portal 的 OpenWrt / iStoreOS 按需代理。访问外网时启动 Mihomo，空闲 60 秒后自动关闭。
+PS Portal 的 OpenWrt / iStoreOS 按需代理。独立模式访问外网时启动自己的 Mihomo，空闲 60 秒后关闭；新增 OpenClash 联动模式复用已运行的核心，空闲只关闭本插件自己的连接。
 
 - **按需启停**：监听器开机自启，代理核心由外网请求唤醒。
 - **节点偏好**：自己的订阅支持自动地区回退、首选后回退或固定节点；可选登录后的 LuCI 页面。
 - **单设备接入**：通过 IP 白名单限制客户端，Portal 手动设置 HTTP 代理即可使用。
+- **OpenClash 联动**：只读发现回环入口，复用已有订阅、节点和规则，不启动/停止外部核心；节点管理留在 OpenClash
 - **独立运行**：使用独立的核心和配置，OpenClash 无需启动；局域网请求直接连接。
 
 > 第二阶段仍需固定版本 Mihomo/OpenWrt/LuCI 实机验收，详见[节点偏好与验收](docs/node-preferences.zh-CN.md)。
 
 ## 桌面与移动端开发版
 
-下面的路由器版本保持独立。Linux、Windows、macOS 请看[桌面使用说明](portable/docs/desktop.md)；共享原生引擎和移动端请看 [native/README.md](native/README.md)。不要在桌面系统执行路由器安装脚本。
+路由器有独立核心和外部 OpenClash 联动两种归属模式。Linux、Windows、macOS 请看[桌面使用说明](portable/docs/desktop.md)；共享原生引擎和移动端请看 [native/README.md](native/README.md)。不要在桌面系统执行路由器安装脚本。
 
-桌面默认使用独立 Mihomo，也可在同一界面选择实验性的内置共享引擎。Android 由前台服务运行；iOS 只能前台托管。请先看[当前验证结果与平台限制](docs/portable-status.zh-CN.md)。原生引擎遵循 GPL-3.0，原路由器与包装界面遵循 MIT；分发原生二进制须附带完整对应源码。
+桌面默认使用独立 Mihomo，也可在同一界面选择实验性的内置共享引擎。Android 由前台服务运行；iOS 默认前台托管；iOS 26+ 限时后台实验仍需实际授权与真机验收。请先看[当前验证结果与平台限制](docs/portable-status.zh-CN.md)。原生引擎遵循 GPL-3.0，原路由器与包装界面遵循 MIT；分发原生二进制须附带完整对应源码。
 
-## 快速开始
+## OpenClash 联动快速开始
+
+从本草稿 PR 精确提交或 Actions 的 `starpass-router-source-…` 下载源码安装包；旧 main 压缩包尚不含本次更新。
+无需复制核心：`sh install.sh --openclash`，然后 `portalproxy setup` 选择 `openclash`。
+在 OpenClash 内先配置并启动订阅／节点；本插件仅设置 LAN 地址、单设备白名单、HTTP 端口与空闲时间。
+LuCI 中可选择归属模式，保存后明确应用。已有安装不会被安装参数静默改模式。
+
+[详细联动指南、控制器认证、fake-IP 和验证边界](docs/openclash-linked.zh-CN.md)。
+OpenClash 的最终规则可以选 DIRECT，看到的来源通常是路由器。HTTP 入口不承载游戏 UDP。
+本次提供源码安装器及校验清单，尚未制作／验收 iStore 上架包、IPK 或 APK。
+
+## 独立模式快速开始
 
 ### 1. 准备
 

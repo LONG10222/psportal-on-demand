@@ -71,13 +71,18 @@ local function fixture()
         function sock:recv(size)
             check(self.nonblock and size==8192,'bounded nonblocking recv')
             if w.recv_error then return nil,w.recv_error end
-            self.part=self.part+1; return w.response and w.response[self.part] or ''
+            self.part=self.part+1; local path=self.request:match('^GET ([^ ]+) '); local parts=(w.by_path and w.by_path[path]) or w.response; return parts and parts[self.part] or ''
         end
         function sock:close() w.closed=w.closed+1; return true end
         return sock
     end
-    local api=load_module('core_api',{nixio=n,['nixio.fs']=fs,['luci.jsonc']=json})
-    local status=load_module('node_status',{nixio=n,['nixio.fs']=fs,['luci.jsonc']=json,core_api=api})
+    local linked=load_module('openclash',{uci={cursor=function() return {get=function(_,package,section,key)
+        check(package=='openclash','external auth reads only OpenClash')
+        if section=='@overwrite[0]' then return nil end
+        return ({enable='1',http_port='18680',cn_port=tostring(cfg.api_port),dashboard_password=w.external_secret or 'test-only-external!@$'})[key]
+    end} end}})
+    local api=load_module('core_api',{nixio=n,['nixio.fs']=fs,['luci.jsonc']=json,openclash=linked})
+    local status=load_module('node_status',{nixio=n,['nixio.fs']=fs,['luci.jsonc']=json,core_api=api,openclash=linked})
     local function response(value)
         local body=json.stringify(value)
         w.response={'HTTP/1.1 200 OK\r\nContent-Length: '..#body..'\r\n\r\n'..body}; return body
@@ -208,4 +213,42 @@ for _,failure in ipairs({'fail_open','fail_write','fail_close','fail_rename'}) d
 end
 w.stats['/mock/run'].modestr='rwxrwxrwx';check(not status.write(cfg,snap),'unsafe cache directory rejected')
 check(w.sockets>=sockets,'no hidden cache-related service or listener operation')
+w,cfg,api,status,put,response=fixture(); cfg.core_mode='openclash';cfg.backend_port=18680;cfg.proxy_kind='http'
+response({mode='rule',port=18680});check(api.get(cfg,'/configs').mode=='rule','linked configs GET is allowed')
+check(w.requests[1]:find('Authorization: Bearer test-only-external!@$',1,true),'external header punctuation preserved')
+local previous=w.sockets
+for _,path in ipairs({'/configs?x=1','/connections','/providers/proxies','/proxies/a/delay','/configs/geo'}) do
+    check(not api.get(cfg,path),'linked API remains restricted')
+end
+check(w.sockets==previous,'unapproved linked paths never connect')
+w.external_secret='';response({ok=true});check(api.get(cfg,'/proxies').ok,'explicit empty upstream auth supported')
+check(not w.requests[w.sockets]:find('Authorization:',1,true),'empty auth omits header without malformed CRLF')
+local sockets_before=w.sockets
+w.response={'HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n'}
+check(not api.get(cfg,'/proxies'),'401 rejected')
+check(w.sockets==sockets_before+1,'401 never retries anonymously')
+w.external_secret='secret\r\nInjected: bad';sockets_before=w.sockets
+check(not api.get(cfg,'/configs') and w.sockets==sockets_before,'unsafe external token blocked before connect')
+w.external_secret='private-secret'
+local groupbody=response({proxies={GLOBAL={type='Selector',now='DIRECT',all={'DIRECT'},secret='MUST-NOT-LEAK'},
+    DIRECT={type='Direct'},['safe node']={type='Trojan',password='MUST-NOT-LEAK'},['bad\nname']={type='Trojan'}}})
+local groupwire=copy(w.response)
+response({mode='rule',port=18680,authentication={},secret='MUST-NOT-LEAK'})
+w.by_path={['/proxies']=groupwire,['/configs']=copy(w.response)}
+local linked_snapshot=assert(status.collect(cfg))
+check(linked_snapshot.ready and linked_snapshot.current==nil,'linked endpoint readiness never invents actual route')
+check(#linked_snapshot.groups==1 and linked_snapshot.groups[1].selected=='DIRECT','arbitrary group retained observationally')
+check(#linked_snapshot.nodes==1 and linked_snapshot.nodes[1].delay==nil,'unknown delay never becomes zero or fabricated health')
+check(linked_snapshot.secret==nil and linked_snapshot.groups[1].secret==nil and linked_snapshot.nodes[1].password==nil,'linked secret fields never enter snapshot')
+check(status.write(cfg,linked_snapshot),'linked cache uses same private writer')
+sockets_before=w.sockets;local linked_cache=assert(status.read(cfg))
+check(w.sockets==sockets_before and linked_cache.current==nil,'linked cached read opens no sockets')
+check(linked_cache.nodes[1].alive==nil and linked_cache.nodes[1].delay==nil,'linked cache does not invent health')
+cfg.core_mode='standalone';check(not status.read(cfg),'old linked cache is hidden after mode change');cfg.core_mode='openclash'
+w.by_path['/proxies']={'HTTP/1.1 503 Unavailable\r\nContent-Length: 0\r\n\r\n'}
+local optional=assert(status.collect(cfg))
+check(optional.ready and not optional.nodes_available and #optional.nodes==0,'optional failed node list does not block available linked endpoint')
+local dangerous=copy(linked_snapshot);dangerous.groups[1].selected='bad\27control'
+check(not status.write(cfg,dangerous),'unsafe linked selection rejected from cache')
+
 print('Passed '..count..' node API/status assertions (all sockets, files and services mocked)')

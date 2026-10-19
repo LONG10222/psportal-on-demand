@@ -6,7 +6,7 @@ local fs = require 'nixio.fs'
 local json = require 'luci.jsonc'
 local sys = require 'luci.sys'
 
-local form = SimpleForm('portalproxy_ui', translate('PS Portal'),
+local form = SimpleForm('portalproxy_ui', translate('StarPass / 星渡'),
     translate('Viewing this page reads a local snapshot only. It does not start the core, probe nodes, or keep the core awake. Save settings first, then explicitly apply them when connections may be interrupted.'))
 form.submit = false
 form.reset = false
@@ -22,6 +22,17 @@ http.header('Cache-Control', 'no-store')
 
 local cursor = require('uci').cursor()
 local options = cursor:get_all('portalproxy', 'main') or {}
+local linked = options.core_mode == 'openclash'
+local core_mode = form:field(ListValue, 'core_mode', translate('Core ownership'),
+    translate('Standalone starts and stops its own core. OpenClash linked reuses the already running external core; final DNS, rules and DIRECT choices stay with OpenClash. Idle closes only StarPass sessions. HTTP sharing does not carry game UDP.'))
+core_mode:value('standalone', translate('Standalone on-demand core'))
+core_mode:value('openclash', translate('OpenClash linked (read-only)'))
+core_mode.default = options.core_mode or 'standalone'
+core_mode.rmempty = false
+if linked then
+    local manage = form:field(DummyValue, '_openclash', translate('Subscription and node management'))
+    manage.value = translate('Use Services → OpenClash. This page never changes its subscriptions, selectors, rules, service or firewall.')
+end
 local function plain(value)
     return type(value) == 'string' and #value <= 256
         and not value:find('%c') and value or nil
@@ -49,17 +60,20 @@ do
         end
     end
 end
+if (snapshot.core_mode == 'openclash') ~= linked then snapshot = {} end
 local updated = type(snapshot.updated_at) == 'number' and snapshot.updated_at or nil
 if updated and (updated ~= updated or updated < 0 or updated > os.time() + 300
     or updated ~= math.floor(updated)) then updated = nil end
 local stale = not updated or os.time() - updated > 120
 local state = snapshot.ready == true and translate('Ready at last snapshot')
     or translate('Sleeping or not ready at last snapshot')
+if linked then state = snapshot.ready == true and translate('OpenClash endpoint available at snapshot; Internet and node health unknown') or translate('OpenClash endpoint unavailable at snapshot') end
 if stale then state = state .. ' / ' .. translate('stale cache') end
 local status = form:field(DummyValue, '_status', translate('Cached core state'))
 status.value = state
 local timestamp = form:field(DummyValue, '_updated', translate('Snapshot time'))
 timestamp.value = updated and os.date('!%Y-%m-%d %H:%M:%S UTC', updated) or translate('No cached status')
+if not linked then
 local current = type(snapshot.current) == 'table' and snapshot.current or {}
 local actual = form:field(DummyValue, '_current', translate('Actual node at last snapshot'))
 actual.value = (plain(current.name) or translate('Unknown')) .. ' / ' .. latency(current.delay)
@@ -73,11 +87,29 @@ end
 local route = form:field(DummyValue, '_path', translate('Cached selection path'))
 route.value = #path > 0 and table.concat(path, ' > ') or translate('Unknown')
 
+else
+    local routing = form:field(DummyValue, '_routing', translate('OpenClash routing mode at snapshot'))
+    routing.value = (snapshot.route_policy == 'rule' or snapshot.route_policy == 'global' or snapshot.route_policy == 'direct') and snapshot.route_policy or translate('Unknown')
+    local rows = {}
+    for i, group in ipairs(type(snapshot.groups) == 'table' and snapshot.groups or {}) do
+        if i > 256 then break end
+        if type(group) == 'table' and plain(group.name) and plain(group.type) then
+            rows[#rows+1] = {name=group.name,type=group.type,selected=plain(group.selected) or translate('Dynamic / unknown')}
+        end
+    end
+    local groups = form:section(Table, rows, translate('OpenClash groups (cached, read-only)'), translate('A group selection is not proof of the exit used by a particular request. Refresh explicitly with portalproxy nodes-refresh; page views never contact the core.'))
+    groups:option(DummyValue, 'name', translate('Group'))
+    groups:option(DummyValue, 'type', translate('Type'))
+    groups:option(DummyValue, 'selected', translate('Selected member'))
+end
+
 local saved = form:field(DummyValue, '_saved', translate('Saved preference'))
+saved:depends('core_mode','standalone')
 saved.value = plain(options.preferred_node) and options.preferred_node ~= ''
     and options.preferred_node or translate('None')
 local subscription = form:field(Value, 'subscription_url', translate('Replace HTTPS subscription URL'),
     translate('Input is hidden and never filled from the stored URL. Leave empty to keep the current subscription. Save before using Update subscription.'))
+subscription:depends('core_mode','standalone')
 subscription.password = true
 subscription.rmempty = true
 subscription.maxlength = 8192
@@ -93,6 +125,7 @@ function subscription.validate(self, value)
 end
 
 local mode = form:field(ListValue, 'selection_mode', translate('Selection mode'))
+mode:depends('core_mode','standalone')
 mode:value('auto', translate('Automatic regional fallback'))
 mode:value('preferred', translate('Preferred node, with automatic fallback'))
 mode:value('fixed', translate('Fixed node only (fail closed)'))
@@ -100,6 +133,7 @@ mode.default = options.selection_mode or 'auto'
 mode.rmempty = false
 local preferred = form:field(Value, 'preferred_node', translate('Preferred / fixed node name'),
     translate('Choose a cached name or enter the exact name, including case and spaces. The name is retained in automatic mode. Fixed mode rejects external traffic if the node is missing or unavailable; it never silently uses another node.'))
+preferred:depends('core_mode','standalone')
 preferred.default = plain(options.preferred_node) or ''
 preferred.maxlength = 256
 preferred.rmempty = true
@@ -139,15 +173,15 @@ end
 button('_save', translate('Save settings (no restart)'),
     translate('Save to UCI without restarting the listener or waking the core. Running connections keep their current configuration until Apply or the next service start.'))
 button('_apply', translate('Apply saved settings and restart listener'),
-    translate('Uses saved settings only; unsaved form edits are ignored. Restarts the listener and stops the core, interrupting active Portal connections. The core remains on demand.'))
-button('_update', translate('Update subscription now'),
-    translate('Downloads the cache using the saved URL without starting the core. A running core may automatically reload the changed file, switch live routes, and interrupt active Portal connections.'))
+    translate('Uses saved settings only; unsaved edits are ignored. Restarts the StarPass listener and stops its owned core, interrupting Portal sessions. An external OpenClash core is never restarted or stopped.'))
+if not linked then button('_update', translate('Update subscription now'),
+    translate('Downloads the cache using the saved URL without starting the core. A running core may automatically reload the changed file, switch live routes, and interrupt active Portal connections.')) end
 
 -- Post/redirect/get prevents a browser refresh from repeating a service action.
 -- Fixed result messages only; no submitted value enters a redirect.
 local results = {
     saved = translate('Settings saved. The listener was not restarted. Apply saved settings when interrupting active connections is acceptable.'),
-    applied = translate('Saved settings applied and listener restarted. The core will wake only for an external request.'),
+    applied = translate('Saved settings applied and listener restarted. Standalone remains on demand; linked mode leaves OpenClash running unchanged.'),
     updated = translate('Subscription cache updated. A running core may reload it and change live routes. The status below may still show the previous snapshot.')
 }
 local errors = {
@@ -191,8 +225,9 @@ function form.handle(self, state, data)
         if state ~= FORM_VALID then return true end
         local candidate = {}
         for key, value in pairs(options) do candidate[key] = value end
-        candidate.selection_mode = data.selection_mode or 'auto'
-        candidate.preferred_node = data.preferred_node or ''
+        candidate.core_mode = data.core_mode or options.core_mode or 'standalone'
+        candidate.selection_mode = data.selection_mode or options.selection_mode or 'auto'
+        candidate.preferred_node = data.preferred_node or options.preferred_node or ''
         if replacement and replacement ~= '' then candidate.subscription_url = replacement end
         local ok = pcall(function()
             package.path = '/usr/libexec/portalproxy/?.lua;' .. package.path
@@ -209,6 +244,7 @@ function form.handle(self, state, data)
             return true
         end
         local committed = pcall(function()
+            assert(cursor:set('portalproxy', 'main', 'core_mode', candidate.core_mode))
             assert(cursor:set('portalproxy', 'main', 'selection_mode', candidate.selection_mode))
             assert(cursor:set('portalproxy', 'main', 'preferred_node', candidate.preferred_node))
             if replacement and replacement ~= '' then
@@ -226,6 +262,7 @@ function form.handle(self, state, data)
         local ok, code = pcall(sys.call, '/usr/bin/lua /usr/libexec/portalproxy/render.lua >/dev/null 2>&1 && /etc/init.d/portalproxy restart >/dev/null 2>&1')
         return completed(ok and code == 0 and 'applied' or 'apply_failed')
     elseif action == '_update' then
+        if linked then return completed('update_failed') end
         local ok, code = pcall(sys.call, '/usr/bin/lua /usr/libexec/portalproxy/update-subscription.lua >/dev/null 2>&1')
         return completed(ok and code == 0 and 'updated' or 'update_failed')
     end

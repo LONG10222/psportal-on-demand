@@ -9,6 +9,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - name: Install Lua
         run: sudo apt-get update && sudo apt-get install -y lua5.1
       - name: Protocol and configuration tests
@@ -21,6 +24,7 @@ jobs:
           lua5.1 tests/selection.lua
           lua5.1 tests/subscription.lua
           lua5.1 tests/node_api.lua
+          lua5.1 tests/openclash.lua
           lua5.1 tests/luci.lua
       - name: Installer and repository checks
         run: python3 tests/packaging.py
@@ -28,3 +32,17 @@ jobs:
         run: |
           python3 native/scripts/generate_brand_assets.py --verify
           python3 -m unittest discover -s native/scripts -p test_brand_assets.py -v
+      - name: Build deterministic router source bundle (no core or credentials)
+        run: |
+          python3 scripts/build-router-source.py "$RUNNER_TEMP/starpass-router-source.tar.gz" > "$RUNNER_TEMP/starpass-router-source.sha256"
+          python3 scripts/build-router-source.py "$RUNNER_TEMP/starpass-router-source-second.tar.gz"
+          cmp "$RUNNER_TEMP/starpass-router-source.tar.gz" "$RUNNER_TEMP/starpass-router-source-second.tar.gz"
+      - name: Upload reviewed router source installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: starpass-router-source-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/starpass-router-source.tar.gz
+            ${{ runner.temp }}/starpass-router-source.sha256
+          retention-days: 7
+          if-no-files-found: error

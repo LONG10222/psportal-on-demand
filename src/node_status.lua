@@ -54,6 +54,38 @@ function M.resolve(proxies,health_url,root)
     return nil,'proxy selection depth exceeded'
 end
 function M.collect(cfg,opts)
+    if cfg.core_mode=='openclash' then
+        local runtime,why=api.get(cfg,'/configs',opts)
+        if not runtime then return nil,why end
+        local mode,reason=require('openclash').runtime(runtime,cfg)
+        local reachable = mode and api.probe(cfg.backend_port,opts)
+        if mode and not reachable then reason='OpenClash proxy port is unavailable' end
+        local snapshot={version=1,core_mode='openclash',updated_at=os.time(),ready=mode~=nil and reachable==true,
+            route_policy=mode,nodes={},groups={},reason=reason,nodes_available=false}
+        if not snapshot.ready then return snapshot end
+        local state=api.get(cfg,'/proxies',opts)
+        -- Node display is optional; a large/unsupported proxy map cannot block
+        -- an authenticated, runtime-matched and reachable external endpoint.
+        if not state or type(state.proxies)~='table' then return snapshot end
+        local count=0
+        for name,p in pairs(state.proxies) do
+            count=count+1
+            if count>MAX_NODES then snapshot.nodes={}; snapshot.groups={}; return snapshot end
+            if safe_name(name) and type(p)=='table' then
+                if groups[tag(p.type)] then
+                    snapshot.groups[#snapshot.groups+1]={name=name,type=p.type,
+                        selected=safe_name(p.now) and p.now or nil}
+                elseif terminal(name,p) then
+                    -- No chosen health URL or per-request route is implied.
+                    snapshot.nodes[#snapshot.nodes+1]={name=name}
+                end
+            end
+        end
+        snapshot.nodes_available=true
+        table.sort(snapshot.nodes,function(a,b) return a.name<b.name end)
+        table.sort(snapshot.groups,function(a,b) return a.name<b.name end)
+        return snapshot
+    end
     local state,err=api.get(cfg,'/proxies',opts)
     if not state then return nil,err end
     if type(state.proxies)~='table' then return nil,'invalid API proxy map' end
@@ -91,6 +123,25 @@ local function clean(value)
         local ms=node.alive==true and delay(node.delay) or nil
         result.nodes[#result.nodes+1]={name=node.name,delay=ms,alive=ms~=nil,selected=false}
     end
+    if value.core_mode=='openclash' then
+        if type(value.groups)~='table' or #value.groups>MAX_NODES then return nil,'invalid linked groups' end
+        result.core_mode='openclash'; result.groups={}; result.nodes_available=value.nodes_available==true
+        local group_seen={}
+        for _,group in ipairs(value.groups) do
+            if type(group)~='table' or not safe_name(group.name) or group_seen[group.name]
+                or not safe_name(group.type) or not groups[tag(group.type)]
+                or (group.selected~=nil and not safe_name(group.selected)) then return nil,'invalid linked group' end
+            group_seen[group.name]=true
+            result.groups[#result.groups+1]={name=group.name,type=group.type,selected=group.selected}
+        end
+        if value.route_policy=='rule' or value.route_policy=='global' or value.route_policy=='direct' then
+            result.route_policy=value.route_policy; result.ready=value.ready==true
+        end
+        if safe_name(value.reason) then result.reason=value.reason end
+        -- Never retain a single "actual node" or health claim in linked mode.
+        for _,node in ipairs(result.nodes) do node.alive=nil; node.delay=nil; node.selected=nil end
+        return result
+    end
     local current=value.current
     if current~=nil then
         if type(current)~='table' or not safe_name(current.name) or not seen[current.name] or not delay(current.delay)
@@ -121,7 +172,9 @@ function M.read(cfg)
     if not value or #value>MAX_CACHE then return nil,'cannot read node cache' end
     local ok,decoded=pcall(json.parse,value)
     if not ok then return nil,'invalid node cache' end
-    return clean(decoded)
+    local cleaned,err=clean(decoded)
+    if cleaned and (cleaned.core_mode=='openclash')~=(cfg.core_mode=='openclash') then return nil,'cache belongs to previous mode' end
+    return cleaned,err
 end
 function M.write(cfg,snapshot)
     local path=cache_path(cfg)
