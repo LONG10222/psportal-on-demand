@@ -15,12 +15,14 @@ from test_core import port
 
 class NetworkSetupTests(unittest.TestCase):
     def test_only_physical_private_interface_and_current_subnet_are_selected(self):
-        data = '''utun3: flags=1
+        data = '''utun3: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> mtu 1500
     inet 10.9.0.2 netmask 0xffffff00
-en0: flags=1
+en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
     inet 192.168.3.8 netmask 0xffffff00
-en1: flags=1
+    status: active
+en1: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
     inet 10.1.0.2 netmask 0xfffffff0
+    status: active
 '''
         info = parse_interfaces(data, 'en1')
         self.assertEqual(info['host'], '10.1.0.2')
@@ -29,9 +31,11 @@ en1: flags=1
         self.assertTrue(all(ipaddress.ip_address(ip) in ipaddress.ip_network(info['subnet']) for ip in info['clients']))
         self.assertLessEqual(len(info['clients']), 254)
         with self.assertRaises(ValueError):
-            parse_interfaces('utun0: flags=1\n    inet 10.0.0.1 netmask 0xffffff00')
+            parse_interfaces('utun0: flags=8051<UP,POINTOPOINT,RUNNING> mtu 1500\n'
+                             '    inet 10.0.0.1 netmask 0xffffff00', 'utun0')
         with self.assertRaises(ValueError):
-            parse_interfaces('en0: flags=1\n    inet 10.0.0.1 netmask 0xff000000')
+            parse_interfaces('en0: flags=8863<UP,BROADCAST,RUNNING> mtu 1500\n'
+                             '    inet 10.0.0.1 netmask 0xff000000\n    status: active\n', 'en0')
 
     def test_port_is_kept_until_occupied_and_alternative_is_available(self):
         preferred = port()

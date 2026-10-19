@@ -84,18 +84,56 @@ def _detect_linux_proxy() -> dict | None:
         return None
 
 
+def _macos_global_proxy(output: str) -> dict | None:
+    """Read only scutil's top-level HTTP proxy, ignoring scoped dictionaries."""
+    if not isinstance(output, str) or not 0 < len(output) <= 262144:
+        return None
+    fields = {}
+    depth = 0
+    seen_root = False
+    for raw in output.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if not seen_root:
+            if line != '<dictionary> {':
+                return None
+            seen_root, depth = True, 1
+            continue
+        if depth == 0:
+            return None
+        if line == '}':
+            depth -= 1
+            continue
+        if re.fullmatch(r'[^:]+\s*:\s*<(?:dictionary|array)>\s*\{', line):
+            depth += 1
+            if depth > 16:
+                return None
+            continue
+        if depth == 1:
+            match = re.fullmatch(r'(HTTPEnable|HTTPProxy|HTTPPort|ProxyAutoConfigEnable|ProxyAutoDiscoveryEnable)\s*:\s*(\S+)', line)
+            if match:
+                key, value = match.groups()
+                if key in fields:
+                    return None
+                fields[key] = value
+    if not seen_root or depth != 0 or fields.get('HTTPEnable') != '1':
+        return None
+    if (fields.get('HTTPProxy') not in ('127.0.0.1', 'localhost')
+            or any(fields.get(key, '0') != '0' for key in ('ProxyAutoConfigEnable', 'ProxyAutoDiscoveryEnable'))):
+        return None
+    return _local_http_proxy(fields.get('HTTPProxy', '') + ':' + fields.get('HTTPPort', ''))
+
+
 def detect_system_proxy() -> dict | None:
     if sys.platform == 'win32': return _detect_windows_proxy()
     if sys.platform.startswith('linux'): return _detect_linux_proxy()
     if sys.platform != 'darwin': return None
     try:
-        result = subprocess.run(['/usr/sbin/scutil', '--proxy'], capture_output=True, text=True, timeout=2)
-        fields = dict(re.findall(r'^\s*(HTTPEnable|HTTPProxy|HTTPPort)\s*:\s*(\S+)', result.stdout, re.MULTILINE))
-        if fields.get('HTTPEnable') == '1' and fields.get('HTTPProxy') in ('127.0.0.1', 'localhost'):
-            port = int(fields.get('HTTPPort', '0'))
-            if 1024 <= port <= 65535:
-                return {'host': '127.0.0.1', 'port': port}
-    except (OSError, ValueError, subprocess.SubprocessError):
+        result = subprocess.run(['/usr/sbin/scutil', '--proxy'], capture_output=True, text=True,
+                                encoding='utf-8', timeout=2, check=True, shell=False)
+        return _macos_global_proxy(result.stdout)
+    except (OSError, ValueError, UnicodeError, subprocess.SubprocessError):
         pass
     return None
 

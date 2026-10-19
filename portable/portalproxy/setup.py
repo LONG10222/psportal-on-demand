@@ -228,34 +228,45 @@ def parse_linux_interfaces(address_output: str, route_output: str, sysfs_root: P
 
 
 def parse_interfaces(output: str, preferred: str = '') -> dict:
-    candidates = []
-    name = ''
+    """Use only the verified, active default interface; never guess a fallback."""
+    if not isinstance(output, str) or not 0 < len(output) <= 262144:
+        raise ValueError(_READ_ERROR)
+    if not isinstance(preferred, str) or not re.fullmatch(r'(?:en|eth|wlan)\d+', preferred):
+        raise ValueError(_AMBIGUOUS)
+    interfaces = []
+    current = None
     for line in output.splitlines():
         if line and not line[0].isspace():
-            name = line.split(':', 1)[0]
-        if not re.fullmatch(r'(?:en|eth|wlan)\d+', name):
-            continue  # Excludes VPN, loopback and virtual bridge addresses.
-        match = re.search(r'\binet (\d+\.\d+\.\d+\.\d+) netmask (0x[0-9a-fA-F]+|[\d.]+)', line)
-        if not match:
+            current = None
+            header = re.match(r'^([^:]+): flags=([0-9a-fA-F]+)(?:<[^>]*>)?\s', line)
+            if header and header.group(1) == preferred:
+                current = dict(flags=int(header.group(2), 16), addresses=[], states=[])
+                interfaces.append(current)
+        if current is None:
             continue
-        host, mask = match.groups()
+        state = re.fullmatch(r'\s*status:\s*(\S+)\s*', line)
+        if state:
+            current['states'].append(state.group(1))
+        match = re.match(r'\s*inet (\S+) netmask (\S+)(?:\s|$)', line)
+        if match:
+            current['addresses'].append(match.groups())
+    if len(interfaces) != 1:
+        raise ValueError(_AMBIGUOUS)
+    interface = interfaces[0]
+    # IFF_UP and IFF_RUNNING are required. Loopback/point-to-point interfaces,
+    # missing carrier status and multiple IPv4 aliases need explicit settings.
+    flags = interface['flags']
+    if (flags & 0x41 != 0x41 or flags & 0x18 or interface['states'] != ['active']
+            or len(interface['addresses']) != 1):
+        raise ValueError(_AMBIGUOUS)
+    host, mask = interface['addresses'][0]
+    try:
         if mask.startswith('0x'):
             mask = str(ipaddress.IPv4Address(int(mask, 16)))
-        try:
-            interface = ipaddress.IPv4Interface(host + '/' + mask)
-        except ValueError:
-            continue
-        private = any(interface.network.subnet_of(ipaddress.ip_network(net))
-                      for net in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'))
-        if private:
-            candidates.append((name != preferred, name, interface))
-    if not candidates:
-        raise ValueError('Connect this Mac to a private Wi-Fi or Ethernet network first.')
-    _, name, interface = sorted(candidates)[0]
-    if not 24 <= interface.network.prefixlen <= 30:
-        raise ValueError('This network needs an explicit device allowlist in Advanced settings.')
-    return dict(host=str(interface.ip), interface=name, subnet=str(interface.network),
-                clients=[str(ip) for ip in interface.network.hosts() if ip != interface.ip])
+        address = ipaddress.IPv4Interface(host + '/' + mask)
+    except ValueError:
+        raise ValueError(_AMBIGUOUS) from None
+    return _lan_result(preferred, str(address.ip), address.network.prefixlen)
 
 
 def discover_lan() -> dict:
@@ -274,11 +285,15 @@ def discover_lan() -> dict:
     if sys.platform != 'darwin':
         raise ValueError('Automatic LAN setup is unavailable on this platform. Use Advanced settings.')
     try:
-        route = subprocess.run(['/sbin/route', '-n', 'get', 'default'], capture_output=True, text=True, timeout=2).stdout
-        match = re.search(r'interface:\s+(\S+)', route)
-        output = subprocess.run(['/sbin/ifconfig', '-a'], capture_output=True, text=True, timeout=2, check=True).stdout
-        return parse_interfaces(output, match.group(1) if match else '')
-    except (OSError, subprocess.SubprocessError):
+        route = subprocess.run(['/sbin/route', '-n', 'get', 'default'], capture_output=True,
+                               text=True, encoding='utf-8', timeout=2, check=True, shell=False).stdout
+        interfaces = re.findall(r'^\s*interface:\s*(\S+)\s*$', route, re.MULTILINE)
+        if len(interfaces) != 1:
+            raise ValueError(_AMBIGUOUS)
+        output = subprocess.run(['/sbin/ifconfig', '-a'], capture_output=True, text=True,
+                                encoding='utf-8', timeout=2, check=True, shell=False).stdout
+        return parse_interfaces(output, interfaces[0])
+    except (OSError, UnicodeError, subprocess.SubprocessError):
         raise ValueError('Could not read local network information. Use Advanced settings.') from None
 
 

@@ -21,6 +21,18 @@ final class NetworkEnvironmentTests: XCTestCase {
         XCTAssertNil(LANInterface(name: "en0", address: "10.0.0.1", mask: "255.0.0.0").clients)
     }
 
+    func testAmbiguousPhysicalInterfacesAndHotspotsAreNotGuessed() {
+        let wifi = LANInterface(name: "en0", address: "192.168.3.2", mask: "255.255.255.0")
+        let wired = LANInterface(name: "en5", address: "10.0.1.2", mask: "255.255.255.0")
+        for uplink in [Uplink.wifi, .wired] {
+            XCTAssertNil(NetworkSnapshot(uplink: uplink, interfaces: [wifi, wired]).shareableLAN(confirmOwnHotspot: false))
+            XCTAssertNil(NetworkSnapshot(uplink: uplink, interfaces: [wired, wifi]).shareableLAN(confirmOwnHotspot: false))
+        }
+        let bridges = [LANInterface(name: "bridge0", address: "172.20.10.1", mask: "255.255.255.240"),
+                       LANInterface(name: "bridge1", address: "192.168.2.1", mask: "255.255.255.0")]
+        XCTAssertNil(NetworkSnapshot(uplink: .cellular, interfaces: bridges).shareableLAN(confirmOwnHotspot: true))
+    }
+
     func testMissingSubscriptionValuesAreUnknownAndOveruseClampsToZero() throws {
         let missing = try JSONDecoder().decode(SubscriptionAccounting.self, from: Data("{}".utf8))
         XCTAssertNil(missing.used)

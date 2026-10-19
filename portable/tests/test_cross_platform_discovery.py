@@ -238,7 +238,8 @@ class BoundedDiscoveryTests(unittest.TestCase):
 
     def test_macos_command_path_is_preserved(self):
         results = [subprocess.CompletedProcess([], 0, stdout='interface: en0'),
-                   subprocess.CompletedProcess([], 0, stdout='en0: flags=1\n    inet 192.168.5.12 netmask 0xfffffff0')]
+                   subprocess.CompletedProcess([], 0, stdout='en0: flags=8863<UP,BROADCAST,RUNNING> mtu 1500\n'
+                       '    inet 192.168.5.12 netmask 0xfffffff0\n    status: active\n')]
         with patch.object(setup.sys, 'platform', 'darwin'), patch.object(setup.subprocess, 'run', side_effect=results) as run:
             self.assertEqual(setup.discover_lan()['host'], '192.168.5.12')
         self.assertEqual([call.args[0] for call in run.call_args_list], [['/sbin/route', '-n', 'get', 'default'], ['/sbin/ifconfig', '-a']])

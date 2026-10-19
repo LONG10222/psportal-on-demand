@@ -598,19 +598,22 @@ class DesktopApp:
     def quick_start(self):
         if self.importing or self.backend.process is not None:
             return
-        self.raw.pop('existing_proxy_port', None)
-        if not self._configure_lan(): return
+        # Keep the previous linked proxy and manual network settings intact
+        # until a validated import is accepted by _poll_import. A failed URL,
+        # download or cancelled preparation must not change sharing modes.
+        if not self._configure_lan(commit=False): return
         self.quick_start_pending = True
         self.import_subscription()
         if not self.importing:
             self.quick_start_pending = False
 
-    def _configure_lan(self, reserved=()):
+    def _configure_lan(self, reserved=(), *, commit=True):
         from tkinter import messagebox
         from .setup import discover_lan, available_port
         try:
             network = discover_lan()
             chosen = set(reserved)
+            values = {}
             for key, host, default in (('listen_port', network['host'], 10081),
                                        ('backend_port', '127.0.0.1', 10082),
                                        ('api_port', '127.0.0.1', 10090)):
@@ -622,15 +625,23 @@ class DesktopApp:
                 excluded = chosen | ({10082, 10090} if key == 'listen_port' else set())
                 selected = available_port(host, preferred, excluded)
                 chosen.add(selected)
-                self.vars[key].set(str(selected))
-            self.vars['listen_host'].set(network['host'])
-            self.vars['allowed_clients'].set(', '.join(network['clients']))
-            self.view.setup_network = network['subnet']
-            self.view.refresh()
-            return True
+                values[key] = str(selected)
+            values.update(listen_host=network['host'], allowed_clients=', '.join(network['clients']))
+            plan = (values, network['subnet'])
+            if commit:
+                self._apply_lan(plan)
+                return True
+            return plan
         except ValueError as error:
             messagebox.showerror(self._t('Check configuration'), self._t(str(error)), parent=self.root)
             return False
+
+    def _apply_lan(self, plan):
+        values, subnet = plan
+        for key, value in values.items():
+            self.vars[key].set(value)
+        self.view.setup_network = subnet
+        self.view.refresh()
 
     def use_existing_proxy(self):
         if self.importing or self.backend.process is not None: return
@@ -772,7 +783,17 @@ class DesktopApp:
             messagebox.showerror(self._t('Cannot inspect provider'), self._t(error), parent=self.root)
         else:
             self._set_status('Stopped')
-            if self._use_imported_file(path) and pending and self._configure_lan():
+            # Connectivity/ports can change during the download. Stage their
+            # final validation before accepting the provider or changing modes.
+            plan = self._configure_lan(commit=False) if pending else None
+            if pending and not plan:
+                self._discard_import(path)
+                return
+            if not self._use_imported_file(path):
+                self._discard_import(path)
+                return
+            if pending:
+                self._apply_lan(plan)
                 self.start()
                 if self.view.navigation_generation == active[3]:
                     self.view.show('LAN sharing')

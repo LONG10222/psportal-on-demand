@@ -2,6 +2,7 @@
 import Foundation
 import SwiftUI
 import UIKit
+import Combine
 
 @MainActor
 final class ProxyModel: ObservableObject {
@@ -25,11 +26,17 @@ final class ProxyModel: ObservableObject {
     @Published var darkAppearance = true
     @Published var confirmOwnHotspot = false
     @Published private(set) var subscriptionInfo: SubscriptionAccounting?
-    let network = NetworkEnvironment()
+    @Published private(set) var subscriptionInfoUpdatedAt: Date?
+    let network: NetworkEnvironment
     private var quickNetworkLAN: LANInterface?
+    private var networkObservation: AnyCancellable?
+    private let findPort: (String, Int) -> Int?
 
     func t(_ zh: String, _ en: String) -> String { language == "zh" ? zh : en }
-    func clearSubscriptionInfo() { subscriptionInfo = nil }
+    func clearSubscriptionInfo() {
+        subscriptionInfo = nil
+        subscriptionInfoUpdatedAt = nil
+    }
     var localizedMessage: String {
         guard language == "zh" else { return message }
         return [
@@ -73,7 +80,7 @@ final class ProxyModel: ObservableObject {
             message = "No shareable LAN address found. Join Wi-Fi, or enable your own hotspot and connect the client first."
             return
         }
-        guard let port = NetworkEnvironment.availablePort(host: lan.address, preferred: Int(settings.listenPort) ?? 10081) else {
+        guard let port = findPort(lan.address, Int(settings.listenPort) ?? 10081) else {
             message = "No available port. Check Advanced settings."
             return
         }
@@ -85,9 +92,9 @@ final class ProxyModel: ObservableObject {
         if state == .stopped { quickNetworkLAN = nil }
     }
 
-    func networkChanged() {
+    func networkChanged(_ snapshot: NetworkSnapshot) {
         guard let lan = quickNetworkLAN, canStop else { return }
-        if network.snapshot.shareableLAN(confirmOwnHotspot: confirmOwnHotspot) != lan {
+        if snapshot.shareableLAN(confirmOwnHotspot: confirmOwnHotspot) != lan {
             quickNetworkLAN = nil
             stop(reason: "Network changed. Listener stopped. Prepare again and update the client proxy address.")
         }
@@ -132,9 +139,13 @@ final class ProxyModel: ObservableObject {
         requestErrors = 0; deniedClients = 0
     }
 
-    init(engine: EngineController = EngineController(), store: PrivateSettingsStore = PrivateSettingsStore()) {
+    init(engine: EngineController = EngineController(), store: PrivateSettingsStore = PrivateSettingsStore(),
+         network: NetworkEnvironment? = nil,
+         findPort: @escaping (String, Int) -> Int? = { NetworkEnvironment.availablePort(host: $0, preferred: $1) }) {
         self.engine = engine
         self.store = store
+        self.network = network ?? NetworkEnvironment()
+        self.findPort = findPort
         do {
             if let saved = try store.load() {
                 settings = saved
@@ -145,6 +156,12 @@ final class ProxyModel: ObservableObject {
             message = "Saved settings could not be read securely. Unlock the device and reopen the app, or enter fresh settings."
         }
         // Loading a saved subscription never starts a listener or network request.
+        // @Published emits in willSet: inspect the emitted snapshot, not the
+        // property's previous value. Keep lifecycle observation in the model
+        // so stopping does not depend on a particular view being mounted.
+        networkObservation = self.network.$snapshot.sink { [weak self] next in
+            self?.networkChanged(next)
+        }
     }
 
     func start() {
@@ -161,6 +178,7 @@ final class ProxyModel: ObservableObject {
         let token = generation
         state = .starting
         clearRuntime()
+        clearSubscriptionInfo()
         message = "Opening the LAN listener…"
         synchronizeIdleTimer()
         engine.start(json: json) { [weak self] failure in
@@ -175,10 +193,10 @@ final class ProxyModel: ObservableObject {
             self.state = .running
             self.message = "Listening; outbound pool will wake on demand."
             self.refreshStatus()
-            self.subscriptionInfo = nil
             self.engine.subscriptionInfo(url: self.settings.subscriptionURL) { [weak self] info in
                 guard let self, self.generation == token else { return }
                 self.subscriptionInfo = info
+                self.subscriptionInfoUpdatedAt = info == nil ? nil : Date()
             }
         }
     }
@@ -186,11 +204,10 @@ final class ProxyModel: ObservableObject {
     func stop(reason: String = "Stopped. Restore the Portal's proxy setting when finished.") {
         quickNetworkLAN = nil
         restoreIdleTimer()
-        guard state != .stopped else { return }
+        guard state != .stopped, state != .stopping else { return }
         // A finite UIKit assertion is used only to close the listener and owned
         // connections, never to keep serving traffic in the background.
         beginCleanupTask()
-        guard state != .stopping else { return }
         generation += 1
         let token = generation
         statusPending = false
@@ -267,6 +284,7 @@ final class ProxyModel: ObservableObject {
         do {
             try store.forget()
             settings = ProxySettings()
+            clearSubscriptionInfo()
             hasSavedSettings = false
             message = "Saved configuration removed and fields cleared."
         } catch {
