@@ -48,6 +48,22 @@ def finish(proc, *, signal=False):
     return out
 
 
+def assert_cold_listener_statuses(statuses):
+    """The listener stays available without waking or using the outbound pool."""
+    assert statuses, 'Executable did not emit any status snapshots'
+    for status in statuses:
+        assert status.get('event') == 'status', status
+        assert status.get('running') is True, status
+        assert status.get('state') == 'listening', status
+        assert status.get('core_state') == 'stopped', status
+        assert status.get('nodes') == [], status
+        assert status.get('active') == 0 and status.get('selected_node') == '', status
+        assert status.get('error') == '', status
+        stats = status.get('stats', {})
+        assert stats.get('running') is True, status
+        assert all(stats.get(key) == 0 for key in ('external_requests', 'waking', 'forwarding')), status
+
+
 def child(binary, config, port, *, requests=False, signal=False):
     proc = subprocess.Popen(
         [binary, '-config', str(config), '--desktop-child', '-status-interval', '100ms'],
@@ -71,7 +87,7 @@ def child(binary, config, port, *, requests=False, signal=False):
         time.sleep(.3)
         out = finish(proc, signal=signal)
         statuses = [json.loads(line) for line in out.splitlines() if line.startswith('{')]
-        assert statuses and all(s['state'] == 'stopped' and s['nodes'] == [] for s in statuses), statuses
+        assert_cold_listener_statuses(statuses)
     finally:
         if proc.poll() is None:
             proc.kill()

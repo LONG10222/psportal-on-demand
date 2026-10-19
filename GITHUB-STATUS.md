@@ -1,10 +1,18 @@
 # GitHub 更新、日志与优化记录
 
-检查日期：2026-10-19。仓库 [LONG10222/psportal-on-demand](https://github.com/LONG10222/psportal-on-demand)，当前工作使用 [PR #4](https://github.com/LONG10222/psportal-on-demand/pull/4) 的功能分支，未合并主分支。
+检查日期：2026-10-19。仓库 [LONG10222/psportal-on-demand](https://github.com/LONG10222/psportal-on-demand)，当前工作为基于 PR #4 最新源码的独立草稿 [PR #5](https://github.com/LONG10222/psportal-on-demand/pull/5)，未合并主分支。
 
 ## 跨平台整合检查（2026-10-19）
 
-用户的新基线已推进到 `72b23e4`，包括 iOS 新面板、移动端仅订阅范围、macOS HTTPS 信任根及 Windows 测试修复。独立跨平台源码已保存为 [`aeaf7e5`](https://github.com/LONG10222/psportal-on-demand/commit/aeaf7e53027a1ed111c98a4d7606671789801273)，当前正整合两边的实时控制接口，保留最新 Apple 文件。下文原记录继续作为历史证据；新整合提交的 CI 必须重新验证。
+用户新基线 `72b23e4` 已整合到 `9c4515f`，保留 Apple 应用与启动器字节。GitHub PR 合成提交 `9024b931` 与该提交的源码树相同。
+
+- [统一桌面打包](https://github.com/LONG10222/psportal-on-demand/actions/runs/39185011647) 三平台通过：Windows/macOS/Linux 的精确来源、完整许可、匹配源码与归档门禁均通过；此前 Windows 核心就绪竞态已在该检查通过。
+- [Portable desktop builds](https://github.com/LONG10222/psportal-on-demand/actions/runs/39185011634)、[Android 未签名构建与审计](https://github.com/LONG10222/psportal-on-demand/actions/runs/39185011567) 及基础 checks 通过。
+- Linux 实际窗口生成七张离线合成数据截图，支持可读性检查，不能证明真实订阅、手机或游戏机连接。
+- [原生桌面检查](https://github.com/LONG10222/psportal-on-demand/actions/runs/39185011633) 暴露旧验收断言：把正在监听、核心休眠误判为错误。已保留零外连/唤醒门禁并修正双状态断言，实际 Linux 二进制、14 项脚本测试与全部 Go 测试通过，待新提交 CI 验证。
+- iOS Simulator 检查尚在运行；未宣称真机后台常驻或热点验收。
+
+下文为历史记录，不能代替最新提交检查。
 
 ## 检查到的更新
 
