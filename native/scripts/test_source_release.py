@@ -18,8 +18,8 @@ class CorrespondingSourceTests(unittest.TestCase):
                 (root / name / 'source.go').write_text('// exact source\n')
             (root / 'assets/branding').mkdir(parents=True)
             (root / 'assets/branding/starpass-original.png').write_bytes(b'original artwork fixture')
-            (root / 'assets/branding/manifest.json').write_text('{"source": "fixture"}\n')
-            (root / 'scripts/generate_brand_assets.py').write_text('# conversion recipe fixture\n')
+            (root / 'assets/branding/manifest.json').write_text('{"source": "fixture"}\n', encoding='utf-8')
+            (root / 'scripts/generate_brand_assets.py').write_text('# conversion recipe fixture\n', encoding='utf-8')
             for name in ('.gitignore', 'go.mod', 'go.sum', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'README.md', 'config.example.json'):
                 (root / name).write_text('fixture\n')
             (root / 'android' / 'private.p12').write_bytes(b'not a real key')

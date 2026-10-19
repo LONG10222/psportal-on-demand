@@ -1,5 +1,8 @@
 # 星渡 StarPass：三种用途与平台对照
 
+本文记录 PR #10 初版。最新 iOS 四页界面、限时后台实验及构建修复，参见
+[最新上传校验说明](starpass-reconciliation-2026-10-19.zh-CN.md)；下文前台限制不代表后续实验已被移除。
+
 日期：2026-10-19。基线为 PR #9 `3e8aab8d7a3ef1dc1997283ea8cb44aeb3546fee`，
 叠加本次独立开发分支；未合并 main，也未改写原 macOS/iOS 分支。
 

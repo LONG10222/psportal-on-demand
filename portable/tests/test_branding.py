@@ -54,11 +54,23 @@ class BrandingTests(unittest.TestCase):
             self.assertFalse(branding.apply_window_icon(root))
 
     def test_packaging_references_icons_without_renaming_product_identity(self):
-        spec = (ROOT / "packaging/portalproxy.spec").read_text()
+        spec = (ROOT / "packaging/portalproxy.spec").read_text(encoding="utf-8")
         for value in ("'assets/branding'", "'starpass.ico'", "'starpass.icns'", "'CFBundleDisplayName': '星渡 StarPass'",
                       "name='PSPortalProxy'", "name='PSPortalProxy.app'", "bundle_identifier='org.psportal.on-demand'"):
             self.assertIn(value, spec)
-        self.assertIn("generate_brand_assets.py", (ROOT / "build.py").read_text())
+        self.assertIn("generate_brand_assets.py", (ROOT / "build.py").read_text(encoding="utf-8"))
+
+    def test_packaging_text_checks_ignore_windows_default_codepage(self):
+        original = Path.read_text
+        encodings = []
+
+        def windows_read_text(path, encoding=None, errors=None, **kwargs):
+            encodings.append(encoding)
+            return original(path, encoding=encoding or "cp1252", errors=errors, **kwargs)
+
+        with patch.object(Path, "read_text", windows_read_text):
+            self.test_packaging_references_icons_without_renaming_product_identity()
+        self.assertEqual(encodings, ["utf-8", "utf-8"])
 
 
 if __name__ == "__main__":
