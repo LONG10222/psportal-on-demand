@@ -4,6 +4,7 @@ package org.psportal.host;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 
 /** Process-owned lifecycle and probe lanes: old work cannot race a new Start. No Android dependencies. */
 public final class SessionController {
@@ -17,6 +18,8 @@ public final class SessionController {
         default void prepare() throws Exception { throw new UnsupportedOperationException(); }
         default void testNodes() throws Exception { throw new UnsupportedOperationException(); }
         default void selectNode(String mode, String name, int threshold) throws Exception { throw new UnsupportedOperationException(); }
+        default String groupChoices(String group) throws Exception { throw new UnsupportedOperationException(); }
+        default void selectGroup(String group, String choice) throws Exception { throw new UnsupportedOperationException(); }
     }
     public static final class Snapshot {
         public final Phase phase;
@@ -31,7 +34,7 @@ public final class SessionController {
     private final Executor serial, callbacks, commands;
     private final List<Runnable> stopCallbacks = new ArrayList<>();
     private volatile Snapshot snapshot = new Snapshot(Phase.STOPPED, "{}", "");
-    private long generation;
+    private long generation, commandGeneration;
     private boolean refreshPending;
     private volatile boolean commandPending, commandFailed;
     private boolean teardownFinished, teardownSucceeded;
@@ -45,23 +48,48 @@ public final class SessionController {
     public boolean commandPending() { return commandPending; }
     public boolean commandFailed() { return commandFailed; }
 
-    /** Probe work must not block native Stop. A new session waits for both lanes to retire. */
+    public synchronized long sessionId() { return generation; }
+    private interface Command { String run() throws Exception; }
+
+    /** Dialogs retain this session ID, so old choices cannot act after restart. */
+    public synchronized boolean control(long sessionId, String action, String mode, String name, int threshold) {
+        if (!("prepare".equals(action) || "test".equals(action) || "select".equals(action))) return false;
+        return enqueueCommand(sessionId, () -> {
+            switch (action) {
+                case "prepare": engine.prepare(); break;
+                case "test": engine.testNodes(); break;
+                default: engine.selectNode(mode, name, threshold);
+            }
+            return "{}";
+        }, null);
+    }
     public synchronized boolean control(String action, String mode, String name, int threshold) {
-        if (snapshot.phase != Phase.RUNNING || commandPending ||
-                !(action.equals("prepare") || action.equals("test") || action.equals("select"))) return false;
-        final long token = generation;
+        return control(generation, action, mode, name, threshold);
+    }
+    public synchronized boolean groupChoices(long sessionId, String group, Consumer<String> completion) {
+        if (completion == null) return false;
+        return enqueueCommand(sessionId, () -> engine.groupChoices(group), completion);
+    }
+    public synchronized boolean selectGroup(long sessionId, String group, String choice) {
+        return enqueueCommand(sessionId, () -> { engine.selectGroup(group, choice); return "{}"; }, null);
+    }
+
+    /** Probe work must not block native Stop. A new session waits for both lanes to retire. */
+    private synchronized boolean enqueueCommand(long token, Command command, Consumer<String> completion) {
+        if (token != generation || snapshot.phase != Phase.RUNNING || commandPending) return false;
+        final long operation = ++commandGeneration;
         commandPending = true; commandFailed = false;
         commands.execute(() -> {
             boolean failed = false;
+            String result = "{}";
             try {
                 synchronized (this) {
                     if (generation != token || snapshot.phase != Phase.RUNNING) return;
                 }
-                switch (action) {
-                    case "prepare": engine.prepare(); break;
-                    case "test": engine.testNodes(); break;
-                    default: engine.selectNode(mode, name, threshold);
-                }
+                String received = command.run();
+                if (received == null || received.length() > MAX_STATUS_CHARACTERS)
+                    throw new IllegalStateException("Invalid command result");
+                result = received;
             } catch (Exception | LinkageError failure) { failed = true; }
             finally {
                 synchronized (this) {
@@ -69,6 +97,15 @@ public final class SessionController {
                     if (generation == token && snapshot.phase == Phase.RUNNING) commandFailed = failed;
                     finishTeardownIfReady();
                 }
+            }
+            if (completion != null) {
+                final String delivered = result;
+                callbacks.execute(() -> {
+                    synchronized (this) {
+                        if (generation == token && commandGeneration == operation && snapshot.phase == Phase.RUNNING)
+                            completion.accept(delivered);
+                    }
+                });
             }
         });
         return true;

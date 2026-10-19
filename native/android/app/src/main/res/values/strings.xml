@@ -1,6 +1,6 @@
 <resources>
-    <string name="app_name">OnDemand</string>
-    <string name="title">OnDemand</string>
+    <string name="app_name">星渡 StarPass</string>
+    <string name="title">星渡 StarPass</string>
     <string name="subtitle">按需局域网代理</string>
     <string name="explanation">连接同一个可信局域网。按页面显示的服务器和端口设置设备 Wi-Fi 手动 HTTP 代理。仅允许名单中的设备。</string>
     <string name="limitations">局域网手动代理仅支持 HTTP/HTTPS CONNECT，不中继 UDP 游戏或串流。后台共享开启时移出最近任务仍继续；Android 强行停止、省电或厂商限制可能中断服务。</string>
@@ -17,7 +17,7 @@
     <string name="phone_apps">同时代理本机应用（可选）</string>
     <string name="vpn_notification_channel">本机应用 VPN</string>
     <string name="vpn_notification_description">显示本机应用代理状态，并提供停止全部代理的按钮</string>
-    <string name="vpn_notification_title">OnDemand 正在代理本机应用</string>
+    <string name="vpn_notification_title">星渡 StarPass 正在代理本机应用</string>
     <string name="vpn_notification_running">本机应用 VPN 已连接 · 点击查看代理状态</string>
     <string name="vpn_notification_stopping">正在关闭本机 VPN</string>
     <string name="vpn_stop_phone_apps">停止本机代理</string>
@@ -48,12 +48,12 @@
     <string name="invalid_config">请检查配置</string>
     <string name="notification_channel">局域网代理连接</string>
     <string name="notification_description">代理运行时显示状态，并提供停止按钮</string>
-    <string name="notification_title">OnDemand 正在运行</string>
+    <string name="notification_title">星渡 StarPass 正在运行</string>
     <string name="notification_starting">正在准备所选代理</string>
     <string name="notification_running">局域网代理已就绪 · 点击打开或停止</string>
     <string name="notification_stopping">正在关闭监听和活动连接</string>
     <string name="notification_required">请允许通知，以便运行时显示状态和停止按钮。</string>
-    <string name="notifications_disabled">通知已关闭。请在 Android 设置中开启 OnDemand 通知，然后重试。</string>
+    <string name="notifications_disabled">通知已关闭。请在 Android 设置中开启 星渡 StarPass 通知，然后重试。</string>
     <string name="local_network_required">请允许本地网络访问，以便设备连接本机。授权前不会监听。</string>
     <string name="permission_denied">权限未获批准，代理保持停止。</string>
     <string name="start_rejected">Android 无法启动前台服务，请保持应用打开并检查权限后重试。</string>

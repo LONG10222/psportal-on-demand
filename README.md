@@ -1,4 +1,8 @@
-# OnDemand · 按需局域网代理
+# 星渡 StarPass · 按需代理与设备共享
+
+星渡 StarPass 延续 PS Portal On-Demand 项目。新界面以「游戏／混合／Clash」区分接入用途，
+与规则／全局／直连分流设置分开；[各平台的实际模式范围与限制](docs/starpass-platform-modes.zh-CN.md)
+说明了哪些能力已实现。桌面不自动设置系统代理，Android 本机代理仍需 VPN 授权，iOS 仍限前台共享。
 
 让不方便安装代理客户端的设备，通过电脑、手机或路由器上的 HTTP/HTTPS 代理接入网络。外网请求按需唤醒自己管理的核心，空闲后回收；局域网请求直连。界面参考 Clash 的使用习惯，核心仍是设备共享与按需运行。
 

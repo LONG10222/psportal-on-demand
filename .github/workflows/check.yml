@@ -24,3 +24,7 @@ jobs:
           lua5.1 tests/luci.lua
       - name: Installer and repository checks
         run: python3 tests/packaging.py
+      - name: Verify StarPass icons and platform branding
+        run: |
+          python3 native/scripts/generate_brand_assets.py --verify
+          python3 -m unittest discover -s native/scripts -p test_brand_assets.py -v

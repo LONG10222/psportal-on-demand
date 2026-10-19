@@ -10,7 +10,7 @@ def ignored(directory, names):
  if pathlib.Path(directory)==ROOT/'android'/'app'/'libs':
   ignored_names.update(name for name in names if name.endswith('.jar'))
  return ignored_names
-SOURCE_DIRECTORIES = ('engine','mobile','androidcore','androidmobile','cmd','tools','scripts','android','ios','ci','third_party')
+SOURCE_DIRECTORIES = ('engine','mobile','androidcore','androidmobile','cmd','tools','scripts','android','ios','ci','third_party','assets')
 
 def main():
  p=argparse.ArgumentParser();p.add_argument('--go',default='go');a=p.parse_args()

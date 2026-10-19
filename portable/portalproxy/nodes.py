@@ -80,9 +80,22 @@ class NodeControl:
             self.policies.pop(group, None)
         self.core.config['node_policies'] = dict(self.policies)
 
+    def restore_provider_policy(self):
+        """Hydrate the owned provider's saved policy before selection or probes."""
+        if self.core.config.get('profile_file'):
+            return  # Complete profiles retain their independent group scopes.
+        policy = self.policies.get('PORTAL')
+        if policy is not None:
+            self.core.config['selection_mode'] = 'fixed' if policy['mode'] == 'manual' else 'fastest'
+            self.core.config['preferred_node'] = policy.get('name', '')
+
     async def restore(self):
         if not self.policies:
             return
+        # Desktop acknowledgements persist group policies separately from the
+        # original launch fields. Restore both the route and the active mode;
+        # otherwise the next latency test can undo a saved manual selection.
+        self.restore_provider_policy()
         inventory = await self.inventory()
         previous_group = self.core.selection_group
         previous_mode = self.core.profile_mode

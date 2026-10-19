@@ -479,6 +479,9 @@ class CoreManager:
         await self._apply_policy(measured=True, stable_round=not pending, candidates=candidates)
 
     async def _select(self):
+        # Reapply saved provider intent before the first startup selection.
+        # This also makes fastest perform its measured probe on every wake.
+        self.nodes.restore_provider_policy()
         await self._refresh_nodes()
         if self.selection_mode == 'fastest':
             await self._probe_nodes()

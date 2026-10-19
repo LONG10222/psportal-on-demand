@@ -26,13 +26,19 @@ The ordered, independently reproducible patch series is:
 3. 0003-queue-synchronization.patch: Pop/Last lock before inspecting queue length,
    keeping empty checks and element access in one critical section. A regression
    uses public Put/Last/Pop concurrently; empty-queue zero-value behavior remains.
+4. 0004-selector-synchronization.patch: Set and ForceSet synchronize the selected
+   name with selectedProxy readers. Each read takes one name snapshot and releases
+   the lock before invoking a member. Background automatic groups may probe a
+   nested manual selector even when the embedder reports no active client flows.
+   Socket-free tests cover concurrent control, status, unwrap, TCP/UDP and
+   capability reads, plus default-selected and invalid-selection semantics.
 
 No race suppression, hidden module-cache patch or global-variable reset replaces
 proper teardown. The Android embedding code must honor the ingress API contract;
 calling WaitIngress without first canceling/closing owned flows can wait forever.
 
 PROVENANCE.json identifies exact upstream and local content. UPSTREAM-FILES.sha256
-lists every original module file. Applying the three patches in order reproduces
+lists every original module file. Applying the four patches in order reproduces
 all production changes and regression tests. The parent go.mod uses a
 version-specific local replace; an upstream update therefore requires deliberate
 review of the pin, patches, inventory and replacement.
@@ -40,7 +46,7 @@ review of the pin, patches, inventory and replacement.
 From native/, with the project's pinned Go toolchain and cached dependencies:
 
     python3 scripts/verify_mihomo_patch.py
-    GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go test -race -count=10 -tags no_easytier,no_zerotier,no_tailscale github.com/metacubex/mihomo/log github.com/metacubex/mihomo/common/queue github.com/metacubex/mihomo/tunnel
+    GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go test -race -count=10 -tags no_easytier,no_zerotier,no_tailscale github.com/metacubex/mihomo/log github.com/metacubex/mihomo/common/queue github.com/metacubex/mihomo/tunnel github.com/metacubex/mihomo/adapter/outboundgroup
     GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local go test -race -tags no_easytier,no_zerotier,no_tailscale,with_gvisor ./androidcore ./androidmobile
 
 For a fresh build, normal Go tooling retrieves pinned dependencies. For offline

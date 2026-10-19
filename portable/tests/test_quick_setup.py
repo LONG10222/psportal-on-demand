@@ -60,22 +60,23 @@ class QuickSetupWindowTests(unittest.TestCase):
                 while len(ports) < 3: ports.add(port())
                 listen, backend, api = sorted(ports)
                 path = folder / 'host.json'
-                path.write_text(json.dumps(dict(core_path=sys.executable, listen_port=listen,
+                path.write_text(json.dumps(dict(product_mode='clash', core_path=sys.executable, listen_port=listen,
                     backend_port=backend, api_port=api, subscription_url='https://fixture.example/opaque-token')))
                 app = DesktopApp(root, path)
                 def download(url, target):
                     target.write_text('proxies: []\n')
                     return {'upload':1000000000,'download':2000000000,'total':10000000000,'expire':2000000000}
-                with (patch('portalproxy.setup.discover_lan', return_value=dict(host='127.0.0.1',clients=['127.0.0.1'],subnet='loopback-fixture')),
+                with (patch('portalproxy.setup.discover_lan', side_effect=AssertionError('Clash mode must not discover LAN')),
                       patch('portalproxy.core.download_subscription', side_effect=download)):
                     app.view.quick_button.invoke()
                     end = time.monotonic()+15
                     while time.monotonic()<end and not app.backend.ready:
                         root.update(); time.sleep(.02)
                     self.assertTrue(app.backend.ready, app.log_widget.get('1.0','end'))
-                    self.assertEqual(app.vars['listen_host'].get(), '127.0.0.1')
+                    self.assertEqual(app.collect()['listen_host'], '127.0.0.1')
+                    self.assertEqual(app.vars['listen_host'].get(), '')
                     self.assertEqual(app.vars['listen_port'].get(), str(listen))
-                    self.assertEqual(app.view.page, 'LAN sharing')
+                    self.assertEqual(app.view.page, 'Overview')
                     self.assertFalse(app.view.advanced)
                     self.assertIn('127.0.0.1', app.view.guide_var.get())
                     self.assertIn('6.52 GiB', app.view.subscription_var.get())

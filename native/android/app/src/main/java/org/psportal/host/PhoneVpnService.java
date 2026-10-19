@@ -130,7 +130,7 @@ public final class PhoneVpnService extends VpnService {
             if (VpnService.prepare(this) != null) { main.post(() -> requestStop("consent_required")); return; }
             if (hasVpnConflict(this)) { main.post(() -> requestStop("vpn_conflict")); return; }
             if (findUnderlyingNetwork() == null) { main.post(() -> requestStop("no_network")); return; }
-            Builder builder = new Builder().setSession("PSPortal").setMtu(1500)
+            Builder builder = new Builder().setSession("星渡 StarPass").setMtu(1500)
                     .addAddress("198.18.0.1", 30).addAddress("fdfe:dcba:9876::1", 126)
                     .addRoute("0.0.0.0", 0).addRoute("::", 0)
                     .addDnsServer("198.18.0.2").addDnsServer("fdfe:dcba:9876::2")

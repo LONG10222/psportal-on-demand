@@ -6,6 +6,28 @@ from pathlib import Path
 import tempfile
 
 ZH = {
+    'The saved provider is now a full profile. Import it again before starting.': '已保存的节点文件现在包含完整配置，请重新导入后再启动。',
+    'Using your selected local file. Import subscription explicitly to replace this override.': '正在使用手动选择的本地文件；如需替换，请点击“导入订阅”。',
+    'LAN listener IPv4 (saved for Game / Mixed)': '局域网监听 IPv4（游戏 / 混合模式）',
+    'HTTP proxy port': 'HTTP 代理端口',
+    'Allowed device IPv4 addresses (comma-separated)': '允许的设备 IPv4（逗号分隔）',
+    'Product mode does not match the listener address and allowed devices.': '所选模式与监听地址或允许设备列表不匹配。',
+    'Previous settings could not be restored on disk. Review the configuration before restarting.': '未能在磁盘上恢复之前的设置，请在重新启动前检查配置。',
+    'StarPass · games and everyday browsing': '星渡 · 游戏与日常上网',
+    'Close StarPass?': '关闭星渡 StarPass？',
+    'Product mode': '使用模式',
+    'Game mode': '游戏模式', 'Mixed mode': '混合模式', 'Clash mode': 'Clash 模式',
+    'Game devices only: LAN HTTP/CONNECT proxy; the listener host IP is excluded. UDP game acceleration is not provided.': '仅游戏设备：局域网 HTTP/CONNECT 代理，本机监听 IP 不在允许名单中。不提供 UDP 游戏加速。',
+    'Game devices + local apps: LAN HTTP/CONNECT proxy, including this computer. Configure each app manually.': '游戏设备 + 本机应用：局域网 HTTP/CONNECT 代理，包含本机。需在各应用中手动配置代理。',
+    'Local apps only: HTTP/CONNECT on 127.0.0.1, with no LAN access. Full profiles require external Mihomo; embedded support is limited.': '仅本机应用：仅监听 127.0.0.1，不开放局域网。完整配置需外部 Mihomo；内嵌引擎能力有限。',
+    'Configure apps manually with the local address below. System proxy and VPN settings stay unchanged.': '请在应用中手动填写本机代理地址；系统代理及 VPN 设置不会改变。',
+    'Detect the current LAN for quick setup. Manual device lists are kept; automatic lists follow the subnet. Advanced Start keeps your manual address.': '快速启动识别当前局域网。手动设备名单保持不变，自动名单随网段更新；高级启动保留手动监听地址。',
+    'Choose Game, Mixed or Clash mode.': '请选择游戏、混合或 Clash 模式。',
+    'Game and Mixed modes need a private LAN IPv4 address. Use Prepare & start or Advanced settings.': '游戏和混合模式需要局域网 IPv4 地址，请使用“一键准备并启动”或高级设置。',
+    'Allowed devices must be specific private LAN IPv4 addresses.': '允许的设备必须是具体的局域网 IPv4 地址。',
+    'Game mode needs at least one allowed device other than this computer.': '游戏模式至少需要一个本机之外的允许设备地址。',
+    'Choose at most 256 allowed device addresses.': '最多允许 256 个设备地址。',
+
     'Select a node or enable automatic lowest latency.': '选择节点手动切换，或启用自动最低延迟选择。',
     'Could not safely identify one active physical LAN interface. Use Advanced settings.': '无法确定唯一的活动物理局域网接口，请使用高级设置。',
     'Connect this computer to a private Wi-Fi or Ethernet network first.': '请先让电脑接入 Wi-Fi 或有线局域网。',

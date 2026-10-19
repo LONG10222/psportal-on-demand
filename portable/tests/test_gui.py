@@ -133,7 +133,7 @@ class FrozenGuiTests(unittest.TestCase):
                         return controller.tk.call('send', target, *args)
 
                     wait_for(lambda: int(remote('winfo', 'viewable', '.')))
-                    self.assertEqual(remote('wm', 'title', '.'), 'PS Portal On-Demand')
+                    self.assertEqual(remote('wm', 'title', '.'), '星渡 StarPass')
                     widgets = []
                     def walk(parent):
                         for widget in controller.tk.splitlist(remote('winfo', 'children', parent)):
@@ -211,7 +211,7 @@ class FrozenGuiTests(unittest.TestCase):
                             remote('after', '0', close_command)
                             wait_for(lambda: int(remote('winfo', 'exists', dialog)),
                                 state='native Tk close confirmation')
-                            self.assertEqual(remote('wm', 'title', dialog), 'Close PS Portal On-Demand?')
+                            self.assertEqual(remote('wm', 'title', dialog), 'Close StarPass?')
                             self.assertEqual(remote(dialog + '.msg', 'cget', '-text'),
                                 'Stop the listener and its core, then close?')
                             remote(dialog + '.' + answer, 'invoke')

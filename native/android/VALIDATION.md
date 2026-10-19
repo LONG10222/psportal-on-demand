@@ -1,5 +1,26 @@
 # Android validation record
 
+## 2026-10-19 StarPass product modes and profile selectors
+
+Local checked source adds Game/Mixed/Clash next-session input presets, manual
+full-profile select groups, accounting retrieval time, unavailable-latency
+handling and a live visible network label. Existing VPN consent, input admission,
+phone-private-network restrictions, package identity and unsigned state remain.
+
+- 348 JVM assertions: 241 host/controller, 84 runtime/product/accounting,
+  8 background and 15 phone state; source/XML guards pass
+- 17 compiled-manifest/notice helper tests pass; Java syntax parsing does not
+  substitute for SDK/JNI compilation or instrumentation
+- New real-Mihomo group tests cover membership, automatic groups, active/VPN
+  guards, idle restore, Stop/reset and actual A/B route selection via local fixtures
+- New selector concurrency tests exercise Set/ForceSet concurrently with Now,
+  Unwrap, JSON status, TCP and UDP paths, using in-memory reject adapters
+- Go/compiler/SDK stages run in exact-revision GitHub Actions, not locally.
+  The denied local dependency-fetch route was not retried
+- No physical device, signed APK, permission UI, hotspot, actual phone TUN,
+  OEM endurance or Portal/game acceptance is established by these checks
+
+
 ## 2026-10-19 startup-callback and notice correction
 
 The current correction preserves Android v4 (`0.4.0-dev`, code 4), its phone

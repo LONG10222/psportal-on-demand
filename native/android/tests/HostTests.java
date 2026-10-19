@@ -118,6 +118,7 @@ public final class HostTests {
         boolean failStart, failStop, failStatus, failCommand;
         String nativeStatus = "{\"running\":true,\"state\":\"stopped\"}";
         Runnable duringStart, duringCommand;
+        String groupResult = "{\"group\":\"Choice\",\"selected\":\"A\",\"choices\":[\"A\",\"B\"]}";
         @Override public void start(String config) throws Exception {
             calls.add("start"); if (duringStart != null) duringStart.run();
             if (failStart) throw new Exception("https://secret.example/private-token");
@@ -130,6 +131,13 @@ public final class HostTests {
         }
         @Override public void testNodes() throws Exception { calls.add("test"); if (failCommand) throw new Exception("secret"); }
         @Override public void selectNode(String mode, String name, int threshold) throws Exception { calls.add("select:" + mode + ":" + threshold); if (failCommand) throw new Exception("secret"); }
+        @Override public String groupChoices(String group) throws Exception {
+            calls.add("choices:" + group); if (duringCommand != null) duringCommand.run();
+            if (failCommand) throw new Exception("https://secret.example/token"); return groupResult;
+        }
+        @Override public void selectGroup(String group, String choice) throws Exception {
+            calls.add("group:" + group + ":" + choice); if (failCommand) throw new Exception("secret");
+        }
     }
     private static final class Fixture {
         final Engine engine = new Engine();
@@ -226,6 +234,50 @@ public final class HostTests {
         check(new HostConfig("10.0.0.1", java.util.Arrays.asList("10.0.0.2"), "10081", "https://example.com/", "fastest", "", "60", 75).toJson("/private/runtime").contains("\"switch_threshold_ms\":75"), "Fastest config carries threshold");
         rejects(() -> new HostConfig("10.0.0.1", java.util.Arrays.asList("10.0.0.2"), "10081", "https://example.com/", "fastest", "", "60", -1));
     }
+    private static void groupControlTests() {
+        Engine engine = new Engine(); Queue owner = new Queue(), probes = new Queue(), callbacks = new Queue();
+        SessionController session = new SessionController(engine, owner, callbacks, probes);
+        List<String> received = new ArrayList<>();
+        check(!session.groupChoices(session.sessionId(), "Choice", received::add), "Cannot load groups before Start");
+        check(!session.selectGroup(session.sessionId(), "Choice", "B"), "Cannot select group before Start");
+        session.start("{}", () -> {}); owner.drain(); callbacks.drain();
+        long first = session.sessionId();
+        check(session.groupChoices(first, "Choice", received::add), "Load group members off the UI thread");
+        check(!session.selectGroup(first, "Choice", "B"), "Group commands coalesce with pending choice fetch");
+        check(received.isEmpty(), "No synchronous member callback"); probes.drain();
+        check(received.isEmpty(), "Deliver group members on callback lane"); callbacks.drain();
+        check(received.size() == 1 && received.get(0).equals(engine.groupResult), "Exact bounded member result delivered");
+        check(session.selectGroup(first, "Choice", "B"), "Select explicit profile member"); probes.drain();
+        check(engine.calls.contains("group:Choice:B"), "Exact group and member reach native API");
+        check(!session.groupChoices(first, "Choice", null), "Require a result consumer");
+        received.clear(); engine.failCommand = true;
+        session.groupChoices(first, "Choice", received::add); probes.drain(); callbacks.drain();
+        check(session.commandFailed() && received.equals(java.util.Arrays.asList("{}")), "Choice errors are redacted");
+        engine.failCommand = false; received.clear();
+        engine.groupResult = "x".repeat(SessionController.MAX_STATUS_CHARACTERS + 1);
+        session.groupChoices(first, "Choice", received::add); probes.drain(); callbacks.drain();
+        check(session.commandFailed() && received.equals(java.util.Arrays.asList("{}")), "Oversize member response fails bounded");
+        engine.groupResult = "{}"; received.clear();
+        session.groupChoices(first, "Choice", received::add); probes.drain();
+        session.stop(() -> {}); owner.drain(); session.start("{}", () -> {}); owner.drain(); callbacks.drain();
+        long second = session.sessionId();
+        check(first != second && received.isEmpty(), "Old group callback cannot open a dialog after restart");
+        check(!session.selectGroup(first, "Choice", "B"), "Old member dialog cannot control new session");
+        check(!session.groupChoices(first, "Choice", received::add), "Old group dialog cannot load from new session");
+        check(!session.control(first, "select", "fixed", "A", 50), "Old simple-node dialog cannot control new session");
+        check(session.selectGroup(second, "Choice", "A"), "Current session accepts fresh group selection"); probes.drain();
+        session.groupChoices(second, "Choice", received::add); probes.drain();
+        session.selectGroup(second, "Choice", "B"); probes.drain(); callbacks.drain();
+        check(received.isEmpty(), "New command supersedes queued old choice response");
+        session.groupChoices(second, "Choice", received::add); session.stop(() -> {}); owner.drain();
+        int calls = engine.calls.size(); probes.drain(); callbacks.drain();
+        check(engine.calls.size() == calls && received.isEmpty(), "Stopped queued member load cannot reach native or UI");
+        check(session.snapshot().phase == SessionController.Phase.STOPPED, "Group lane retires before next Start");
+        session.start("{}", () -> {}); owner.drain(); callbacks.drain();
+        engine.duringCommand = () -> { session.stop(() -> {}); owner.drain(); };
+        session.groupChoices(session.sessionId(), "Choice", received::add); probes.drain(); callbacks.drain();
+        check(session.snapshot().phase == SessionController.Phase.STOPPED && received.isEmpty(), "Stop cancels active member result before restart");
+    }
     private static void startCompletionIdentityTests() {
         // Android assigns a new startId even when the active session rejects a
         // duplicate Start. The original completion must still run exactly once.
@@ -317,6 +369,6 @@ public final class HostTests {
         check(fixture.session.snapshot().nativeStatus.equals("{}"), "Null status stays unavailable");
     }
     public static void main(String[] args) {
-        configTests(); lifecycleTests(); startCompletionIdentityTests(); simpleHomeTests(); nodeControlTests(); statusSizeTests(); System.out.println("PASS: " + assertions + " Android host config/lifecycle/presentation assertions (JVM only)");
+        configTests(); lifecycleTests(); startCompletionIdentityTests(); simpleHomeTests(); nodeControlTests(); groupControlTests(); statusSizeTests(); System.out.println("PASS: " + assertions + " Android host config/lifecycle/presentation assertions (JVM only)");
     }
 }

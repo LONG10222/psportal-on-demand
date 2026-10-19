@@ -11,10 +11,13 @@ MODULE = 'github.com/metacubex/mihomo'
 VERSION = 'v1.19.32'
 UPSTREAM_SUM = 'h1:uD7ZC3P77isWD554NNvtee65L+99+/C5hyc+Lk8rVEk='
 COMMIT = '88dcbf7f1614a67c3b36b848ee3592dfa92ada36'
-MODIFIED = ['common/queue/queue.go', 'log/log.go', 'tunnel/connection.go', 'tunnel/tunnel.go']
+MODIFIED = ['adapter/outboundgroup/selector.go', 'common/queue/queue.go',
+            'log/log.go', 'tunnel/connection.go', 'tunnel/tunnel.go']
 ADDED = {'log/log_concurrency_test.go', 'NOTICE-PSPORTAL-PATCH.md',
-         'tunnel/ingress.go', 'tunnel/ingress_test.go', 'common/queue/queue_concurrency_test.go'}
-PATCHES = ['0001-atomic-log-level.patch', '0002-ingress-quiescence.patch', '0003-queue-synchronization.patch']
+         'tunnel/ingress.go', 'tunnel/ingress_test.go', 'common/queue/queue_concurrency_test.go',
+         'adapter/outboundgroup/selector_concurrency_test.go'}
+PATCHES = ['0001-atomic-log-level.patch', '0002-ingress-quiescence.patch',
+           '0003-queue-synchronization.patch', '0004-selector-synchronization.patch']
 
 
 def sha256(path):

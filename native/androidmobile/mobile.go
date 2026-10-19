@@ -82,4 +82,18 @@ func SelectNodeWithThreshold(mode, name string, threshold int) error {
 	}
 	return e.SelectNodeWithThreshold(mode, name, threshold)
 }
+func GroupChoices(name string) (string, error) {
+	e, err := activeEngine()
+	if err != nil {
+		return "", err
+	}
+	return e.GroupChoices(name)
+}
+func SelectGroup(name, choice string) error {
+	e, err := activeEngine()
+	if err != nil {
+		return err
+	}
+	return e.SelectGroup(name, choice)
+}
 func SubscriptionInfo(url string) string { return engine.SubscriptionInfo(url) }

@@ -16,6 +16,10 @@ class CorrespondingSourceTests(unittest.TestCase):
             for name in source_release.SOURCE_DIRECTORIES:
                 (root / name).mkdir()
                 (root / name / 'source.go').write_text('// exact source\n')
+            (root / 'assets/branding').mkdir(parents=True)
+            (root / 'assets/branding/starpass-original.png').write_bytes(b'original artwork fixture')
+            (root / 'assets/branding/manifest.json').write_text('{"source": "fixture"}\n')
+            (root / 'scripts/generate_brand_assets.py').write_text('# conversion recipe fixture\n')
             for name in ('.gitignore', 'go.mod', 'go.sum', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'README.md', 'config.example.json'):
                 (root / name).write_text('fixture\n')
             (root / 'android' / 'private.p12').write_bytes(b'not a real key')
@@ -38,6 +42,7 @@ class CorrespondingSourceTests(unittest.TestCase):
                     self.assertEqual((cwd / name / 'source.go').read_text(), '// exact source\n')
                 self.assertEqual((cwd / 'third_party/mihomo/log/log.go').read_text(), 'exact replacement fixture\n')
                 self.assertEqual((cwd / 'third_party/mihomo/Meta.png').read_bytes(), b'upstream binary fixture')
+                self.assertEqual((cwd / 'assets/branding/starpass-original.png').read_bytes(), b'original artwork fixture')
                 (cwd / 'vendor').mkdir()
                 (cwd / 'vendor' / 'modules.txt').write_text('exact dependency fixture\n')
             with patch.object(source_release, 'ROOT', root), patch.object(source_release.subprocess, 'run', side_effect=vendor), patch.object(source_release.verify_mihomo_patch, 'verify') as verify, patch('sys.argv', ['source_release.py', '--go', 'verified-go']), contextlib.redirect_stdout(io.StringIO()):
@@ -50,7 +55,9 @@ class CorrespondingSourceTests(unittest.TestCase):
                              'third_party/mihomo/go.mod', 'third_party/mihomo/LICENSE', 'third_party/mihomo/log/log.go',
                              'third_party/mihomo/Meta.png', 'third_party/mihomo/PSPORTAL-PATCHES/PROVENANCE.json',
                              'third_party/mihomo/PSPORTAL-PATCHES/0001-atomic-log-level.patch',
-                             'third_party/mihomo/unreferenced_upstream_package/source.go'):
+                             'third_party/mihomo/unreferenced_upstream_package/source.go',
+                             'assets/branding/starpass-original.png', 'assets/branding/manifest.json',
+                             'scripts/generate_brand_assets.py'):
                     self.assertIn('psportal-native-source/' + path, names)
                 self.assertNotIn('psportal-native-source/android/private.p12', names)
                 self.assertNotIn('psportal-native-source/third_party/mihomo/.env', names)

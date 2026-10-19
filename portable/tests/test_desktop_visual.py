@@ -54,6 +54,15 @@ class DesktopVisualEvidenceTests(unittest.TestCase):
 
                 def visible(widget):
                     root.update_idletasks()
+                    # Overview is scrollable so subscription details and live
+                    # runtime controls remain reachable at compact sizes.
+                    if app.view.page == 'Overview':
+                        for canvas in app.view.scroll_canvases:
+                            if canvas.winfo_viewable():
+                                bottom = widget.winfo_rooty() + widget.winfo_height()
+                                if bottom > canvas.winfo_rooty() + canvas.winfo_height():
+                                    canvas.yview_moveto(1.0)
+                                    root.update_idletasks()
                     self.assertTrue(widget.winfo_viewable(), str(widget))
                     self.assertGreater(widget.winfo_width(), 2)
                     self.assertGreaterEqual(widget.winfo_rootx(), root.winfo_rootx())
@@ -78,6 +87,11 @@ class DesktopVisualEvidenceTests(unittest.TestCase):
                 app.load()
                 app.set_language('zh')
                 app.inspect_provider()
+                for mode in ('game', 'mixed', 'clash'):
+                    app.set_product_mode(mode)
+                    visible(app.view.product_mode_combo)
+                    save('product-' + mode + '-zh-dark')
+                app.set_product_mode('game')
                 fake_process = SimpleNamespace(poll=lambda: None)
                 app.backend.process = fake_process
                 app.backend.ready = True

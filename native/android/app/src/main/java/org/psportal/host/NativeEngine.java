@@ -11,4 +11,6 @@ final class NativeEngine implements SessionController.Engine {
     @Override public void prepare() throws Exception { Androidmobile.prepare(); }
     @Override public void testNodes() throws Exception { Androidmobile.testNodes(); }
     @Override public void selectNode(String mode, String name, int threshold) throws Exception { Androidmobile.selectNodeWithThreshold(mode, name, threshold); }
+    @Override public String groupChoices(String group) throws Exception { return Androidmobile.groupChoices(group); }
+    @Override public void selectGroup(String group, String choice) throws Exception { Androidmobile.selectGroup(group, choice); }
 }

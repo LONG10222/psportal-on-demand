@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 
 	C "github.com/metacubex/mihomo/constant"
 	P "github.com/metacubex/mihomo/constant/provider"
@@ -16,6 +17,7 @@ type SelectorOption struct {
 type Selector struct {
 	*GroupBase
 	disableUDP bool
+	selectedMu sync.RWMutex
 	selected   string
 	testUrl    string
 }
@@ -83,7 +85,7 @@ func (s *Selector) Now() string {
 func (s *Selector) Set(name string) error {
 	for _, proxy := range s.GetProxies(false) {
 		if proxy.Name() == name {
-			s.selected = name
+			s.ForceSet(name)
 			return nil
 		}
 	}
@@ -92,7 +94,9 @@ func (s *Selector) Set(name string) error {
 }
 
 func (s *Selector) ForceSet(name string) {
+	s.selectedMu.Lock()
 	s.selected = name
+	s.selectedMu.Unlock()
 }
 
 // Unwrap implements C.ProxyAdapter
@@ -102,8 +106,13 @@ func (s *Selector) Unwrap(metadata *C.Metadata, touch bool) C.Proxy {
 
 func (s *Selector) selectedProxy(touch bool) C.Proxy {
 	proxies := s.GetProxies(touch)
+	// Provider health checks may read a nested selector while the controller
+	// changes its choice. Snapshot only the name; never hold a lock while dialing.
+	s.selectedMu.RLock()
+	selected := s.selected
+	s.selectedMu.RUnlock()
 	for _, proxy := range proxies {
-		if proxy.Name() == s.selected {
+		if proxy.Name() == selected {
 			return proxy
 		}
 	}

@@ -1,8 +1,39 @@
-# Portable desktop app: Linux-priority preview, Windows and macOS build paths
+# 星渡 StarPass desktop: Windows, macOS and Linux
 
 This is an implementation and native build path, not a signed or fully native-accepted release. One Tk desktop window can select either the established Python listener with separate Mihomo (`external`, the default), or the experimental shared native engine (`embedded`). External mode still uses a separately supplied trusted Mihomo executable with `-post-up` readiness support (tested with official v1.19.32). Embedded mode uses the project's native executable with Mihomo adapters linked into that one process. No installer, TUN adapter, administrator service, system proxy, router change, firewall change, automatic startup, or downloaded core is added by the app.
 
-The application must remain running on an awake computer on the Portal's LAN. Normal Portal use permits only configured exact private LAN IPv4 clients. An optional development-only mode binds to `127.0.0.1` and requires the sole allowed client to be `127.0.0.1`; a real Portal cannot reach that loopback listener. Keep the Portal's IP stable with an existing DHCP reservation. The local Mihomo proxy and controller bind to loopback; the Portal-facing HTTP listener binds only to the configured private LAN address.
+The application must remain running on an awake computer on the Portal's LAN. Normal Portal use permits only configured exact private LAN IPv4 clients. Clash product mode binds to `127.0.0.1` and requires the sole allowed client to be `127.0.0.1`; a real Portal cannot reach that loopback listener. Keep the Portal's IP stable with an existing DHCP reservation. The local Mihomo proxy and controller bind to loopback; the Portal-facing HTTP listener binds only to the configured private LAN address.
+
+## Game, Mixed and Clash product modes
+
+These describe listener inputs, independently of the subscription's routing rules:
+
+- **Game** binds the selected LAN address and permits explicit device IPs, excluding
+  the host's own LAN IP. LAN sharing is HTTP/CONNECT TCP, not arbitrary game UDP
+- **Mixed** includes the host's own LAN IP in addition to the allowed devices.
+  Configure local applications manually to use the displayed LAN address/port
+- **Clash** binds only 127.0.0.1 and accepts only 127.0.0.1. Configure each local
+  application to use that endpoint; LAN devices cannot reach this mode
+
+No OS proxy, TUN, VPN, DNS, firewall or autostart setting is changed. Complete
+profile behavior still requires the external Mihomo path; selecting Clash does
+not make the experimental embedded adapter pool a complete Clash client.
+The mode chooser preserves LAN form preferences, subscription and node choices.
+Changing a mode while stopped only sets up the next run, and does not start it.
+The effective bind/source policy is validated before the backend runs.
+New `product_mode` records the selected use case; `product_lan_preferences`
+retains the editable LAN address/list separately from an effective loopback
+listener. Only explicit `product_lan_automatic: true` allows automatic subnet
+lists to follow a changed network. Legacy saved allowlists are treated as manual,
+not inferred to authorize access for an entire new subnet.
+
+Prepare & start reuses a saved local provider/profile only when `source_provenance`
+records the same accepted subscription URL and exact file path, and revalidates the
+bounded local content before launch. Editing the URL and saving does not relabel
+an old file; legacy unknown provenance with a URL triggers import again. An explicit
+file-picker choice records a local override, shown in the UI. Mode changes preserve
+same-source node choices. Use **Import subscription** for an explicit refresh. Cached
+accounting remains a timestamped server snapshot, not renewed by switching modes.
 
 ## Run from source on Windows
 

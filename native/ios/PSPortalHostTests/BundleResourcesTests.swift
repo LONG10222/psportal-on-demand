@@ -1,7 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import XCTest
+import UIKit
 
 final class BundleResourcesTests: XCTestCase {
+    func testStarPassBrandAssetsAreBundled() throws {
+        XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String, "星渡 StarPass")
+        XCTAssertNotNil(UIImage(named: "StarPassMark"))
+        let icons = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "CFBundleIcons") as? [String: Any])
+        let primary = try XCTUnwrap(icons["CFBundlePrimaryIcon"] as? [String: Any])
+        XCTAssertEqual(primary["CFBundleIconName"] as? String, "AppIcon")
+    }
+
     func testRequiredReasonManifestAndLicenseResourcesAreBundled() throws {
         let url = try XCTUnwrap(Bundle.main.url(forResource: "PrivacyInfo", withExtension: "xcprivacy"))
         let data = try Data(contentsOf: url)
