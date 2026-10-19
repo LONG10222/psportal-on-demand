@@ -12,32 +12,34 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Config is shared by desktop and mobile. BackendPort and APIPort are retained
 // for configuration compatibility; the embedded adapter engine opens neither.
 type Config struct {
-	ListenHost       string   `json:"listen_host"`
-	ListenPort       int      `json:"listen_port"`
-	AllowedClients   []string `json:"allowed_clients"`
-	SubscriptionURL  string   `json:"subscription_url,omitempty"`
-	SubscriptionFile string   `json:"subscription_file,omitempty"`
-	SelectionMode    string   `json:"selection_mode"`
-	PreferredNode    string   `json:"preferred_node"`
-	BackendPort      int      `json:"backend_port"`
-	APIPort          int      `json:"api_port"`
-	IdleSeconds      int      `json:"idle_seconds"`
-	WakeupTimeout    int      `json:"wakeup_timeout"`
-	RequestTimeout   int      `json:"request_timeout"`
-	MaxConnections   int      `json:"max_connections"`
-	HealthURL        string   `json:"health_url"`
-	HealthInterval   int      `json:"health_interval"`
-	HealthTimeout    int      `json:"health_timeout"`
-	DataDir          string   `json:"data_dir,omitempty"`
+	ListenHost        string   `json:"listen_host"`
+	ListenPort        int      `json:"listen_port"`
+	AllowedClients    []string `json:"allowed_clients"`
+	SubscriptionURL   string   `json:"subscription_url,omitempty"`
+	SubscriptionFile  string   `json:"subscription_file,omitempty"`
+	SelectionMode     string   `json:"selection_mode"`
+	SwitchThresholdMS int      `json:"switch_threshold_ms"`
+	PreferredNode     string   `json:"preferred_node"`
+	BackendPort       int      `json:"backend_port"`
+	APIPort           int      `json:"api_port"`
+	IdleSeconds       int      `json:"idle_seconds"`
+	WakeupTimeout     int      `json:"wakeup_timeout"`
+	RequestTimeout    int      `json:"request_timeout"`
+	MaxConnections    int      `json:"max_connections"`
+	HealthURL         string   `json:"health_url"`
+	HealthInterval    int      `json:"health_interval"`
+	HealthTimeout     int      `json:"health_timeout"`
+	DataDir           string   `json:"data_dir,omitempty"`
 }
 
 func DefaultConfig() Config {
-	return Config{ListenPort: 10081, BackendPort: 10082, APIPort: 10090, IdleSeconds: 60, WakeupTimeout: 45, RequestTimeout: 30, MaxConnections: 128, SelectionMode: "auto", HealthURL: "https://www.gstatic.com/generate_204", HealthInterval: 300, HealthTimeout: 5000}
+	return Config{ListenPort: 10081, BackendPort: 10082, APIPort: 10090, IdleSeconds: 60, WakeupTimeout: 45, RequestTimeout: 30, MaxConnections: 128, SelectionMode: "auto", SwitchThresholdMS: 50, HealthURL: "https://www.gstatic.com/generate_204", HealthInterval: 300, HealthTimeout: 5000}
 }
 
 func ParseConfig(raw string) (Config, error) {
@@ -92,13 +94,16 @@ func (c Config) Validate() error {
 	if c.MaxConnections > 4096 {
 		return errors.New("max_connections exceeds 4096")
 	}
-	if c.SelectionMode != "auto" && c.SelectionMode != "prefer" && c.SelectionMode != "fixed" {
-		return errors.New("selection_mode must be auto, prefer or fixed")
+	if c.SelectionMode != "auto" && c.SelectionMode != "prefer" && c.SelectionMode != "fixed" && c.SelectionMode != "fastest" {
+		return errors.New("selection_mode must be auto, prefer, fixed or fastest")
+	}
+	if c.SwitchThresholdMS < 0 || c.SwitchThresholdMS > 60000 {
+		return errors.New("switch_threshold_ms must be between 0 and 60000")
 	}
 	if c.PreferredNode != "" && !validNodeName(c.PreferredNode) {
 		return errors.New("preferred_node is reserved or invalid")
 	}
-	if c.SelectionMode != "auto" && c.PreferredNode == "" {
+	if (c.SelectionMode == "prefer" || c.SelectionMode == "fixed") && c.PreferredNode == "" {
 		return errors.New("preferred_node is required for prefer/fixed mode")
 	}
 	if (c.SubscriptionURL == "") == (c.SubscriptionFile == "") {
@@ -125,7 +130,7 @@ func privateIPv4(s string) bool {
 var reservedName = regexp.MustCompile(`[\s_-]`)
 
 func validNodeName(s string) bool {
-	if len(s) == 0 || len(s) > 256 || strings.TrimSpace(s) != s || strings.ContainsRune(s, '`') {
+	if !utf8.ValidString(s) || len(s) == 0 || len(s) > 256 || strings.TrimSpace(s) != s || strings.ContainsRune(s, '`') {
 		return false
 	}
 	for _, r := range s {

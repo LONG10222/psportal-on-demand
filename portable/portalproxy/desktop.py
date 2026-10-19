@@ -20,6 +20,7 @@ import time
 from urllib.parse import parse_qsl, unquote, urlsplit
 
 from . import config, backend as engine_backend
+from .runtime import MAX_STATUS_BYTES
 
 MAX_CONFIG_BYTES = 1024 * 1024
 MAX_LOG_LINES = 500
@@ -34,11 +35,12 @@ FIELDS = (
     ('subscription_file', 'Local provider file (overrides URL)'),
     ('selection_mode', 'Node selection'),
     ('preferred_node', 'Preferred / fixed node name'),
+    ('switch_threshold_ms', 'Fastest switch threshold (ms)'),
     ('idle_seconds', 'Idle timeout (seconds)'),
     ('backend_port', 'Local core port'),
     ('api_port', 'Local controller port'),
 )
-INTEGER_FIELDS = {'listen_port', 'backend_port', 'api_port', 'idle_seconds'}
+INTEGER_FIELDS = {'listen_port', 'backend_port', 'api_port', 'idle_seconds', 'switch_threshold_ms'}
 
 
 def default_config_path() -> Path:
@@ -123,6 +125,7 @@ class BackendProcess:
         self._signaled = False
         self.launch: engine_backend.Launch | None = None
         self.ready = False
+        self.runtime = None
         self._state_lock = threading.Lock()
         atexit.register(self._at_exit)
 
@@ -140,6 +143,7 @@ class BackendProcess:
             # Buffered output from its reader must not mark the new run ready.
             self.process = None
             self.ready = False
+            self.runtime = None
         if self.launch is not None:
             self.launch.cleanup()
         self.secrets = secret_values(values)
@@ -180,6 +184,8 @@ class BackendProcess:
         def log(line):
             # Capture this child's secrets: a quick restart must not use the
             # replacement configuration's redaction set for old output.
+            if values is not None and self.process is not process:
+                return
             try:
                 self.events.put_nowait(redact_log(line, self.secrets if secrets is None else secrets))
             except queue.Full:
@@ -187,13 +193,27 @@ class BackendProcess:
         try:
             with process.stdout:
                 while True:
-                    line = process.stdout.readline(4097)
+                    line = process.stdout.readline(MAX_STATUS_BYTES + 1)
                     if not line:
                         break
-                    if len(line) > 4096:
+                    if len(line) > MAX_STATUS_BYTES:
                         # Drop the entire oversized record, not split tokens.
                         while line and not line.endswith('\n'):
-                            line = process.stdout.readline(4097)
+                            line = process.stdout.readline(MAX_STATUS_BYTES + 1)
+                        log('[Oversized diagnostic omitted]')
+                        continue
+                    if values is not None:
+                        status = engine_backend.parse_status(line.rstrip())
+                        if status is not None:
+                            # State and device counts must belong to this exact
+                            # child/listener, never buffered output from a restart.
+                            if (status.get('listen_host') == values.get('listen_host')
+                                    and status.get('listen_port') == values.get('listen_port', 10081)):
+                                with self._state_lock:
+                                    if self.process is process:
+                                        self.runtime = status
+                            continue
+                    if len(line) > 4096:
                         log('[Oversized diagnostic omitted]')
                         continue
                     if values is not None and engine_backend.is_ready(line.rstrip(), values):
@@ -210,6 +230,18 @@ class BackendProcess:
                     except (OSError, ValueError):
                         pass
                 launch.cleanup()
+
+    def snapshot(self):
+        with self._state_lock:
+            return self.runtime
+
+    def command(self, command, **values):
+        with self._state_lock:
+            process = self.process
+            if (process is None or process.poll() is not None
+                    or self.stopping_since is not None):
+                raise RuntimeError('The listener is not available')
+            engine_backend.send_command(process, command, **values)
 
     def stop(self) -> None:
         process = self.process
@@ -234,6 +266,7 @@ class BackendProcess:
                 if self.process is process:
                     self.process = None
                     self.ready = False
+                    self.runtime = None
             if self.launch is not None:
                 self.launch.cleanup()
             return result
@@ -269,6 +302,12 @@ class DesktopApp:
         self.importing = False
         self.quick_start_pending = False
         self.import_events = queue.Queue()
+        self._import_generation = 0
+        self._import_lock = threading.Lock()
+        self._active_import = None
+        self._node_request = 0
+        self._pending_node_request = None
+        self._reported_command = None
         self.inputs = []
         self.engine_inputs = {}
         self.profile_selection_inputs = []
@@ -296,6 +335,67 @@ class DesktopApp:
         if status in ('Stopped', 'Stopped with error'):
             self.view.core_state = 'stopped' if status == 'Stopped' else 'Not reported'
         self.view.refresh()
+
+    def node_command(self, command):
+        """Only explicit actions can wake/test/switch a managed subscription."""
+        from tkinter import messagebox
+        snapshot = self.backend.snapshot()
+        if (self.closing or self.importing or self._pending_node_request is not None
+                or not snapshot or not snapshot.get('node_management')
+                or self.raw.get('existing_proxy_port') or not self.view._direct_subscription()
+                or snapshot.get('busy') or self.backend.stopping_since is not None):
+            return
+        values = {}
+        if self.vars.get('profile_file') and self.vars['profile_file'].get():
+            group = self.view.selection_group_var.get()
+            if group:
+                values['selection_group'] = group
+            elif command != 'prepare':
+                return
+        if command == 'select':
+            selected = self.view.node_table.selection()
+            if not selected:
+                return
+            values.update(selection_mode='fixed',
+                          preferred_node=self.view.node_table.item(selected[0], 'values')[0])
+        elif command == 'fastest':
+            try:
+                threshold = int(self.view.switch_threshold_var.get())
+                if not 0 <= threshold <= 60000:
+                    raise ValueError()
+            except ValueError:
+                messagebox.showerror(self._t('Check configuration'),
+                    self._t('Enter a switch threshold from 0 to 60000 ms.'), parent=self.root)
+                return
+            command = 'select'
+            values.update(selection_mode='fastest', preferred_node='', switch_threshold_ms=threshold)
+        elif command not in ('prepare', 'test'):
+            raise ValueError('unsupported node command')
+        self._node_request += 1
+        request_id = self._node_request
+        try:
+            self.backend.command(command, request_id=request_id, **values)
+        except (OSError, RuntimeError, ValueError):
+            self.backend.log(self._t('The node command could not be sent. Check the listener status.'))
+            return
+        self._pending_node_request = (self.backend.process, request_id)
+        self.view.refresh()
+
+    def _poll_runtime(self):
+        snapshot = self.backend.snapshot()
+        pending = self._pending_node_request
+        if pending and (self.backend.process is not pending[0]
+                        or (snapshot and snapshot.get('last_command_id') == pending[1]
+                            and not snapshot.get('busy'))):
+            self._pending_node_request = None
+        if snapshot:
+            key = (self.backend.process, snapshot.get('last_command_id'))
+            if snapshot.get('command_error') and key != self._reported_command:
+                self._reported_command = key
+                self.backend.log(redact_log(snapshot['command_error'], self.backend.secrets))
+        self.view.runtime = snapshot
+        if snapshot and snapshot.get('core_state') in ('starting', 'running', 'stopped', 'failed'):
+            self.view.core_state = snapshot['core_state']
 
     def set_language(self, language):
         from .i18n import save_language
@@ -360,6 +460,8 @@ class DesktopApp:
             variable.set(str(value))
         self.loading = False
         self.dirty = False
+        self.view.switch_threshold_var.set(str(defaults.get('switch_threshold_ms', 50)))
+        self.view.selection_group_var.set('')
         self.path_var.set(str(self.path))
         from .i18n import load_language
         self.view.set_language(load_language(self.path))
@@ -497,7 +599,7 @@ class DesktopApp:
             messagebox.showerror(self._t('Cannot inspect provider'), self._t(str(error)), parent=self.root)
 
     def import_subscription(self):
-        if self.importing or self.backend.process is not None:
+        if self.closing or self.importing or self.backend.process is not None:
             return
         from tkinter import messagebox
         from urllib.parse import urlsplit
@@ -511,20 +613,23 @@ class DesktopApp:
             messagebox.showerror(self._t('Check configuration'), self._t('Enter a valid HTTPS subscription URL.'), parent=self.root)
             return
         self.importing = True
-        self.view.quick_button.configure(state='disabled')
-        self.view.link_button.configure(state='disabled')
-        for widget, _ in self.inputs:
-            widget.configure(state='disabled')
-        self.start_button.configure(state='disabled')
-        self.save_button.configure(state='disabled')
-        self.choose_button.configure(state='disabled')
+        self._import_generation += 1
+        generation = self._import_generation
+        cancelled = threading.Event()
+        # Never let a delayed download use a newly selected configuration path
+        # or send the user back from a page they visited while it was running.
+        owner_path = self.path
+        navigation = self.view.navigation_generation
+        self._active_import = (generation, cancelled, owner_path, navigation)
+        self.running_controls(True)
+        self._set_status('Preparing')
         self.backend.log(self._t('Importing subscription…'))
         def work():
             target = None
             try:
                 from .core import download_subscription
                 from .profiles import inspect_profile
-                folder = self.path.parent / 'profiles'
+                folder = owner_path.parent / 'profiles'
                 folder.mkdir(mode=0o700, parents=True, exist_ok=True)
                 fd, filename = tempfile.mkstemp(prefix='import-', suffix='.yaml', dir=folder)
                 os.close(fd); target = Path(filename)
@@ -533,30 +638,77 @@ class DesktopApp:
                 if isinstance(metadata, dict):
                     from .core import atomic_private
                     atomic_private(target.with_suffix(target.suffix + '.info.json'), json.dumps(metadata).encode())
-                self.import_events.put((target, None))
+                with self._import_lock:
+                    if not cancelled.is_set():
+                        self.import_events.put((generation, target, None))
+                        return
+                self._discard_import(target)
             except Exception:
                 if target is not None:
-                    target.unlink(missing_ok=True)
-                self.import_events.put((None, 'Subscription import failed. Check the URL and connection.'))
+                    self._discard_import(target)
+                with self._import_lock:
+                    if not cancelled.is_set():
+                        self.import_events.put((generation, None, 'Subscription import failed. Check the URL and connection.'))
         threading.Thread(target=work, daemon=True).start()
+
+    @staticmethod
+    def _discard_import(path):
+        if path is not None:
+            for item in (path, path.with_suffix(path.suffix + '.info.json')):
+                try:
+                    item.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+    def cancel_preparation(self):
+        if not self.importing:
+            return
+        self._import_generation += 1
+        with self._import_lock:
+            if self._active_import:
+                self._active_import[1].set()
+            # A completed worker may have queued its result just before Cancel.
+            # Clear owned files now, even if Close destroys the event loop next.
+            while True:
+                try:
+                    _, path, _ = self.import_events.get_nowait()
+                except queue.Empty:
+                    break
+                self._discard_import(path)
+        self._active_import = None
+        self.importing = False
+        self.quick_start_pending = False
+        self.running_controls(False)
+        self._set_status('Stopped')
+        self.backend.log(self._t('Preparation cancelled.'))
 
     def _poll_import(self):
         from tkinter import messagebox
-        try:
-            path, error = self.import_events.get_nowait()
-        except queue.Empty:
-            return
+        while True:
+            try:
+                generation, path, error = self.import_events.get_nowait()
+            except queue.Empty:
+                return
+            active = self._active_import
+            if (self.closing or not active or generation != active[0]
+                    or active[2] != self.path):
+                self._discard_import(path)
+                continue
+            break
+        self._active_import = None
         self.importing = False
         self.running_controls(self.backend.process is not None)
-        if self.closing:
-            return
         pending, self.quick_start_pending = self.quick_start_pending, False
         if error:
+            self._set_status('Stopped with error')
             messagebox.showerror(self._t('Cannot inspect provider'), self._t(error), parent=self.root)
         else:
             if self._use_imported_file(path) and pending and self._configure_lan():
                 self.start()
-                self.view.show('LAN sharing')
+                if self.view.navigation_generation == active[3]:
+                    self.view.show('LAN sharing')
+            elif self.backend.process is None:
+                self._set_status('Stopped')
 
     def copy_address(self):
         from tkinter import messagebox
@@ -638,9 +790,12 @@ class DesktopApp:
             widget.configure(state='disabled' if running else normal)
         if not running:
             self.engine_controls()
+        self.view.refresh()
 
     def start(self):
         from tkinter import messagebox
+        if self.closing or self.importing:
+            return
         if self.backend.process is not None and self.backend.process.poll() is None:
             return
         if not self.save():
@@ -652,17 +807,27 @@ class DesktopApp:
                        if self.raw.get('engine_mode') == 'embedded' else
                        'The listener process could not start. Check the application files and executable permissions.')
             messagebox.showerror(self._t('Cannot start listener'), self._t(message), parent=self.root)
+            self._set_status('Stopped with error')
             return
         self.running_controls(True)
-        self._set_status('Process running')
+        self._pending_node_request = None
+        self._reported_command = None
+        self.view.runtime = None
+        self._set_status('Preparing')
 
     def stop(self):
+        if self.importing:
+            self.cancel_preparation()
+            return
+        if self.backend.process is None:
+            return
         self.backend.stop()
         self.stop_button.configure(state='disabled')
         self._set_status('Stopping…')
 
     def poll(self):
         self._poll_import()
+        self._poll_runtime()
         for _ in range(100):
             try:
                 line = self.backend.events.get_nowait()
@@ -677,12 +842,16 @@ class DesktopApp:
             self.log_widget.see('end')
             self.log_widget.configure(state='disabled')
         if self.backend.ready and self.backend.stopping_since is None:
-            self._set_status('Listening')
+            states = {'preparing': 'Preparing', 'listening': 'Listening', 'waking': 'Waking',
+                      'forwarding': 'Forwarding', 'error': 'Error', 'stopped': 'Stopped'}
+            state = (self.view.runtime or {}).get('state')
+            self._set_status(states.get(state, 'Listening'))
         process = self.backend.process
         if process is not None:
             result = self.backend.poll()
             if result is not None:
                 self._set_status('Stopped' if result == 0 else 'Stopped with error')
+                self._poll_runtime()
                 self.backend.log('Listener exited.' if result == 0 else f'Listener exited with code {result}.')
                 self.running_controls(False)
         if self.closing and self.backend.process is None and not self.importing:
@@ -695,10 +864,14 @@ class DesktopApp:
         if self.closing:
             return
         running = self.backend.process is not None and self.backend.process.poll() is None
-        question = 'Stop the listener and its core, then close?' if running else 'Close and discard unsaved configuration edits?'
+        question = ('Stop the listener and its core, then close?' if running else
+                    'Cancel preparation and close?' if self.importing else
+                    'Close and discard unsaved configuration edits?')
         if (running or self.dirty or self.importing) and not messagebox.askyesno(self._t('Close PS Portal On-Demand?'), self._t(question), parent=self.root):
             return
         self.closing = True
+        if self.importing:
+            self.cancel_preparation()
         if running:
             self.stop()
         elif not self.importing:

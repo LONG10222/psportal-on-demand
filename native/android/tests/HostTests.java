@@ -41,16 +41,66 @@ public final class HostTests {
         void one() { tasks.remove().run(); }
         void drain() { while (!tasks.isEmpty()) one(); }
     }
+    private static void simpleHomeTests() {
+        List<String> clients = LanSetup.clients("192.168.1.2", 24);
+        check(clients.size() == 253, "Bound /24 allowlist to 253 distinct clients");
+        check(!clients.contains("192.168.1.2") && !clients.contains("192.168.1.0") && !clients.contains("192.168.1.255"), "Exclude self, network and broadcast");
+        check(LanSetup.clients("10.0.0.1", 30).equals(java.util.Arrays.asList("10.0.0.2")), "Use actual /30 mask");
+        for (int prefix : new int[]{0, 16, 23, 31, 32}) rejects(() -> LanSetup.clients("10.0.0.1", prefix));
+        for (String ip : new String[]{"8.8.8.8", "127.0.0.1", "192.168.1.0", "192.168.1.255"}) rejects(() -> LanSetup.clients(ip, 24));
+        for (String name : new String[]{"wlan0", "wifi0", "eth1", "en0"}) check(LanSetup.safeInterface(name), "Physical interface " + name);
+        for (String name : new String[]{"tun0", "utun4", "wg0", "rmnet0", "dummy0", "docker0", "bridge0", "lo"}) check(!LanSetup.safeInterface(name), "Exclude virtual/cellular " + name);
+        try {
+            check(LanSetup.choosePort("192.168.1.2", 10081, (host, port) -> true) == 10081, "Keep default when free");
+            check(LanSetup.choosePort("192.168.1.2", 10081, (host, port) -> port != 10081) == 10083, "Skip reserved backend port on conflict");
+            check(LanSetup.choosePort("192.168.1.2", 23456, (host, port) -> true) == 23456, "Keep explicit available preference");
+            try { LanSetup.choosePort("192.168.1.2", 10081, (host, port) -> false); throw new AssertionError("No free port accepted"); }
+            catch (java.io.IOException expected) { assertions++; }
+        } catch (java.io.IOException failure) { throw new AssertionError(failure); }
+        HostConfig auto = new HostConfig("192.168.1.2", clients, "10081", "https://example.com/", "auto", "", "60");
+        check(auto.allowedClients.size() == 253 && auto.toJson("/private/runtime").contains("\"192.168.1.254\""), "Explicit subnet serialized to native config");
+        check(new HostConfig("10.0.0.1", java.util.Arrays.asList("10.0.0.2", "10.0.0.2"), "10081", "https://example.com/", "auto", "", "60").allowedClients.size() == 1, "Deduplicate explicit clients");
+        rejects(() -> new HostConfig("10.0.0.1", new ArrayList<>(), "10081", "https://example.com/", "auto", "", "60"));
+        rejects(() -> new HostConfig("10.0.0.1", java.util.Arrays.asList("10.0.0.1"), "10081", "https://example.com/", "auto", "", "60"));
+        SubscriptionAccounting unknown = new SubscriptionAccounting("", "", "", "");
+        check(unknown.used == null && unknown.total == null && unknown.remaining == null && unknown.expires == null && unknown.percent() == -1, "Missing accounting stays unknown");
+        SubscriptionAccounting known = new SubscriptionAccounting("1024", "3072", "8192", "2000000000");
+        check(known.used == 4096 && known.remaining == 4096 && known.percent() == 50, "Real header arithmetic");
+        check(SubscriptionAccounting.bytes(known.used, "missing", java.util.Locale.ENGLISH).equals("4.00 KiB"), "Binary accounting units");
+        check(new SubscriptionAccounting("100", "200", "150", "0").remaining == 0, "Overage clamps only remaining");
+        check(new SubscriptionAccounting("100", "200", "150", "0").percent() == 100, "Overage progress capped");
+        check(new SubscriptionAccounting("100", "", "150", "253402300800").used == null, "Partial use stays unknown");
+        check(new SubscriptionAccounting("100", "200", "0", "253402300800").total == null, "Zero total is not unlimited");
+        check(new SubscriptionAccounting("9223372036854775807", "1", "-1", "999999999999999999999999").used == null, "Overflow accounting unknown");
+        check(new SubscriptionAccounting("NaN", "1", "100", "253402300800").expires == null, "Reject out-of-range expiry");
+        SessionController.Phase run = SessionController.Phase.RUNNING;
+        check(RuntimePresentation.state(run, false, true, "stopped", 0L, false) == RuntimePresentation.State.LISTENING, "Idle core does not imply stopped listener");
+        check(RuntimePresentation.state(run, false, true, "starting", 0L, false) == RuntimePresentation.State.WAKING, "Real waking state");
+        check(RuntimePresentation.state(run, false, true, "running", 2L, false) == RuntimePresentation.State.FORWARDING, "Real forwarding count");
+        check(RuntimePresentation.state(run, false, true, "listening", 0L, false) == RuntimePresentation.State.LISTENING, "Additive service state");
+        check(RuntimePresentation.state(run, false, true, "running", 0L, false) == RuntimePresentation.State.READY, "Warm idle core");
+        check(RuntimePresentation.state(run, false, null, "", null, false) == RuntimePresentation.State.UNKNOWN, "Unavailable is not zero or ready");
+        check(RuntimePresentation.state(run, false, true, "running", 1L, true) == RuntimePresentation.State.ERROR, "Native failure stays visible");
+        check(RuntimePresentation.state(SessionController.Phase.STOPPED, true, null, "", null, false) == RuntimePresentation.State.PREPARING, "Preparation precedes listening");
+        check(RuntimePresentation.state(SessionController.Phase.STOPPED, false, null, "", null, false) == RuntimePresentation.State.STOPPED, "Canceled preparation stays stopped");
+    }
     private static final class Engine implements SessionController.Engine {
         final List<String> calls = new ArrayList<>();
-        boolean failStart, failStop, failStatus;
-        Runnable duringStart;
+        boolean failStart, failStop, failStatus, failCommand;
+        String nativeStatus = "{\"running\":true,\"state\":\"stopped\"}";
+        Runnable duringStart, duringCommand;
         @Override public void start(String config) throws Exception {
             calls.add("start"); if (duringStart != null) duringStart.run();
             if (failStart) throw new Exception("https://secret.example/private-token");
         }
         @Override public void stop() throws Exception { calls.add("stop"); if (failStop) throw new Exception("secret"); }
-        @Override public String status() throws Exception { calls.add("status"); if (failStatus) throw new Exception("secret"); return "{\"running\":true,\"state\":\"stopped\"}"; }
+        @Override public String status() throws Exception { calls.add("status"); if (failStatus) throw new Exception("secret"); return nativeStatus; }
+        @Override public void prepare() throws Exception {
+            calls.add("prepare"); if (duringCommand != null) duringCommand.run();
+            if (failCommand) throw new Exception("https://secret.example/token");
+        }
+        @Override public void testNodes() throws Exception { calls.add("test"); if (failCommand) throw new Exception("secret"); }
+        @Override public void selectNode(String mode, String name, int threshold) throws Exception { calls.add("select:" + mode + ":" + threshold); if (failCommand) throw new Exception("secret"); }
     }
     private static final class Fixture {
         final Engine engine = new Engine();
@@ -114,7 +164,69 @@ public final class HostTests {
         Fixture stopped = new Fixture(); stopped.session.stop(stopped.done); stopped.callbacks.drain();
         check(stopped.completed == 1 && stopped.engine.calls.isEmpty(), "Stop without start is idempotent");
     }
+    private static void nodeControlTests() {
+        Engine engine = new Engine(); Queue owner = new Queue(), probes = new Queue(), callbacks = new Queue();
+        SessionController session = new SessionController(engine, owner, callbacks, probes);
+        check(!session.control("prepare", "", "", 50), "No node work before listener");
+        session.start("{}", () -> {}); owner.drain(); callbacks.drain();
+        check(session.control("prepare", "", "", 50), "Accept node preparation");
+        check(session.commandPending() && !session.control("test", "", "", 50), "Coalesce repeated node actions");
+        check(owner.tasks.isEmpty() && probes.tasks.size() == 1, "Probe lane does not block native owner");
+        probes.drain(); check(!session.commandPending() && !session.commandFailed(), "Probe completion");
+        check(session.control("select", "fastest", "", 80), "Live selection accepted"); probes.drain();
+        check(engine.calls.contains("select:fastest:80"), "Pass exact live threshold");
+        engine.failCommand = true; session.control("test", "", "", 50); probes.drain();
+        check(session.commandFailed() && session.snapshot().phase == SessionController.Phase.RUNNING, "Failed node action does not discard listener ownership");
+        check(session.snapshot().error.isEmpty(), "Node exception text never exposed"); engine.failCommand = false;
+        session.control("prepare", "", "", 50); session.stop(() -> {}); owner.drain();
+        check(session.snapshot().phase == SessionController.Phase.STOPPING, "Stop waits for queued probe retirement");
+        check(!session.start("{}", () -> {}), "No stale probe can touch a new session");
+        int calls = engine.calls.size(); probes.drain();
+        check(engine.calls.size() == calls, "Canceled queued probe never reaches native");
+        check(session.snapshot().phase == SessionController.Phase.STOPPED && !session.commandFailed(), "Both lanes finish before restart");
+        session.start("{}", () -> {}); owner.drain();
+        engine.duringCommand = () -> {
+            session.stop(() -> {}); owner.drain();
+            check(engine.calls.get(engine.calls.size()-1).equals("stop"), "Native Stop runs during probe");
+            check(session.snapshot().phase == SessionController.Phase.STOPPING, "In-flight old probe still protects restart");
+        };
+        session.control("prepare", "", "", 50); probes.drain();
+        check(session.snapshot().phase == SessionController.Phase.STOPPED, "Stop during probe retires safely");
+        check(session.start("{}", () -> {}), "Restart allowed after full command teardown"); owner.drain();
+        check(!session.control("unknown", "", "", 50), "Reject unknown commands");
+        check(new HostConfig("10.0.0.1", java.util.Arrays.asList("10.0.0.2"), "10081", "https://example.com/", "fastest", "", "60", 75).toJson("/private/runtime").contains("\"switch_threshold_ms\":75"), "Fastest config carries threshold");
+        rejects(() -> new HostConfig("10.0.0.1", java.util.Arrays.asList("10.0.0.2"), "10081", "https://example.com/", "fastest", "", "60", -1));
+    }
+    private static void statusSizeTests() {
+        Fixture fixture = new Fixture(); fixture.session.start("{}", fixture.done); fixture.work.drain();
+        StringBuilder json = new StringBuilder("{\"running\":true,\"state\":\"listening\",\"connected_clients\":2,\"active_connections\":4,\"node_management\":true,\"nodes\":[");
+        String name = "x".repeat(250);
+        for (int i = 0; i < 1000; i++) {
+            if (i > 0) json.append(',');
+            json.append("{\"name\":\"").append(name).append(i).append("\",\"healthy\":true,\"delay_ms\":123}");
+        }
+        json.append("]}"); fixture.engine.nativeStatus = json.toString();
+        check(json.length() > 262144 && json.length() < SessionController.MAX_STATUS_CHARACTERS, "Maximum native pool exceeds old status cap but stays bounded");
+        fixture.session.refresh(); fixture.work.drain();
+        check(fixture.session.snapshot().nativeStatus.equals(json.toString()), "1000 long node names preserve all top-level state and metrics");
+        check(fixture.session.snapshot().nativeStatus.contains("\"node_management\":true"), "Maximum pool keeps live controls available");
+        StringBuilder escaped = new StringBuilder("{\"running\":true,\"state\":\"listening\",\"node_management\":true,\"nodes\":[");
+        for (int i = 0; i < 1000; i++) {
+            if (i > 0) escaped.append(',');
+            escaped.append("{\"name\":").append(HostConfig.quote("\\\"".repeat(125) + i)).append(",\"healthy\":true,\"delay_ms\":123}");
+        }
+        escaped.append("]}");
+        check(escaped.length() > json.length() && escaped.length() < SessionController.MAX_STATUS_CHARACTERS, "JSON-escaped maximum names remain below aligned cap");
+        fixture.engine.nativeStatus = escaped.toString(); fixture.session.refresh(); fixture.work.drain();
+        check(fixture.session.snapshot().nativeStatus.equals(escaped.toString()), "Escape-heavy maximum pool preserves status");
+        fixture.engine.nativeStatus = "x".repeat(SessionController.MAX_STATUS_CHARACTERS + 1);
+        fixture.session.refresh(); fixture.work.drain();
+        check(fixture.session.snapshot().nativeStatus.equals("{}"), "Oversize status remains bounded");
+        check(!fixture.session.snapshot().error.isEmpty(), "Oversize status has an explicit safe diagnostic");
+        fixture.engine.nativeStatus = null; fixture.session.refresh(); fixture.work.drain();
+        check(fixture.session.snapshot().nativeStatus.equals("{}"), "Null status stays unavailable");
+    }
     public static void main(String[] args) {
-        configTests(); lifecycleTests(); System.out.println("PASS: " + assertions + " Android host config/lifecycle assertions (JVM only)");
+        configTests(); lifecycleTests(); simpleHomeTests(); nodeControlTests(); statusSizeTests(); System.out.println("PASS: " + assertions + " Android host config/lifecycle/presentation assertions (JVM only)");
     }
 }

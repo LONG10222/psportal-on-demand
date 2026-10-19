@@ -45,4 +45,25 @@ for source in src.glob('*.java'):
     for name in re.findall(r'R\.string\.([a-zA-Z_0-9]+)', source.read_text()):
         if name != 'cancel': assert name in strings, f'Missing string {name}'
 for resource in root.glob('app/src/main/res/**/*.xml'): ET.parse(resource)
-print('PASS: Android manifest, lifecycle, JNI linkage, unsigned-build and XML structural guards')
+activity = (src/'MainActivity.java').read_text()
+assert 'getBoolean("english", false)' in activity and 'getBoolean("dark", true)' in activity
+assert 'recreate()' not in activity, 'Language/theme changes must preserve active service and inputs'
+assert 'FLAG_SECURE' in activity and 'IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS' in activity
+assert 'subscription.setSaveEnabled(false)' in activity
+assert 'subscription.setTransformationMethod(android.text.method.PasswordTransformationMethod.getInstance())' in activity, 'setSingleLine can clear password masking; restore the transformation explicitly'
+assert activity.index('subscription = input(') < activity.index('subscription.setTransformationMethod(')
+assert 'Mobile.subscriptionInfo(requested.subscriptionUrl)' in activity
+assert 'preparationGeneration++' in activity and 'generation != preparationGeneration' in activity
+assert 'pendingPreparation.cancel(true)' in activity, 'Cancel obsolete preparation work'
+assert '.putString("subscription"' not in activity and '.putString("subscriptionUrl"' not in activity
+assert 'nativeState, "connected_clients"' in activity and 'nativeState, "active_connections"' in activity
+assert 'return number >= 0' in activity, 'Missing metrics must stay unknown'
+assert 'getMessage()' not in activity, 'Never expose untrusted subscription/native exceptions'
+assert 'Mobile.prepare()' in native_source and 'Mobile.testNodes()' in native_source
+assert 'Mobile.selectNodeWithThreshold' in native_source
+session = (src/'SessionController.java').read_text()
+assert 'teardownFinished || commandPending' in session, 'Restart must wait for old probe lane'
+assert 'portal-node-probes' in (src/'PortalApplication.java').read_text()
+assert 'LanSetup.safeInterface(network.getName())' in (src/'NetworkAddresses.java').read_text()
+assert (root/'app/src/main/res/values-en/strings.xml').exists()
+print('PASS: Android manifest, lifecycle, JNI, simple-home privacy/localization and XML structural guards')

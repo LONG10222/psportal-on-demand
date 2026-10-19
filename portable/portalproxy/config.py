@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 DEFAULTS = dict(listen_port=10081, backend_port=10082, api_port=10090,
     idle_seconds=60, wakeup_timeout=45, request_timeout=30, max_connections=128,
     selection_mode='auto', preferred_node='', health_url='https://www.gstatic.com/generate_204',
-    health_interval=300, health_timeout=5000, engine_mode='external')
+    health_interval=300, health_timeout=5000, switch_threshold_ms=50, engine_mode='external')
 
 
 def bundled_native_path():
@@ -92,13 +92,15 @@ def validate(raw, path):
         cfg['selection_mode'], cfg['preferred_node'] = 'auto', ''
     if cfg['selection_mode'] == 'preferred':
         cfg['selection_mode'] = 'prefer'
-    if cfg['selection_mode'] not in ('auto', 'prefer', 'fixed'):
-        raise ValueError('selection_mode must be auto, prefer or fixed')
+    if cfg['selection_mode'] not in ('auto', 'prefer', 'fixed', 'fastest'):
+        raise ValueError('selection_mode must be auto, prefer, fixed or fastest')
     if not isinstance(cfg['preferred_node'], str) or len(cfg['preferred_node']) > 256 or any(ord(c) < 32 for c in cfg['preferred_node']):
         raise ValueError('Invalid preferred_node')
     if re.sub(r'[\s_-]', '', cfg['preferred_node']).lower() in ('direct','reject','rejectdrop','compatible','pass','dns','global','portal','auto') or '`' in cfg['preferred_node']:
         raise ValueError('Reserved or invalid preferred_node')
-    if cfg['selection_mode'] != 'auto' and not cfg['preferred_node']:
+    if type(cfg['switch_threshold_ms']) is not int or not 0 <= cfg['switch_threshold_ms'] <= 60000:
+        raise ValueError('switch_threshold_ms must be an integer from 0 to 60000')
+    if cfg['selection_mode'] in ('prefer', 'fixed') and not cfg['preferred_node']:
         raise ValueError('preferred_node is required for prefer/fixed mode')
     seed = None if profile else cfg.get('subscription_file')
     if seed not in (None, ''):
@@ -177,14 +179,14 @@ def render(cfg, secret):
         '198.18.0.0/15','198.51.100.0/24','203.0.113.0/24','224.0.0.0/3']
     denied6 = ['::/3','4000::/2','8000::/1','2001::/23','2001:db8::/32','2002::/16','3fff::/20']
     order = r'(?i)香港|🇭🇰|\bHK\b|Hong[ -]?Kong`(?i)日本|东京|大阪|🇯🇵|\bJP\b|Japan`^(?!REJECT$).*`^REJECT$'
-    mode = cfg['selection_mode']
-    exact = '^' + re.escape(cfg['preferred_node']) + '$'
-    if mode == 'prefer':
-        order = exact + '`' + order
-    elif mode == 'fixed':
-        order = exact + '`^REJECT$'
-    groups = [{'name':'PORTAL','type':'select' if mode == 'fixed' else 'fallback',
-        'use':['SUBSCRIPTION'],'proxies':['REJECT'],'filter':order,
+    # The owned outer selector keeps the complete provider pool available for
+    # live manual selection. The legacy region-first policy stays a fallback
+    # group; fastest is selected from actual delay probes by CoreManager.
+    groups = [{'name':'PORTAL','type':'select','use':['SUBSCRIPTION'],
+        'proxies':['PORTAL-AUTO','REJECT'],'exclude-type':'Direct|Compatible|Pass|Dns',
+        'empty-fallback':'REJECT','disable-udp':True},
+        {'name':'PORTAL-AUTO','type':'fallback','use':['SUBSCRIPTION'],
+        'proxies':['REJECT'],'filter':order,
         'url':cfg['health_url'],'interval':cfg['health_interval'],
         'timeout':cfg['health_timeout'],'lazy':False,'expected-status':204,
         'exclude-type':'Direct|Compatible|Pass|Dns','max-failed-times':2,

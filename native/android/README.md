@@ -5,13 +5,18 @@ The Activity edits a per-run configuration; an explicitly started foreground
 service owns the embedded JNI engine. There is no Python runtime, VPN service,
 root requirement, shell subprocess or downloaded executable in the app.
 
-**Development status (2026-10-18):** the real arm64/x86_64 engine AAR and
-APK build successfully. Compilation, release lint, 90 JVM assertions, Java-to-Go
+**Current source (0.3.0-dev / code 3):** Chinese-first simple home, hot language/theme
+controls, one-click LAN setup, subscription accounting and live native node controls.
+168 JVM assertions, Android Java/resource compilation and three Java-to-Go config
+round-trips pass. A fresh AAR/APK build and device UI validation remain pending.
+
+**Historical baseline (2026-10-18, build 1):** the real arm64/x86_64 engine AAR and
+APK built successfully. Compilation, release lint, 90 JVM assertions, Java-to-Go
 configuration round-trip and 16 KiB ELF/APK alignment checks pass. An explicitly
 authorized project-only development signing identity was used for isolated
 emulator tests; ordinary Gradle/CI builds remain unsigned.
 
-The signed candidate has passed actual Android 8 / API 26 installation, Activity
+That historical signed candidate passed actual Android 8 / API 26 installation, Activity
 and JNI startup, controlled LAN HTTP/CONNECT, source-IP filtering, background
 continuation and Recents teardown. That runtime test found and verified a fix for
 an idle service left behind after task removal. Android 16 / API 36 ATD also passed
@@ -24,27 +29,31 @@ unverified; this is a development build, not a parity or release signoff.
 
 ## Runtime behavior
 
-1. Connect phone and Portal to a trusted reachable LAN. Reserve the Portal IPv4
-   address in the router. Client isolation must not separate them.
-2. Choose the phone's specific RFC1918 IPv4 address; enter the Portal address,
-   HTTPS proxy-provider subscription, proxy port and selection mode.
-3. Tap **Start proxy** while the Activity is visible. Android 13+ notification
+1. Connect phone and device to a trusted reachable Wi-Fi/Ethernet LAN. Client
+   isolation must not separate them.
+2. Paste your HTTPS proxy-provider subscription. Automatic preparation uses the
+   real /24–/30 subnet; Advanced retains explicit client IP and port configuration.
+3. Tap **Prepare & start** while the Activity is visible. Android 13+ notification
    permission is requested if needed. This app refuses to serve without a visible
    notification, although Android technically permits some foreground services
    without notification permission.
 4. Set the Portal's manual HTTP proxy to that address and port (default 10081).
    Public HTTP/CONNECT requests wake the embedded adapters on demand. The native
    engine, not this UI, owns node selection, allowlisting, direct LAN routing and
-   idle teardown. `running` in native status means listener active; core `state`
-   may remain `stopped` while waiting for traffic. That is normal.
+   idle teardown. In Android's `RuntimeStatus`, `running` means listener active,
+   `state=listening` means waiting for device traffic, and `core_state=stopped`
+   means the idle adapters are released. These states can coexist normally.
+   The legacy `Status` binding retains its core-state meaning for existing iOS.
 5. Stop from the Activity or persistent notification. Removing the app from
    Recents also requests a complete stop. Restore the Portal's proxy setting when
    no longer using the host.
 
 The app never starts at boot, never uses sticky service restart, and never resumes
 an old session after process death. Start/Stop/status operations share a single
-process-owned executor. New starts are rejected until teardown finishes; queued
-starts canceled by Stop never open a listener. Native work runs off the UI thread.
+process-owned executor; live node probes use a separate owned executor so Stop
+can cancel a probe without waiting behind it. New starts are rejected until both
+native teardown and the old probe finish; queued starts canceled by Stop never
+open a listener. Native work runs off the UI thread.
 The foreground notification remains while normal teardown runs. The service also
 stops when the configured LAN address disappears, notifications are disabled, or
 required local-network permission is revoked. An OS force-stop/process kill may
@@ -241,3 +250,58 @@ is preserved separately. A binary release must include required dependency
 licenses and provide corresponding source/build instructions. Google Play and
 other store compatibility has not been established. Nothing is uploaded or
 published by these scripts.
+
+## Current simple-home parity update (PR4 baseline 49a8467)
+
+This update uses the current Mac/iOS simple-home layout as its reference: Chinese
+by default, dark by default, language choice in the header, grouped network,
+subscription, live status and device setup cards, with manual configuration under
+Advanced. Language/theme switches update the existing views without recreating
+the Activity or restarting the native listener.
+
+- **Prepare & start** selects an observed physical Wi-Fi/Ethernet private IPv4 and
+  its actual /24–/30 prefix, builds up to 253 explicit client addresses, and keeps
+  the chosen port (10081 initially) if free. A conflict selects a free alternative.
+  Multiple usable addresses require the user to choose. VPN/cellular/unknown
+  interfaces are excluded from automatic setup; manual explicit configuration
+  remains available. The app never guesses hotspot addresses or changes networking.
+- Preparation fetches only the server's subscription accounting headers. It does
+  not claim the proxy nodes have been verified. The existing adapter engine loads
+  nodes on demand, or when the user explicitly chooses **Load & test nodes**.
+- Accounting is a non-live snapshot, uses KiB/MiB/GiB, keeps missing/invalid fields
+  unknown, and caps remaining allowance at zero when over quota. The subscription
+  is masked with an explicit `PasswordTransformationMethod` after `setSingleLine`,
+  excluded from saved state/autofill, and cleared on Start or leaving the Activity.
+- The current runtime status binding distinguishes preparing, listening, waking,
+  forwarding and error. Active devices use the backend's distinct connected source
+  IP count; they are never inferred from connection counts or all Wi-Fi devices.
+- Advanced live controls load/test nodes, show real nullable measured delays and
+  current selection, fix a selected node without silent fallback, and enable
+  lowest-latency selection with an explicit improvement threshold. Existing auto
+  (HK→JP→others), prefer and fixed modes remain. These are adapter capabilities,
+  not desktop full-profile rules or control over another Clash application.
+- Node probes run on a separate process-owned lane, allowing native Stop to cancel
+  in-flight work. A restart waits for both native teardown and the old probe to
+  retire, so stale UI actions cannot affect a new session.
+
+The established foreground-service, notification Stop, task-removal cleanup,
+notification/network revocation checks and unsigned build defaults are preserved.
+New Java/resource compile checks and host assertions are source-level evidence;
+this UI update still needs an actual APK build and device visual/lifecycle checks.
+See `VALIDATION.md` for the exact local evidence and boundaries.
+
+### Dummy-only UI regression on a test device
+
+`app/src/androidTest/.../SimpleHomeInstrumentation.java` checks the actual password
+transformation (not just input flags), secure window/autofill flags, and unchanged
+subscription/session during hot language/theme changes. It uses only an invalid
+example URL and never taps Start. With separately authorized signing and test
+APKs installed on an isolated emulator/device, run:
+
+```sh
+adb shell am instrument -w org.psportal.host.test/org.psportal.host.SimpleHomeInstrumentation
+```
+
+No new signing key is needed or generated by this source check. The test requires
+an idle app with no running proxy; it is not a replacement for transport, Doze,
+notification or physical-device acceptance.

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -297,14 +298,16 @@ type Proxy struct {
 	connections map[net.Conn]struct{}
 	wg          sync.WaitGroup
 	stats       map[string]uint64
+	clients     map[string]int
+	lastError   string
 	resolver    ipResolver
 	dial        func(context.Context, string, string) (net.Conn, error)
 }
 
 func NewProxy(cfg Config, core Core) *Proxy {
 	return &Proxy{cfg: cfg, core: core, timeout: time.Duration(cfg.RequestTimeout) * time.Second,
-		allowed: map[string]bool{}, connections: map[net.Conn]struct{}{},
-		stats:    map[string]uint64{"accepted": 0, "denied_clients": 0, "local_requests": 0, "external_requests": 0, "errors": 0, "active": 0},
+		allowed: map[string]bool{}, clients: map[string]int{}, connections: map[net.Conn]struct{}{},
+		stats:    map[string]uint64{"accepted": 0, "denied_clients": 0, "local_requests": 0, "external_requests": 0, "errors": 0, "active": 0, "waking": 0, "forwarding": 0},
 		resolver: systemResolver, dial: (&net.Dialer{}).DialContext}
 }
 func (p *Proxy) Start() error {
@@ -372,6 +375,13 @@ func (p *Proxy) Status() map[string]any {
 	for key, value := range p.stats {
 		out[key] = value
 	}
+	clients := make([]string, 0, len(p.clients))
+	for ip := range p.clients {
+		clients = append(clients, ip)
+	}
+	sort.Strings(clients)
+	out["client_ips"], out["connected_clients"], out["active_connections"] = clients, len(clients), p.stats["active"]
+	out["error"] = p.lastError
 	return out
 }
 func (p *Proxy) increment(key string) { p.mu.Lock(); p.stats[key]++; p.mu.Unlock() }
@@ -645,8 +655,17 @@ func (p *Proxy) handle(ctx context.Context, raw net.Conn) {
 	}
 	p.stats["active"]++
 	p.stats["accepted"]++
+	p.clients[peer]++
 	p.mu.Unlock()
-	defer func() { p.mu.Lock(); p.stats["active"]--; p.mu.Unlock() }()
+	defer func() {
+		p.mu.Lock()
+		p.stats["active"]--
+		p.clients[peer]--
+		if p.clients[peer] == 0 {
+			delete(p.clients, peer)
+		}
+		p.mu.Unlock()
+	}()
 	var responded atomic.Bool
 	err = p.serve(ctx, client, &responded)
 	if err == nil {
@@ -668,6 +687,11 @@ func (p *Proxy) handle(ctx context.Context, raw net.Conn) {
 		status = 504
 	case errors.As(err, &timeout) && timeout.Timeout():
 		status = 504
+	}
+	if status == 502 || status == 504 {
+		p.mu.Lock()
+		p.lastError = "Forwarding failed; check the proxy engine and connectivity"
+		p.mu.Unlock()
 	}
 	p.writeError(client, status)
 }
@@ -700,7 +724,11 @@ func (p *Proxy) serve(ctx context.Context, client *timedConn, responded *atomic.
 			startupTimeout = p.timeout
 		}
 		startupCtx, startupCancel := context.WithTimeout(ctx, startupTimeout)
+		p.increment("waking")
 		endpoint, e := p.core.Acquire(startupCtx)
+		p.mu.Lock()
+		p.stats["waking"]--
+		p.mu.Unlock()
 		startupCancel()
 		if e != nil {
 			return e
@@ -735,9 +763,11 @@ func (p *Proxy) serve(ctx context.Context, client *timedConn, responded *atomic.
 		p.mu.Unlock()
 		return context.Canceled
 	}
+	p.stats["forwarding"]++
+	p.lastError = ""
 	p.connections[rawUpstream] = struct{}{}
 	p.mu.Unlock()
-	defer func() { p.mu.Lock(); delete(p.connections, rawUpstream); p.mu.Unlock() }()
+	defer func() { p.mu.Lock(); delete(p.connections, rawUpstream); p.stats["forwarding"]--; p.mu.Unlock() }()
 	upstream := &timedConn{Conn: rawUpstream, timeout: p.timeout}
 	upReader := bufio.NewReaderSize(upstream, MaxLineBytes+2)
 	if request.Method == "CONNECT" {

@@ -30,45 +30,63 @@ const subscriptionLimit = 10 * 1024 * 1024
 
 var errStopped = errors.New("proxy is stopping")
 var errNoHealthy = errors.New("no healthy proxy node is available")
+var errFixedMissing = errors.New("fixed node is missing from the subscription")
 
 type node struct {
 	proxy   C.Proxy
 	healthy bool
+	delayMS int64
 }
 type embeddedCore struct {
-	cfg       Config
-	ctx       context.Context
-	cancel    context.CancelFunc
-	mu        sync.Mutex
-	state     string
-	closed    bool
-	nodes     []*node
-	active    int
-	lastUsed  time.Time
-	selected  string
-	lastError string
-	loading   chan struct{}
-	loadError error
-	wg        sync.WaitGroup
+	cfg         Config
+	ctx         context.Context
+	cancel      context.CancelFunc
+	mu          sync.Mutex
+	state       string
+	closed      bool
+	nodes       []*node
+	active      int
+	lastUsed    time.Time
+	lastHealth  time.Time
+	selected    string
+	lastError   string
+	loading     chan struct{}
+	loadError   error
+	wg          sync.WaitGroup
+	operationMu sync.Mutex
+	probeMu     sync.Mutex
+	mode        string
+	preferred   string
+	thresholdMS int
+	preparing   bool
+	fastest     fastestSelection
+	loader      func(context.Context, Config) ([]*node, error)
 }
 
 func newEmbeddedCore(cfg Config) *embeddedCore {
 	ctx, cancel := context.WithCancel(context.Background())
-	c := &embeddedCore{cfg: cfg, ctx: ctx, cancel: cancel, state: "stopped", lastUsed: time.Now()}
+	c := &embeddedCore{cfg: cfg, ctx: ctx, cancel: cancel, state: "stopped", lastUsed: time.Now(), lastHealth: time.Now(), mode: cfg.SelectionMode, preferred: cfg.PreferredNode, thresholdMS: cfg.SwitchThresholdMS, loader: loadNodes}
 	c.wg.Add(1)
 	go c.maintain()
 	return c
 }
 func (c *embeddedCore) Acquire(ctx context.Context) (string, error) {
+	_, err := c.acquire(ctx)
+	return "", err
+}
+
+// acquire reports whether this caller waited for the initial measured load.
+// This lets Prepare reuse that batch rather than count two back-to-back probes.
+func (c *embeddedCore) acquire(ctx context.Context) (bool, error) {
 	c.mu.Lock()
 	if c.closed || c.ctx.Err() != nil {
 		c.mu.Unlock()
-		return "", errStopped
+		return false, errStopped
 	}
 	if len(c.nodes) > 0 {
 		c.active++
 		c.mu.Unlock()
-		return "", nil
+		return false, nil
 	}
 	done := c.loading
 	if done == nil {
@@ -82,24 +100,24 @@ func (c *embeddedCore) Acquire(ctx context.Context) (string, error) {
 	c.mu.Unlock()
 	select {
 	case <-ctx.Done():
-		return "", ctx.Err()
+		return false, ctx.Err()
 	case <-c.ctx.Done():
-		return "", errStopped
+		return false, errStopped
 	case <-done:
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed || c.ctx.Err() != nil {
-		return "", errStopped
+		return false, errStopped
 	}
 	if c.loadError != nil {
-		return "", c.loadError
+		return true, c.loadError
 	}
 	if len(c.nodes) == 0 {
-		return "", errNoHealthy
+		return true, errNoHealthy
 	}
 	c.active++
-	return "", nil
+	return true, nil
 }
 func (c *embeddedCore) Release() {
 	c.mu.Lock()
@@ -113,9 +131,24 @@ func (c *embeddedCore) load(done chan struct{}) {
 	defer c.wg.Done()
 	ctx, cancel := context.WithTimeout(c.ctx, time.Duration(c.cfg.WakeupTimeout)*time.Second)
 	defer cancel()
-	nodes, err := loadNodes(ctx, c.cfg)
+	c.mu.Lock()
+	cfg := c.cfg
+	cfg.SelectionMode, cfg.PreferredNode = c.mode, c.preferred
+	c.mu.Unlock()
+	nodes, err := c.loader(ctx, cfg)
 	if err == nil {
-		c.checkHealth(ctx, nodes)
+		startupNodes := nodes
+		// Fixed-mode availability must not wait for unrelated adapters. Keep
+		// their records for live selection and the explicit full-pool test.
+		if cfg.SelectionMode == "fixed" {
+			for _, n := range nodes {
+				if n.proxy.Name() == cfg.PreferredNode {
+					startupNodes = []*node{n}
+					break
+				}
+			}
+		}
+		c.checkHealth(ctx, startupNodes)
 		if !hasHealthy(nodes) {
 			err = errNoHealthy
 		}
@@ -124,24 +157,27 @@ func (c *embeddedCore) load(done chan struct{}) {
 	if c.closed || c.ctx.Err() != nil {
 		err = errStopped
 	}
-	if err != nil {
-		c.loadError = err
+	// Retain a valid parsed pool even if all probes fail. Users must still be
+	// able to inspect/select a node and retry measurements without restarting.
+	retain := len(nodes) > 0 && (err == nil || errors.Is(err, errNoHealthy)) && !c.closed && c.ctx.Err() == nil
+	if retain {
+		c.nodes = nodes
+		c.lastUsed = time.Now()
+		c.updateHealthLocked(true)
+		err = c.selectionErrorLocked()
+	} else if err != nil {
 		c.lastError = err.Error()
 		if c.closed {
 			c.state = "stopped"
 		} else {
 			c.state = "error"
 		}
-	} else {
-		c.nodes = nodes
-		c.state = "running"
-		c.lastError = ""
-		c.lastUsed = time.Now()
 	}
+	c.loadError = err
 	c.loading = nil
 	close(done)
 	c.mu.Unlock()
-	if err != nil {
+	if !retain {
 		closeNodes(nodes)
 	}
 }
@@ -150,9 +186,9 @@ func (c *embeddedCore) Status() map[string]any {
 	defer c.mu.Unlock()
 	list := make([]map[string]any, 0, len(c.nodes))
 	for _, n := range c.nodes {
-		list = append(list, map[string]any{"name": n.proxy.Name(), "healthy": n.healthy})
+		list = append(list, map[string]any{"name": n.proxy.Name(), "healthy": n.healthy, "delay_ms": nodeDelay(n)})
 	}
-	return map[string]any{"state": c.state, "active": c.active, "selected_node": c.selected, "nodes": list, "error": c.lastError}
+	return map[string]any{"core_state": c.state, "state": c.state, "active": c.active, "selected_node": c.selected, "nodes": list, "error": c.lastError, "selection_mode": c.mode, "switch_threshold_ms": c.thresholdMS, "preparing": c.preparing, "node_management": true}
 }
 func (c *embeddedCore) Close() {
 	c.cancel()
@@ -161,6 +197,7 @@ func (c *embeddedCore) Close() {
 	c.state = "stopped"
 	nodes := c.nodes
 	c.nodes = nil
+	c.selected = ""
 	c.mu.Unlock()
 	c.wg.Wait()
 	closeNodes(nodes)
@@ -182,7 +219,6 @@ func (c *embeddedCore) maintain() {
 	defer c.wg.Done()
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
-	lastHealth := time.Now()
 	for {
 		select {
 		case <-c.ctx.Done():
@@ -194,11 +230,16 @@ func (c *embeddedCore) maintain() {
 				c.nodes = nil
 				c.state = "stopped"
 				c.selected = ""
+				c.fastest = fastestSelection{}
 				c.mu.Unlock()
 				closeNodes(nodes)
 				continue
 			}
-			if len(c.nodes) == 0 || now.Sub(lastHealth) < time.Duration(c.cfg.HealthInterval)*time.Second {
+			interval := c.cfg.HealthInterval
+			if c.mode == "fastest" && interval < 30 {
+				interval = 30
+			}
+			if len(c.nodes) == 0 || now.Sub(c.lastHealth) < time.Duration(interval)*time.Second {
 				c.mu.Unlock()
 				continue
 			}
@@ -212,6 +253,7 @@ func (c *embeddedCore) maintain() {
 				}
 			}
 			c.active++
+			c.lastHealth = now
 			c.mu.Unlock()
 			probeCtx, cancel := context.WithTimeout(c.ctx, budget)
 			c.checkHealth(probeCtx, nodes)
@@ -219,34 +261,70 @@ func (c *embeddedCore) maintain() {
 			c.mu.Lock()
 			c.active-- // Maintenance is not client traffic; preserve lastUsed.
 			c.mu.Unlock()
-			lastHealth = now
 		}
 	}
 }
 func (c *embeddedCore) checkHealth(ctx context.Context, nodes []*node) {
+	c.measureNodes(ctx, nodes, true)
+}
+
+func (c *embeddedCore) measureNodes(ctx context.Context, nodes []*node, selectAfter bool) {
+	c.probeMu.Lock()
+	defer c.probeMu.Unlock()
+	if ctx.Err() != nil {
+		return
+	}
+	type measurement struct {
+		healthy   bool
+		delayMS   int64
+		completed bool
+	}
+	results := make([]measurement, len(nodes))
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 8)
-	for _, n := range nodes {
+probeLoop:
+	for i, n := range nodes {
 		select {
 		case sem <- struct{}{}:
 		case <-ctx.Done():
-			wg.Wait()
-			return
+			break probeLoop
 		}
 		wg.Add(1)
-		go func(n *node) {
+		go func(i int, n *node) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			ok := probeNode(ctx, n.proxy, c.cfg)
-			if ctx.Err() != nil {
-				return
-			} // A cancelled batch is not a failed node probe.
-			c.mu.Lock()
-			n.healthy = ok
-			c.mu.Unlock()
-		}(n)
+			results[i].healthy, results[i].delayMS = probeNodeLatency(ctx, n.proxy, c.cfg)
+			results[i].completed = results[i].healthy || ctx.Err() == nil
+		}(i, n)
 	}
 	wg.Wait()
+	if c.ctx.Err() != nil || (ctx.Err() != nil && !errors.Is(ctx.Err(), context.DeadlineExceeded)) {
+		return // Stop or explicit cancellation never commits stale results.
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed || c.ctx.Err() != nil {
+		return
+	}
+	completed := 0
+	for i, n := range nodes {
+		if results[i].completed {
+			n.healthy, n.delayMS = results[i].healthy, results[i].delayMS
+			completed++
+		}
+	}
+	c.lastHealth = time.Now()
+	// Commit the batch and its selection decision together. The initial load
+	// publishes and selects separately because it does not own c.nodes yet.
+	if selectAfter && len(nodes) > 0 && len(c.nodes) == len(nodes) && c.nodes[0] == nodes[0] {
+		// A deadline may preserve useful measurements, but cannot count as a
+		// complete stability round or mark untested nodes unhealthy.
+		measured := completed == len(nodes) && ctx.Err() == nil
+		if !measured {
+			c.fastest.challenger, c.fastest.rounds = "", 0
+		}
+		c.updateHealthLocked(measured)
+	}
 }
 
 // DialExternal pins a verified public numeric destination inside the encrypted
@@ -258,12 +336,8 @@ func (c *embeddedCore) DialExternal(ctx context.Context, host string, port int) 
 		return nil, err
 	}
 	c.mu.Lock()
-	nodes := make([]*node, 0, len(c.nodes))
-	for _, n := range c.nodes {
-		if n.healthy {
-			nodes = append(nodes, n)
-		}
-	}
+	nodes := c.candidatesLocked()
+	mode := c.mode
 	c.mu.Unlock()
 	for _, n := range nodes {
 		for _, ip := range addrs {
@@ -276,15 +350,18 @@ func (c *embeddedCore) DialExternal(ctx context.Context, host string, port int) 
 			cancel()
 			if err == nil {
 				c.mu.Lock()
-				c.selected = n.proxy.Name()
+				if c.mode == mode && mode != "fixed" && mode != "fastest" {
+					c.selected = n.proxy.Name()
+				}
 				c.mu.Unlock()
 				return conn, nil
 			}
 		}
 		c.mu.Lock()
 		n.healthy = false
+		c.updateHealthLocked(false)
 		c.mu.Unlock()
-		if c.cfg.SelectionMode == "fixed" {
+		if mode == "fixed" {
 			break
 		}
 	}
@@ -307,20 +384,7 @@ func loadNodes(ctx context.Context, cfg Config) ([]*node, error) {
 		return nil, err
 	}
 	orderNodes(nodes, cfg)
-	if cfg.SelectionMode == "fixed" {
-		var chosen *node
-		for _, n := range nodes {
-			if n.proxy.Name() == cfg.PreferredNode {
-				chosen = n
-			} else {
-				_ = n.proxy.Close()
-			}
-		}
-		if chosen == nil {
-			return nil, errors.New("fixed node is missing from the subscription")
-		}
-		nodes = []*node{chosen}
-	}
+
 	return nodes, nil
 }
 
@@ -485,6 +549,11 @@ func orderNodes(nodes []*node, cfg Config) {
 	sort.SliceStable(nodes, func(i, j int) bool { return rank(nodes[i]) < rank(nodes[j]) })
 }
 func probeNode(parent context.Context, proxy C.Proxy, cfg Config) bool {
+	ok, _ := probeNodeLatency(parent, proxy, cfg)
+	return ok
+}
+func probeNodeLatency(parent context.Context, proxy C.Proxy, cfg Config) (bool, int64) {
+	started := time.Now()
 	ctx, cancel := context.WithTimeout(parent, time.Duration(cfg.HealthTimeout)*time.Millisecond)
 	defer cancel()
 	transport := &http.Transport{Proxy: nil, DisableKeepAlives: true, TLSHandshakeTimeout: time.Duration(cfg.HealthTimeout) * time.Millisecond, DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -506,14 +575,17 @@ func probeNode(parent context.Context, proxy C.Proxy, cfg Config) bool {
 	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("health redirects disabled") }}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.HealthURL, nil)
 	if err != nil {
-		return false
+		return false, 0
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		return false
+		return false, 0
 	}
 	defer res.Body.Close()
-	return res.StatusCode == http.StatusNoContent
+	if res.StatusCode != http.StatusNoContent {
+		return false, 0
+	}
+	return true, time.Since(started).Milliseconds()
 }
 
 func publicAddresses(ctx context.Context, host string) ([]netip.Addr, error) {

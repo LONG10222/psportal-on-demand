@@ -18,7 +18,7 @@ class API(http.server.BaseHTTPRequestHandler):
             return
         data = {'version':'fixture'}
         if self.path == '/proxies':
-            data = {'proxies':{'PORTAL':{'all':['AUTO','Tokyo','Hong Kong']}}}
+            data = {'proxies':{'PORTAL':{'type':'Selector','all':['PORTAL-AUTO','Tokyo','Hong Kong'],'now':name}, 'PORTAL-AUTO':{'type':'Fallback','all':['Tokyo','Hong Kong'],'now':'Hong Kong'}, 'Tokyo':{'type':'Http','alive':True}, 'Hong Kong':{'type':'Http','alive':True}}}
         elif self.path == '/proxies/PORTAL':
             data = {'now':name}
         payload = json.dumps(data).encode()

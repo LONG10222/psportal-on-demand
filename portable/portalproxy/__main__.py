@@ -19,15 +19,10 @@ async def serve(config, desktop_child=False):
         sig = getattr(signal, name, None)
         if sig is not None:
             old[sig] = signal.signal(sig, stop)
-    if desktop_child:
-        def watch_parent():
-            for line in sys.stdin:
-                if line.strip() == 'stop':
-                    break
-            stop()
-        threading.Thread(target=watch_parent, daemon=True).start()
     core = None
     proxy = None
+    control = None
+    publisher = None
     try:
         if config.get('existing_proxy_port'):
             from .existing_proxy import ExistingProxy
@@ -37,9 +32,34 @@ async def serve(config, desktop_child=False):
         proxy = ProxyServer(config, core)
         await proxy.start()
         core.start_monitor()
+        if desktop_child:
+            from .runtime import RuntimeControl, MAX_COMMAND_BYTES
+            control = RuntimeControl(proxy, core)
+            def watch_parent():
+                while True:
+                    line = sys.stdin.readline(MAX_COMMAND_BYTES + 2)
+                    if not line or line.strip() == 'stop':
+                        stop()
+                        return
+                    if len(line) > MAX_COMMAND_BYTES:
+                        # Refuse oversized input; do not interpret a suffix as a command.
+                        stop()
+                        return
+                    loop.call_soon_threadsafe(control.accept, line)
+            threading.Thread(target=watch_parent, daemon=True).start()
+            async def publish_status():
+                while True:
+                    control.publish()
+                    await asyncio.sleep(1)
+            publisher = asyncio.create_task(publish_status())
         print(f"Proxy ready at {config['listen_host']}:{config['listen_port']}; core starts on demand", flush=True)
         await stopped.wait()
     finally:
+        if publisher:
+            publisher.cancel()
+            await asyncio.gather(publisher, return_exceptions=True)
+        if control:
+            await control.close()
         if proxy:
             await proxy.close()
         if core:

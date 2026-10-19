@@ -13,8 +13,9 @@ android {
         applicationId 'org.psportal.host'
         minSdk 26
         targetSdk 36
-        versionCode 1
-        versionName '0.1.0-dev'
+        versionCode 3
+        versionName '0.3.0-dev'
+        testInstrumentationRunner 'org.psportal.host.SimpleHomeInstrumentation'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

@@ -88,3 +88,78 @@ class RealCoreTests(unittest.IsolatedAsyncioTestCase):
                 await core.close()
                 server.close()
                 await server.wait_closed()
+
+    async def test_live_manual_and_measured_fastest_preserve_existing_tunnel(self):
+        # Every upstream and health response is an owned loopback fixture. The
+        # public CONNECT target is interpreted only by this fixture echo server.
+        async def serve(reader, writer, delay):
+            try:
+                header = await asyncio.wait_for(reader.readuntil(b'\r\n\r\n'), 5)
+                if b'/health' in header:
+                    await asyncio.sleep(delay)
+                    writer.write(b'HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n')
+                    await writer.drain()
+                elif header.startswith(b'CONNECT '):
+                    writer.write(b'HTTP/1.1 200 Connection Established\r\n\r\n')
+                    await writer.drain()
+                    if b'1.1.1.1:443' in header:
+                        while data := await reader.read(65536):
+                            writer.write(data)
+                            await writer.drain()
+                    else:
+                        inner = await asyncio.wait_for(reader.readuntil(b'\r\n\r\n'), 5)
+                        if b'/health' in inner:
+                            await asyncio.sleep(delay)
+                            writer.write(b'HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n')
+                            await writer.drain()
+            except (OSError, asyncio.IncompleteReadError, TimeoutError):
+                pass
+            finally:
+                writer.close()
+                await writer.wait_closed()
+        slow = await asyncio.start_server(lambda r,w: serve(r,w,.12), '127.0.0.1', 0)
+        fast = await asyncio.start_server(lambda r,w: serve(r,w,.01), '127.0.0.1', 0)
+        slow_port, fast_port = slow.sockets[0].getsockname()[1], fast.sockets[0].getsockname()[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = dict(DEFAULTS, data_dir=tmp, listen_host='127.0.0.1', listen_port=0,
+                allowed_clients=['127.0.0.1'], backend_port=port(), api_port=port(),
+                core_path=os.environ['MIHOMO_BINARY'], subscription_url='https://example.com/fixture',
+                health_url=f'http://127.0.0.1:{slow_port}/health',
+                selection_mode='auto', idle_seconds=60, wakeup_timeout=15)
+            def seed(url, target):
+                target.write_text(json.dumps({'proxies':[
+                    {'name':'Hong Kong slow','type':'http','server':'127.0.0.1','port':slow_port},
+                    {'name':'US fast','type':'http','server':'127.0.0.1','port':fast_port}]}))
+            core = CoreManager(cfg)
+            proxy = ProxyServer(cfg, core)
+            writer = None
+            try:
+                with patch('portalproxy.core.download_subscription', seed):
+                    await proxy.start()
+                    await core.prepare()
+                    pid = core.process.pid
+                    await core.select_node('fixed', 'Hong Kong slow')
+                    address = proxy.bound_addresses[0]
+                    reader, writer = await asyncio.open_connection(address[0], address[1])
+                    writer.write(b'CONNECT 1.1.1.1:443 HTTP/1.1\r\nHost: 1.1.1.1:443\r\n\r\n')
+                    await writer.drain()
+                    self.assertIn(b'200', await asyncio.wait_for(reader.readuntil(b'\r\n\r\n'), 10))
+                    self.assertEqual(proxy.status()['connected_clients'], 1)
+                    await core.select_node('fixed', 'US fast')
+                    self.assertEqual(core.selected, 'US fast')
+                    writer.write(b'old-tunnel'); await writer.drain()
+                    self.assertEqual(await asyncio.wait_for(reader.readexactly(10), 5), b'old-tunnel')
+                    await core.select_node('fastest')
+                    self.assertEqual(core.selected, 'US fast')
+                    delays = {node['name']: node['delay_ms'] for node in core.nodes}
+                    self.assertLess(delays['US fast'], delays['Hong Kong slow'])
+                    self.assertEqual(core.process.pid, pid)
+                    self.assertEqual(len(core.nodes), 2)
+            finally:
+                if writer:
+                    writer.close()
+                    await writer.wait_closed()
+                await proxy.close()
+                await core.close()
+                slow.close(); fast.close()
+                await slow.wait_closed(); await fast.wait_closed()

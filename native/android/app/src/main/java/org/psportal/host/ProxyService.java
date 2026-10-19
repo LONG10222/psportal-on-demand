@@ -55,11 +55,19 @@ public final class ProxyService extends Service {
         }
     };
 
+    // The service follows the in-app language without restarting the listener.
+    private android.content.Context localized() {
+        android.content.res.Configuration config = new android.content.res.Configuration(getResources().getConfiguration());
+        config.setLocale(getSharedPreferences("ui", MODE_PRIVATE).getBoolean("english", false)
+                ? java.util.Locale.ENGLISH : java.util.Locale.SIMPLIFIED_CHINESE);
+        return createConfigurationContext(config);
+    }
+
     @Override public void onCreate() {
         super.onCreate();
         session = ((PortalApplication)getApplication()).session();
-        NotificationChannel channel = new NotificationChannel(CHANNEL, getString(R.string.notification_channel), NotificationManager.IMPORTANCE_LOW);
-        channel.setDescription(getString(R.string.notification_description));
+        NotificationChannel channel = new NotificationChannel(CHANNEL, localized().getString(R.string.notification_channel), NotificationManager.IMPORTANCE_LOW);
+        channel.setDescription(localized().getString(R.string.notification_description));
         getSystemService(NotificationManager.class).createNotificationChannel(channel);
     }
 
@@ -126,15 +134,15 @@ public final class ProxyService extends Service {
         PendingIntent stop = PendingIntent.getService(this, 1, new Intent(this, ProxyService.class).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         return new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(R.drawable.ic_portal)
-                .setContentTitle(getString(R.string.notification_title))
-                .setContentText(getString(message))
+                .setContentTitle(localized().getString(R.string.notification_title))
+                .setContentText(localized().getString(message))
                 .setSubText(listenAddress == null || listenAddress.isEmpty() ? null : listenAddress + ":" + listenPort)
                 .setContentIntent(open)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setCategory(Notification.CATEGORY_SERVICE)
                 .setVisibility(Notification.VISIBILITY_PRIVATE)
-                .addAction(new Notification.Action.Builder(null, getString(R.string.stop), stop).build())
+                .addAction(new Notification.Action.Builder(null, localized().getString(R.string.stop), stop).build())
                 .build();
     }
 

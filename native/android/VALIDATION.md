@@ -1,9 +1,17 @@
 # Android validation record
 
-Checked 2026-10-18. These are actual development build results, not a physical-device
-or Portal release signoff.
+**Current source: version 0.3.0-dev / code 3, simple-home UI.** Its local results
+are recorded under “Current simple-home source validation” below: 168 JVM
+assertions, actual Android Java/resource compilation and three Java-to-Go config
+round-trips. A new native AAR/APK build and on-device UI validation are still pending.
 
-## Passed
+**Historical evidence follows.** The build 1 hashes, signed candidates, emulator
+runs and CI artifacts below belong to the prior implementation, not the current
+code 3 UI. They are retained for provenance and must not be presented as evidence
+that this update was built, signed or run on Android. Neither set establishes
+physical-device or Portal release signoff.
+
+## Historical baseline: passed
 
 - 90 JVM configuration/lifecycle assertions with the real `HostConfig` and
   `SessionController`; fake native engine is test-only
@@ -28,7 +36,7 @@ or Portal release signoff.
 
 ## Artifact provenance
 
-Current unsigned APK: `app/build/outputs/apk/release/app-release-unsigned.apk`
+Historical build 1 unsigned APK: `app/build/outputs/apk/release/app-release-unsigned.apk`
 
 - Size: 75,204,521 bytes
 - SHA256: `7a66562bd24716f823e139155bf2d12278f563ccd7074dfee4692071c03eb35f`
@@ -232,3 +240,46 @@ head `4ef16d63a16fa9783e26cef5b69c488f5be5d80a`. Its separate unsigned APK SHA25
 `9bf6f8b78b5b0c6eab96c88330e4f84bb2a2ea6b8e7efcdd9eebd895e5306132`.
 CI artifacts expire after one day and contain unsigned APKs. They are not an
 installable or durable release.
+
+## Current simple-home source validation, 2026-10-18
+
+Based on PR4 `49a8467702e949bd517f9abc9da27c922cf73bdf`, preserving current Mac/iOS
+files and existing native adapter/service behavior. Reference images inspected:
+`evidence/simple-home-zh.png` and `evidence/ios-simple-home-zh.png`.
+
+This run used the cloud Linux workspace, not a user computer or Android emulator.
+The Java 21 runtime contains the compiler module but no `javac` launcher or Java
+17 release metadata. ECJ 3.39.0 from Maven Central was used for the JVM suite.
+Official Google Android SDK platform 36 r02 and Build Tools 35.0.0 were downloaded
+to a task-local directory under the already approved SDK terms and verified
+against Google's repository SHA-1 checksums. No SDK license acceptance files,
+signing identities, system networking changes or fake native APIs were created.
+
+- 168 JVM assertions pass, covering original config/session lifecycle plus bounded
+  subnet allowlists, interface filtering, port conflict choice, missing accounting,
+  overflow, quota/expiry formatting, real-state presentation, live node operations,
+  cancellation, Stop during probes and restart isolation
+- Python structure/XML/privacy guards pass, including explicit password
+  transformation after single-line input configuration
+- Android app and dummy-only instrumentation Java sources compile against actual
+  API 36 classes and freshly generated current native/mobile Java bindings
+- aapt2 compiles and links the actual resources and merged namespace manifest
+- Java configuration output is accepted by the real current Go engine.ParseConfig
+- The dummy-only instrumentation is added and source-compiled, but has NOT been
+  executed on a device in this run
+- Full Gradle release lint/APK/native AAR rebuild, visual Android validation,
+  physical device/hotspot/Portal, notification behavior and Doze tests have NOT
+  been run for this UI change; historical results above do not establish them
+
+Source/resource check (requires installed licensed SDK and pinned current bindings):
+
+```sh
+ANDROID_JAR=/path/to/platforms/android-36/android.jar \
+AAPT2=/path/to/build-tools/35.0.0/aapt2 \
+MOBILE_JAVA=/path/to/current-gobind-output/java \
+./tools/check-ui-compile.sh
+ECJ_JAR=/path/to/ecj-3.39.0.jar ./tools/test-host.sh
+```
+
+The resource-link output is intentionally not an app artifact: it contains no
+compiled native engine and must never be distributed as an installable build.

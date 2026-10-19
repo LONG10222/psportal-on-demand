@@ -7,5 +7,8 @@ import org.psportal.engine.mobile.Mobile;
 final class NativeEngine implements SessionController.Engine {
     @Override public void start(String configJson) throws Exception { Mobile.start(configJson); }
     @Override public void stop() { Mobile.stop(); }
-    @Override public String status() { return Mobile.status(); }
+    @Override public String status() { return Mobile.runtimeStatus(); }
+    @Override public void prepare() throws Exception { Mobile.prepare(); }
+    @Override public void testNodes() throws Exception { Mobile.testNodes(); }
+    @Override public void selectNode(String mode, String name, int threshold) throws Exception { Mobile.selectNodeWithThreshold(mode, name, threshold); }
 }

@@ -4,17 +4,45 @@ package org.psportal.host;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Locale;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 
 /** UI-side validation; the native engine independently validates every configuration. */
 public final class HostConfig {
     public final String listenHost, portalHost, subscriptionUrl, selectionMode, preferredNode;
-    public final int listenPort, idleSeconds;
+    public final int listenPort, idleSeconds, switchThresholdMs;
+    public final List<String> allowedClients;
 
     public HostConfig(String listenHost, String portalHost, String listenPort,
                       String subscriptionUrl, String selectionMode, String preferredNode,
                       String idleSeconds) {
+        this(listenHost, Collections.singletonList(portalHost.trim()), listenPort,
+                subscriptionUrl, selectionMode, preferredNode, idleSeconds);
+    }
+
+    public HostConfig(String listenHost, List<String> allowedClients, String listenPort,
+                      String subscriptionUrl, String selectionMode, String preferredNode,
+                      String idleSeconds) {
+        this(listenHost, allowedClients, listenPort, subscriptionUrl, selectionMode, preferredNode, idleSeconds, 50);
+    }
+    public HostConfig(String listenHost, List<String> allowedClients, String listenPort,
+                      String subscriptionUrl, String selectionMode, String preferredNode,
+                      String idleSeconds, int switchThresholdMs) {
+        if (switchThresholdMs < 0 || switchThresholdMs > 60000) throw new IllegalArgumentException("Invalid switch threshold");
+        this.switchThresholdMs = switchThresholdMs;
         this.listenHost = listenHost.trim();
-        this.portalHost = portalHost.trim();
+        if (allowedClients == null || allowedClients.isEmpty() || allowedClients.size() > 253)
+            throw new IllegalArgumentException("Enter 1–253 explicit private client addresses");
+        LinkedHashSet<String> unique = new LinkedHashSet<>();
+        for (String client : allowedClients) {
+            if (client == null || !isPrivateIpv4(client.trim()) || this.listenHost.equals(client.trim()))
+                throw new IllegalArgumentException("Enter client private IPv4 addresses different from this phone");
+            unique.add(client.trim());
+        }
+        this.allowedClients = Collections.unmodifiableList(new ArrayList<>(unique));
+        this.portalHost = this.allowedClients.get(0); // Existing single-client integration remains supported.
         this.subscriptionUrl = subscriptionUrl.trim();
         this.selectionMode = selectionMode;
         this.preferredNode = preferredNode.trim();
@@ -25,10 +53,10 @@ public final class HostConfig {
         if (this.listenHost.equals(this.portalHost)) throw new IllegalArgumentException("Phone and Portal addresses must differ");
         if (this.listenPort == 10082 || this.listenPort == 10090) throw new IllegalArgumentException("Use a proxy port other than 10082 or 10090");
         validateSubscription(this.subscriptionUrl);
-        if (!selectionMode.equals("auto") && !selectionMode.equals("prefer") && !selectionMode.equals("fixed")) {
+        if (!selectionMode.equals("auto") && !selectionMode.equals("prefer") && !selectionMode.equals("fixed") && !selectionMode.equals("fastest")) {
             throw new IllegalArgumentException("Invalid selection mode");
         }
-        if (!selectionMode.equals("auto") && this.preferredNode.isEmpty()) throw new IllegalArgumentException("Enter an exact node name for this mode");
+        if ((selectionMode.equals("prefer") || selectionMode.equals("fixed")) && this.preferredNode.isEmpty()) throw new IllegalArgumentException("Enter an exact node name for this mode");
         String reserved = this.preferredNode.replaceAll("[\\s_-]", "").toLowerCase(Locale.ROOT);
         if (this.preferredNode.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 256 || hasControl(this.preferredNode) || this.preferredNode.contains("`") ||
                 java.util.Arrays.asList("direct", "reject", "rejectdrop", "compatible", "pass", "dns", "global", "portal", "auto", "rematch", "passrule").contains(reserved)) {
@@ -84,9 +112,15 @@ public final class HostConfig {
     }
 
     public String toJson(String appPrivateDataDirectory) {
+        StringBuilder clients = new StringBuilder();
+        for (String client : allowedClients) {
+            if (clients.length() > 0) clients.append(',');
+            clients.append(quote(client));
+        }
         return "{\"listen_host\":" + quote(listenHost) + ",\"listen_port\":" + listenPort +
-                ",\"allowed_clients\":[" + quote(portalHost) + "],\"subscription_url\":" + quote(subscriptionUrl) +
+                ",\"allowed_clients\":[" + clients + "],\"subscription_url\":" + quote(subscriptionUrl) +
                 ",\"selection_mode\":" + quote(selectionMode) + ",\"preferred_node\":" + quote(preferredNode) +
+                ",\"switch_threshold_ms\":" + switchThresholdMs +
                 ",\"idle_seconds\":" + idleSeconds + ",\"backend_port\":10082,\"api_port\":10090,\"data_dir\":" +
                 quote(appPrivateDataDirectory) + "}";
     }

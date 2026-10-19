@@ -206,12 +206,36 @@ class ProxyServer:
         self._server: asyncio.Server | None = None
         self._tasks: set[asyncio.Task] = set()
         self._closing = False
+        self._clients = {}
+        self.last_error = ""
         self.stats = {"accepted": 0, "denied_clients": 0, "local_requests": 0,
-                      "external_requests": 0, "errors": 0, "active": 0}
+                      "external_requests": 0, "errors": 0, "active": 0, "waking": 0, "forwarding": 0}
 
     @property
     def bound_addresses(self) -> list[tuple]:
         return [sock.getsockname() for sock in self._server.sockets] if self._server else []
+
+    def status(self) -> dict:
+        core = self.core.status() if hasattr(self.core, 'status') else {}
+        error = core.get('error') or self.last_error
+        if self._server is None:
+            state = 'stopped'
+        elif core.get('preparing'):
+            state = 'preparing'
+        elif self.stats['waking'] or core.get('core_state') == 'starting':
+            state = 'waking'
+        elif self.stats['forwarding']:
+            state = 'forwarding'
+        elif error or core.get('core_state') in ('failed', 'error'):
+            state = 'error'
+        else:
+            state = 'listening'
+        return dict(core, event='status', running=self._server is not None,
+                    state=state, listen_host=self.config['listen_host'],
+                    listen_port=self.config['listen_port'],
+                    address=f"{self.config['listen_host']}:{self.config['listen_port']}",
+                    connected_clients=len(self._clients), active_connections=self.stats['active'],
+                    client_ips=sorted(self._clients), stats=dict(self.stats), error=error)
 
     async def start(self) -> None:
         if self._server is not None:
@@ -343,6 +367,8 @@ class ProxyServer:
         upstream_writer = None
         acquired = False
         counted = False
+        forwarding = False
+        peer_ip = None
         state = {"responded": False}
         try:
             peer = writer.get_extra_info("peername")
@@ -360,10 +386,16 @@ class ProxyServer:
             counted = True
             self.stats["active"] += 1
             self.stats["accepted"] += 1
+            peer_ip = str(ipaddress.ip_address(peer[0]))
+            self._clients[peer_ip] = self._clients.get(peer_ip, 0) + 1
             request = parse_request(await self._header(reader))
             route = await asyncio.wait_for(resolve_destination(request.host, request.port), self.timeout)
             if route.kind == "external":
-                endpoint = await self.core.acquire()
+                self.stats["waking"] += 1
+                try:
+                    endpoint = await self.core.acquire()
+                finally:
+                    self.stats["waking"] -= 1
                 acquired = True
                 self.stats["external_requests"] += 1
                 host, port = endpoint
@@ -374,6 +406,9 @@ class ProxyServer:
                 raise DestinationDenied("invalid route")
             upstream_reader, upstream_writer = await asyncio.wait_for(
                 asyncio.open_connection(host, port, limit=MAX_HEADER_BYTES), self.timeout)
+            forwarding = True
+            self.stats["forwarding"] += 1
+            self.last_error = ""
             if request.method == "CONNECT":
                 if route.kind == "external":
                     upstream_writer.write(request.forwarded_header(True))
@@ -416,6 +451,7 @@ class ProxyServer:
             if not state["responded"]:
                 await self._error(writer, 504)
         except (OSError, RuntimeError, ValueError):
+            self.last_error = "Forwarding failed; check the proxy engine and connectivity"
             self.stats["errors"] += 1
             if not state["responded"]:
                 await self._error(writer, 502)
@@ -426,6 +462,11 @@ class ProxyServer:
                 if acquired:
                     await self.core.release()
             finally:
+                if forwarding:
+                    self.stats["forwarding"] -= 1
                 if counted:
                     self.stats["active"] -= 1
+                    self._clients[peer_ip] -= 1
+                    if self._clients[peer_ip] == 0:
+                        del self._clients[peer_ip]
                 await _close_writer(writer)

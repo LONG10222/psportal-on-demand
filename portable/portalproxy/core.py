@@ -1,11 +1,12 @@
 """Owned Mihomo lifecycle. Never attaches to or terminates an unrelated core."""
 import asyncio
+import copy
 import json
 import http.client
 import ssl
 import queue
 import threading
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, quote, urlencode
 import os
 from pathlib import Path
 import secrets
@@ -172,37 +173,374 @@ class CoreManager:
         self.runtime = Path(tempfile.mkdtemp(prefix='session-', dir=root))
         (self.runtime / 'providers').mkdir(mode=0o700)
         self.monitor = None
+        self.nodes = []
+        self.node_paths = {}
+        self.groups = []
+        self.selection_group = ''
+        self.profile_mode = 'profile'
+        self.profile_groups = None
+        self.selected = ''
+        self.selector_choice = ''
+        self.last_error = ''
+        self.preparing = False
+        self.last_health = 0.0
+        self.startup_deadline = None
+        self.probe_complete = False
+        self.probe_tested = 0
+        self.probe_total = 0
+        from .policy import FastestSelection
+        self.fastest = FastestSelection()
 
     def start_monitor(self):
         if self.monitor is None:
             self.monitor = asyncio.create_task(self._idle_loop())
 
-    def _request(self, path, method='GET', payload=None):
+    def _request(self, path, method='GET', payload=None, timeout=2):
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
         request = urllib.request.Request(f"http://127.0.0.1:{self.config['api_port']}{path}",
             data=None if payload is None else json.dumps(payload).encode(), method=method,
             headers={'Authorization':'Bearer '+self.secret, 'Content-Type':'application/json'})
-        with opener.open(request, timeout=2) as response:
+        with opener.open(request, timeout=timeout) as response:
             data = response.read(1024 * 1024 + 1)
             if len(data) > 1024 * 1024:
                 raise CoreError('Controller response too large')
             return json.loads(data) if data else {}
 
-    async def _select(self):
+    @property
+    def node_management(self):
+        return True  # This manager owns its controller; linked proxies use ExistingProxy.
+
+    @property
+    def selection_mode(self):
+        return self.profile_mode if self.config.get('profile_file') else self.config['selection_mode']
+
+    def status(self):
+        return {'core_state': self.state, 'selected_node': self.selected,
+                'nodes': [dict(node) for node in self.nodes],
+                'selection_mode': self.selection_mode,
+                'selection_group': self.selection_group,
+                'groups': [{'name': group['name'], 'selected': group['selected'], 'eligible_node_count': len(group['members'])} for group in self.groups],
+                'switch_threshold_ms': self.config.get('switch_threshold_ms', 50),
+                'node_management': self.node_management, 'error': self.last_error,
+                'preparing': self.preparing, 'probe_complete': self.probe_complete,
+                'probe_tested': self.probe_tested, 'probe_total': self.probe_total}
+
+    @staticmethod
+    def _safe_name(name):
+        return (isinstance(name, str) and 1 <= len(name.encode('utf-8')) <= 256
+                and not any(ord(c) < 32 for c in name))
+
+    async def _refresh_nodes(self, selection_group=None):
+        result = await asyncio.to_thread(self._request, '/proxies')
+        proxies = result.get('proxies', {})
+        if not isinstance(proxies, dict):
+            raise CoreError('Invalid owned controller node inventory')
+        proxies = dict(proxies)
+        global_names = set(proxies)
+        paths = {name: '/proxies/' + quote(name, safe='') + '/delay' for name in global_names if self._safe_name(name)}
+        # Provider adapters are not addressable through /proxies/{name}/delay.
+        # Resolve their exact owned provider before testing, including imported
+        # profiles with more than one subscription provider.
+        provider_result = await asyncio.to_thread(self._request, '/providers/proxies')
+        providers = provider_result.get('providers', {})
+        ambiguous = set()
+        if not isinstance(providers, dict):
+            raise CoreError('Invalid owned provider inventory')
+        for provider, data in providers.items():
+            if not self._safe_name(provider) or not isinstance(data, dict):
+                continue
+            items = data.get('proxies', [])
+            if not isinstance(items, list):
+                continue
+            for item in items[:1000]:
+                name = item.get('name') if isinstance(item, dict) else None
+                if not self._safe_name(name) or name in global_names:
+                    continue
+                if name in paths:
+                    ambiguous.add(name)
+                    continue
+                proxies[name] = item
+                paths[name] = '/providers/proxies/' + quote(provider, safe='') + '/' + quote(name, safe='') + '/healthcheck'
+        self.node_paths = paths
+        def eligible(name):
+            if not self._safe_name(name) or name in ambiguous or name in ('PORTAL', 'PORTAL-AUTO', 'REJECT', 'DIRECT', 'AUTO'):
+                return False
+            item = proxies.get(name, {})
+            kind = item.get('type') if isinstance(item, dict) else None
+            # The external core already validated its adapter graph. Preserve
+            # all genuine leaf protocols, including newer Mihomo adapters;
+            # only routing groups and direct/bypass actions are ineligible.
+            return (isinstance(kind, str) and bool(kind) and len(kind) <= 64
+                    and item.get('all') is None and kind.lower() not in
+                    ('direct','reject','rejectdrop','compatible','pass','passrule','rematch','dns',
+                     'relay','selector','select','fallback','urltest','url-test','loadbalance','load-balance'))
+        group_name = 'PORTAL'
         if self.config.get('profile_file'):
-            return  # Imported groups/rules retain their own selection semantics.
-        proxies = await asyncio.to_thread(self._request, '/proxies')
-        group = proxies.get('proxies', {}).get('PORTAL', {})
+            groups = []
+            for name, item in proxies.items():
+                if (not self._safe_name(name) or name == 'GLOBAL' or not isinstance(item, dict)
+                        or (self.profile_groups is not None and name not in self.profile_groups)
+                        or str(item.get('type', '')).lower() not in ('selector', 'select')
+                        or not isinstance(item.get('all'), list)):
+                    continue
+                members = [member for member in item['all'] if eligible(member)][:1000]
+                if members:
+                    selected = item.get('now', '')
+                    groups.append({'name': name, 'selected': selected if self._safe_name(selected) else '', 'members': members})
+            self.groups = groups[:1000]
+            group_names = {group['name'] for group in self.groups}
+            if selection_group is not None:
+                if selection_group not in group_names:
+                    raise CoreError('Select an owned profile selector group with eligible proxy nodes')
+                if selection_group != self.selection_group:
+                    self.selection_group, self.profile_mode = selection_group, 'profile'
+                    from .policy import FastestSelection
+                    self.fastest = FastestSelection()
+            if self.selection_group and self.selection_group not in group_names:
+                self.selection_group, self.profile_mode = '', 'profile'
+                raise CoreError('Selected profile group is no longer available')
+            if not self.selection_group:
+                self.nodes, self.selected = [], ''
+                return
+            group_name = self.selection_group
+        elif selection_group not in (None, '', 'PORTAL'):
+            raise CoreError('Subscription nodes use the owned PORTAL group')
+        group = proxies.get(group_name, {})
         names = group.get('all', [])
+        if not isinstance(names, list):
+            raise CoreError('Owned selector group is unavailable')
+        old = {n['name']: n for n in self.nodes}
+        nodes = []
+        seen = set()
+        for name in names[:1003]:
+            if not eligible(name) or name in seen:
+                continue
+            seen.add(name)
+            item = proxies.get(name, {})
+            previous = old.get(name, {})
+            history = item.get('history', [])
+            delay = history[-1].get('delay') if isinstance(history, list) and history and isinstance(history[-1], dict) else previous.get('delay_ms')
+            alive = item.get('alive', previous.get('healthy'))
+            alive = alive if type(alive) is bool else None
+            delay = delay if type(delay) in (int, float) and 0 <= delay <= 86400000 and alive is not False else None
+            nodes.append({'name': name, 'healthy': alive, 'delay_ms': delay})
+        self.nodes = nodes[:1000]
+        selected = group.get('now', self.selected)
+        self.selector_choice = selected if self._safe_name(selected) else ''
+        if selected == 'PORTAL-AUTO' and not self.config.get('profile_file'):
+            selected = proxies.get('PORTAL-AUTO', {}).get('now', '')
+        self.selected = selected if selected in {n['name'] for n in self.nodes} else ''
+
+    def _record_selection(self, name):
+        self.selector_choice = name
+        self.selected = name if name in {n['name'] for n in self.nodes} else ''
+        for item in self.groups:
+            if item['name'] == self.selection_group:
+                item['selected'] = name
+
+    async def _restore_choice(self, name):
+        group = self.selection_group if self.config.get('profile_file') else 'PORTAL'
+        if not group or not self._safe_name(name):
+            self._record_selection('')
+            return False
+        path = '/proxies/' + quote(group, safe='')
+        try:
+            await asyncio.to_thread(self._request, path, 'PUT', {'name': name})
+            actual = await asyncio.to_thread(self._request, path)
+            if actual.get('now') != name:
+                raise CoreError('Previous node selection could not be restored')
+            self._record_selection(name)
+            return True
+        except (OSError, ValueError, CoreError):
+            self._record_selection('')
+            self.last_error = 'Node selection is unverified; refresh live nodes before retrying'
+            return False
+
+    async def _put_selection(self, name):
+        group = self.selection_group if self.config.get('profile_file') else 'PORTAL'
+        if not group:
+            raise CoreError('Choose a profile selector group first')
+        if self.config.get('profile_file') and not any(g['name'] == group and name in g['members'] for g in self.groups):
+            raise CoreError('Node is not an eligible member of the selected profile group')
+        path = '/proxies/' + quote(group, safe='')
+        previous = await asyncio.to_thread(self._request, path)
+        previous = previous.get('now')
+        if not self._safe_name(previous):
+            raise CoreError('Current node selection could not be verified')
+        try:
+            await asyncio.to_thread(self._request, path, 'PUT', {'name': name})
+            verified = await asyncio.to_thread(self._request, path)
+            if verified.get('now') != name:
+                raise CoreError('Node selection could not be verified')
+        except asyncio.CancelledError:
+            self._record_selection('')
+            raise
+        except (OSError, ValueError, CoreError):
+            restored = await self._restore_choice(previous)
+            raise CoreError('Node selection failed; previous choice restored' if restored else
+                            'Node selection is unverified; refresh live nodes before retrying') from None
+        self._record_selection(name)
+
+    async def _apply_policy(self, *, measured=False, stable_round=True, candidates=None):
+        mode = self.selection_mode
         preferred = self.config['preferred_node']
-        mode = self.config['selection_mode']
-        if mode == 'fixed' and preferred not in names:
-            raise CoreError('Fixed node is missing from the subscription')
+        names = {n['name'] for n in self.nodes}
+        if mode == 'profile':
+            return  # Preserve the complete profile's own graph until explicitly selected.
         if mode == 'fixed':
-            await asyncio.to_thread(self._request, '/proxies/PORTAL', 'PUT', {'name':preferred})
-            verified = await asyncio.to_thread(self._request, '/proxies/PORTAL')
-            if verified.get('now') != preferred:
-                raise CoreError('Fixed node selection could not be verified')
+            if preferred not in names:
+                raise CoreError('Fixed node is missing from the subscription')
+            await self._put_selection(preferred)
+        elif mode == 'fastest':
+            if measured:
+                old_fastest = copy.deepcopy(self.fastest)
+                chosen = self.fastest.choose(self.nodes if candidates is None else candidates, self.config.get('switch_threshold_ms', 50), measured=stable_round)
+                try:
+                    if chosen or not self.config.get('profile_file'):
+                        await self._put_selection(chosen or 'REJECT')
+                except BaseException:
+                    self.fastest = old_fastest
+                    raise
+                if not chosen:
+                    raise CoreError('No healthy proxy node is available')
+        elif mode == 'prefer' and any(n['name'] == preferred and n.get('healthy') is True for n in self.nodes):
+            await self._put_selection(preferred)
+        else:
+            await self._put_selection('PORTAL-AUTO')
+
+    async def _probe_nodes(self, budget=None):
+        sem = asyncio.Semaphore(8)
+        timeout_ms = min(32767, self.config['health_timeout'])
+        async def probe(node):
+            async with sem:
+                path = self.node_paths.get(node['name'], '/proxies/' + quote(node['name'], safe='') + '/delay') + '?' + urlencode(
+                    {'url': self.config['health_url'], 'timeout': timeout_ms, 'expected': '204'})
+                try:
+                    result = await asyncio.to_thread(self._request, path, 'GET', None, timeout_ms / 1000 + 1)
+                    delay = result.get('delay')
+                    ok = type(delay) in (int, float) and 0 <= delay <= timeout_ms
+                except (OSError, ValueError, CoreError):
+                    delay, ok = None, False
+                return node, ok, delay if ok else None
+        budget = self.config['wakeup_timeout'] if budget is None else budget
+        if self.state == 'starting' and self.startup_deadline is not None:
+            budget = max(.001, min(budget, self.startup_deadline - time.monotonic() - .25))
+        tasks = [asyncio.create_task(probe(node)) for node in self.nodes]
+        if not tasks:
+            self.probe_complete, self.probe_tested, self.probe_total = True, 0, 0
+            await self._apply_policy(measured=True)
+            return
+        try:
+            done, pending = await asyncio.wait(tasks, timeout=budget)
+        except asyncio.CancelledError:
+            for task in tasks: task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise  # Stop/stale cancellation never publishes a partial batch.
+        for task in pending: task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        results = [task.result() for task in done if not task.cancelled()]
+        for node, healthy, delay in results:
+            node.update(healthy=healthy, delay_ms=delay)
+        self.probe_complete = not pending
+        self.probe_tested, self.probe_total = len(results), len(tasks)
+        self.last_health = time.monotonic()
+        # A deadline may still yield useful healthy measurements. Keep a known
+        # incumbent, but only fresh completed nodes can challenge/fail over.
+        completed = {node['name'] for node, _, _ in results}
+        candidates = [node for node in self.nodes if node['name'] in completed or node['name'] == self.fastest.current]
+        await self._apply_policy(measured=True, stable_round=not pending, candidates=candidates)
+
+    async def _select(self):
+        await self._refresh_nodes()
+        if self.selection_mode == 'fastest':
+            await self._probe_nodes()
+        else:
+            await self._apply_policy()
+
+    def _require_nodes(self):
+        if self.closing:
+            raise CoreError('Proxy is stopping')
+
+    async def prepare(self, selection_group=None):
+        self._require_nodes()
+        self.preparing = True
+        already_running = self.process is not None and self.process.returncode is None
+        previous_group = self.selection_group
+        try:
+            await self.acquire()
+            try:
+                async with self.lock:
+                    await self._refresh_nodes(selection_group)
+                    if self.nodes and (already_running or self.selection_mode != 'fastest' or previous_group != self.selection_group):
+                        await self._probe_nodes()
+                    self.last_error = ''
+            finally:
+                await self.release()
+        finally:
+            self.preparing = False
+
+    async def test_nodes(self, selection_group=None):
+        if self.config.get('profile_file') and not (selection_group or self.selection_group):
+            raise CoreError('Choose a profile selector group before testing nodes')
+        await self.prepare(selection_group)
+
+    async def select_node(self, mode, name='', switch_threshold_ms=None, selection_group=None):
+        self._require_nodes()
+        if self.config.get('profile_file') and mode not in ('fixed', 'fastest'):
+            raise CoreError('Owned profile groups support explicit manual or fastest selection')
+        if mode not in ('auto', 'prefer', 'fixed', 'fastest'):
+            raise CoreError('Unsupported selection mode')
+        if not isinstance(name, str) or len(name.encode('utf-8')) > 256 or any(ord(c) < 32 for c in name):
+            raise CoreError('Invalid node name')
+        if switch_threshold_ms is not None and (type(switch_threshold_ms) is not int or not 0 <= switch_threshold_ms <= 60000):
+            raise CoreError('Invalid switching threshold')
+        await self.acquire()
+        try:
+            async with self.lock:
+                # Capture policy before a group refresh can change its scope.
+                old = (self.selection_group, self.profile_mode,
+                       self.config['selection_mode'], self.config['preferred_node'],
+                       self.config.get('switch_threshold_ms', 50), copy.deepcopy(self.fastest))
+                previous_choice = ''
+                try:
+                    await self._refresh_nodes(selection_group)
+                    previous_choice = self.selector_choice
+                    if self.config.get('profile_file') and not self.selection_group:
+                        raise CoreError('Choose a profile selector group first')
+                    if mode in ('fixed', 'prefer') and name not in {n['name'] for n in self.nodes}:
+                        raise CoreError('Selected node is missing from the subscription')
+                    if self.config.get('profile_file'):
+                        self.profile_mode = mode
+                    self.config['selection_mode'], self.config['preferred_node'] = mode, name if mode in ('fixed', 'prefer') else ''
+                    if switch_threshold_ms is not None:
+                        self.config['switch_threshold_ms'] = switch_threshold_ms
+                    if mode == 'fastest':
+                        if old[2] != 'fastest' or old[0] != self.selection_group:
+                            from .policy import FastestSelection
+                            self.fastest = FastestSelection()
+                        await self._probe_nodes()
+                    else:
+                        await self._apply_policy()
+                    self.last_error = ''
+                except BaseException as exc:
+                    # Restore the exact previously verified member of the target
+                    # group, including an existing nested profile policy.
+                    cancelled = isinstance(exc, asyncio.CancelledError)
+                    if not cancelled and not self.closing and previous_choice and self.selector_choice != previous_choice:
+                        await self._restore_choice(previous_choice)
+                    (self.selection_group, self.profile_mode, self.config['selection_mode'],
+                     self.config['preferred_node'], self.config['switch_threshold_ms'], self.fastest) = old
+                    try:
+                        if cancelled:
+                            self._record_selection('')
+                        else:
+                            await self._refresh_nodes()
+                    except (OSError, ValueError, CoreError):
+                        self._record_selection('')
+                        self.last_error = 'Node selection is unverified; refresh live nodes before retrying'
+                    raise
+        finally:
+            await self.release()
 
     async def acquire(self):
         async with self.lock:
@@ -223,6 +561,8 @@ class CoreManager:
 
     async def _start(self):
         self.state = 'starting'
+        self.startup_deadline = time.monotonic() + self.config['wakeup_timeout']
+        self.last_error = ''
         print('Core: starting', flush=True)
         self.process = None
         try:
@@ -261,7 +601,9 @@ class CoreManager:
                     pass
                 raise
             rendered = generated if self.config.get('profile_file') else render(self.config, self.secret)
-            atomic_private(self.runtime / 'config.json', json.dumps(rendered).encode())
+            if self.config.get('profile_file'):
+                self.profile_groups = {group.get('name') for group in rendered.get('proxy-groups', []) if group.get('type') == 'select'}
+            atomic_private(self.runtime / 'config.json', json.dumps(rendered, ensure_ascii=False).encode('utf-8'))
             args = (self.config['core_path'], '-d', str(self.runtime), '-f', str(self.runtime / 'config.json'))
             check = await launch_external(*args, '-t')
             try:
@@ -284,6 +626,7 @@ class CoreManager:
                     await writer.wait_closed()
                     await self._select()
                     self.state = 'running'
+                    self.startup_deadline = None
                     print('Core: running', flush=True)
                     return
                 except CoreError:
@@ -296,6 +639,7 @@ class CoreManager:
             self.state = 'failed'
             if not isinstance(exc, asyncio.CancelledError):
                 detail = str(exc) if isinstance(exc, CoreError) else 'Check executable, ports and configuration'
+                self.last_error = detail
                 print('Core startup failed: ' + detail, flush=True)
             if isinstance(exc, (CoreError, asyncio.CancelledError)):
                 raise
@@ -317,6 +661,11 @@ class CoreManager:
                 if isinstance(exc, asyncio.CancelledError):
                     raise
         self.state = 'stopped'
+        self.startup_deadline = None
+        self.selected = ''
+        self.selector_choice = ''
+        from .policy import FastestSelection
+        self.fastest = FastestSelection()
         if proc is not None:
             print('Core: stopped', flush=True)
 
@@ -325,8 +674,23 @@ class CoreManager:
             while True:
                 await asyncio.sleep(min(1, self.config['idle_seconds']))
                 async with self.lock:
-                    if self.process is not None and not self.active and time.monotonic() - self.last_used >= self.config['idle_seconds']:
+                    if self.process is None:
+                        continue
+                    if self.process.returncode is not None:
+                        self.state, self.last_error = 'failed', 'Owned proxy engine exited unexpectedly'
+                        continue
+                    if not self.active and time.monotonic() - self.last_used >= self.config['idle_seconds']:
                         await self._stop()
+                        continue
+                    try:
+                        await self._refresh_nodes()
+                        if self.node_management and self.selection_mode == 'fastest' and time.monotonic() - self.last_health >= max(30, self.config['health_interval']):
+                            await self._probe_nodes()
+                            self.last_error = ''
+                        elif self.node_management and self.selection_mode == 'prefer':
+                            await self._apply_policy()
+                    except (OSError, ValueError, CoreError, TimeoutError):
+                        self.last_error = 'Node status or health check failed'
         except asyncio.CancelledError:
             pass
 

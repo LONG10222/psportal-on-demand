@@ -52,7 +52,7 @@ The subscription URL is saved as plaintext in this local file so the proxy can u
 
 Embedded launch creates one temporary allowlisted JSON configuration in a private session directory, mode `0700` with a `0600` file on POSIX. It omits Python-only settings, unknown fields and the unused subscription URL when a local provider is selected. The temporary file is removed after failed launch or observed child exit. Stopping or closing the app cooperatively stops the native child before cleanup. A hard crash or forced OS termination can leave the private temporary directory behind; verify the child is stopped before removing a stale `psportal-native-*` directory. The child stops when its parent's stdin pipe closes, including parent disappearance. Neither mode sends subscription tokens on the command line.
 
-The GUI's log reports listener lifecycle and sanitized diagnostics, not live node/core telemetry. It does not query the controller or wake a core to display status. `auto`/`prefer` fallback and real node health depend on the selected Mihomo release and subscription; check actual behavior before relying on it.
+The GUI displays sanitized live listener/core state, distinct active source IPs, connection counts and node controls over its child process pipes. Displaying status does not wake the core; explicit preparation and latency tests can. Owned direct-subscription controls support manual and measured fastest selection; linked Clash continues to manage its own nodes. See [live runtime controls and resource limits](runtime-controls.md). Real-node behavior still needs validation with the intended subscription and network.
 
 ## Build a native executable
 

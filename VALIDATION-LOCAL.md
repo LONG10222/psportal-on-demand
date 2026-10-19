@@ -1,6 +1,6 @@
 # 本机验证记录
 
-日期：2026-10-18。环境：Apple Silicon Mac、macOS 27.0.1、Xcode 27.0、iOS 27.0 Simulator。开发改动位于 `local/clash-style-desktop`，基于云端 `872f61b3`。
+日期：2026-10-18。环境：Apple Silicon Mac、macOS 27.0.1、Xcode 27.0、iOS 27.0 Simulator。以下为原 `local/clash-style-desktop` 开发阶段的历史记录，随后保存到 PR #4（`49a8467`）；不代表后续跨平台改动已通过这些验证。
 
 | 检查 | 结果 | 证据 |
 |---|---|---|
