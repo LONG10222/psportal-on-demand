@@ -36,7 +36,7 @@ class ExistingProxyConfigTests(unittest.TestCase):
 
     def test_discovery_is_read_only_and_accepts_only_loopback_proxy(self):
         for host, expected in [('127.0.0.1',7897),('localhost',7897),('8.8.8.8',None)]:
-            result=subprocess.CompletedProcess([],0,stdout=f' HTTPEnable : 1\n HTTPProxy : {host}\n HTTPPort : 7897\n')
+            result=subprocess.CompletedProcess([],0,stdout=f'<dictionary> {{\n HTTPEnable : 1\n HTTPProxy : {host}\n HTTPPort : 7897\n}}\n')
             with patch('portalproxy.existing_proxy.sys.platform','darwin'), patch('portalproxy.existing_proxy.subprocess.run',return_value=result) as command:
                 info=detect_system_proxy()
                 self.assertEqual(info['port'] if info else None,expected)

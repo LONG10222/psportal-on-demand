@@ -15,6 +15,9 @@ func TestLegacyAndRuntimeStatusCompatibility(t *testing.T) {
 	if got := NodeCommand(`{"action":"prepare"}`); got != `{"ok":false,"code":"stopped"}` {
 		t.Fatal(got)
 	}
+	if got := SubscriptionInfo("https://provider.example/fixture"); got != `{"available":false}` {
+		t.Fatal("stopped mobile binding fetched metadata", got)
+	}
 	defer Stop()
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
@@ -30,6 +33,9 @@ func TestLegacyAndRuntimeStatusCompatibility(t *testing.T) {
 	raw, _ := json.Marshal(cfg)
 	if err := Start(string(raw)); err != nil {
 		t.Fatal(err)
+	}
+	if got := SubscriptionInfo("https://other-provider.example/fixture"); got != `{"available":false}` {
+		t.Fatal("mobile binding accepted another subscription", got)
 	}
 	var legacy, runtime map[string]any
 	if err := json.Unmarshal([]byte(Status()), &legacy); err != nil {
@@ -58,6 +64,9 @@ func TestLegacyAndRuntimeStatusCompatibility(t *testing.T) {
 		t.Fatal("selected unloaded node")
 	}
 	Stop()
+	if got := SubscriptionInfo(cfg.SubscriptionURL); got != `{"available":false}` {
+		t.Fatal("mobile binding fetched metadata after Stop", got)
+	}
 	if err := json.Unmarshal([]byte(RuntimeStatus()), &runtime); err != nil || runtime["running"] != false || runtime["state"] != "stopped" {
 		t.Fatal(runtime, err)
 	}

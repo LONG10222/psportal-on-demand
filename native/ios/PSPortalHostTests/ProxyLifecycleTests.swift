@@ -6,6 +6,25 @@ import UIKit
 /// These mocks test orchestration only. They do not prove transport works.
 final class ProxyLifecycleTests: XCTestCase {
     @MainActor
+    func testAccountingSnapshotIsTimestampedAndForgottenWithSettings() async {
+        let harness = LifecycleHarness()
+        defer { harness.removeFiles() }
+        harness.model.start()
+        for _ in 0..<100 {
+            if harness.model.subscriptionInfoUpdatedAt != nil { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertNotNil(harness.model.subscriptionInfo)
+        XCTAssertNotNil(harness.model.subscriptionInfoUpdatedAt)
+        harness.model.stop()
+        await harness.waitUntilStopped()
+        harness.model.forgetSettings()
+        XCTAssertNil(harness.model.subscriptionInfo)
+        XCTAssertNil(harness.model.subscriptionInfoUpdatedAt)
+        XCTAssertTrue(harness.model.settings.subscriptionURL.isEmpty)
+    }
+
+    @MainActor
     func testLanguageAndAppearanceSwitchWithoutRestartOrSettingsLoss() async {
         let harness = LifecycleHarness()
         let model = harness.model
@@ -116,6 +135,7 @@ private final class RecordingDriver: EngineDriver {
     private let lock = NSLock()
     private var starts = 0
     private var running = false
+    func subscriptionInfo(url: String) -> String { "{\"upload\":1,\"download\":2,\"total\":100}" }
     func start(configJSON: String) -> String? {
         lock.lock(); defer { lock.unlock() }
         starts += 1

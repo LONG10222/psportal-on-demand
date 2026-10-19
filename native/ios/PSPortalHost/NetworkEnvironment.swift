@@ -43,15 +43,19 @@ struct NetworkSnapshot: Equatable {
     var interfaces: [LANInterface] = []
 
     func shareableLAN(confirmOwnHotspot: Bool) -> LANInterface? {
+        let prefix: String
         if uplink == .wifi || uplink == .wired {
-            return interfaces.first { $0.name.hasPrefix("en") }
+            prefix = "en"
+        } else if uplink == .cellular && confirmOwnHotspot {
+            // A cellular uplink alone never proves Personal Hotspot is on.
+            prefix = "bridge"
+        } else {
+            return nil
         }
-        // A cellular uplink alone never proves that Personal Hotspot is on.
-        // Require a real private bridge interface and the user's confirmation.
-        if uplink == .cellular && confirmOwnHotspot {
-            return interfaces.first { $0.name.hasPrefix("bridge") }
-        }
-        return nil
+        let candidates = interfaces.filter { $0.name.hasPrefix(prefix) }
+        // Interface enumeration order does not identify the active route.
+        // Multiple physical interfaces/aliases require explicit manual setup.
+        return candidates.count == 1 ? candidates.first : nil
     }
 }
 
@@ -61,19 +65,23 @@ final class NetworkEnvironment: ObservableObject {
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "org.psportal.network-observer")
 
-    init() {
+    init(initialSnapshot: NetworkSnapshot = NetworkSnapshot(), monitorsChanges: Bool = true) {
+        snapshot = initialSnapshot
+        guard monitorsChanges else { return }
         monitor.pathUpdateHandler = { [weak self] path in
             let kind: Uplink = path.status != .satisfied ? .unavailable :
                 path.usesInterfaceType(.wifi) ? .wifi :
                 path.usesInterfaceType(.wiredEthernet) ? .wired :
                 path.usesInterfaceType(.cellular) ? .cellular : .unknown
             let next = NetworkSnapshot(uplink: kind, interfaces: Self.readInterfaces())
-            DispatchQueue.main.async { [weak self] in self?.snapshot = next }
+            DispatchQueue.main.async { [weak self] in self?.updateSnapshot(next) }
         }
         monitor.start(queue: queue)
     }
 
     deinit { monitor.cancel() }
+
+    func updateSnapshot(_ next: NetworkSnapshot) { snapshot = next }
 
     nonisolated private static func readInterfaces() -> [LANInterface] {
         var head: UnsafeMutablePointer<ifaddrs>?
@@ -85,7 +93,9 @@ final class NetworkEnvironment: ObservableObject {
             defer { next = current.pointee.ifa_next }
             let item = current.pointee
             guard let address = item.ifa_addr, let mask = item.ifa_netmask,
-                  address.pointee.sa_family == UInt8(AF_INET), item.ifa_flags & UInt32(IFF_UP) != 0 else { continue }
+                  address.pointee.sa_family == UInt8(AF_INET),
+                  item.ifa_flags & UInt32(IFF_UP | IFF_RUNNING) == UInt32(IFF_UP | IFF_RUNNING),
+                  item.ifa_flags & UInt32(IFF_LOOPBACK | IFF_POINTOPOINT) == 0 else { continue }
             let name = String(cString: item.ifa_name)
             guard name.hasPrefix("en") || name.hasPrefix("bridge") else { continue }
             func numeric(_ value: UnsafeMutablePointer<sockaddr>) -> String? {
@@ -100,7 +110,7 @@ final class NetworkEnvironment: ObservableObject {
         return result.sorted { $0.name < $1.name }
     }
 
-    static func availablePort(host: String, preferred: Int = 10081) -> Int? {
+    nonisolated static func availablePort(host: String, preferred: Int = 10081) -> Int? {
         for port in [preferred] + Array(10081...10112) {
             guard (1024...65535).contains(port), port != 10082, port != 10090 else { continue }
             let fd = socket(AF_INET, SOCK_STREAM, 0)

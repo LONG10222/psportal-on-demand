@@ -177,6 +177,7 @@ class ImportInterruptionTests(unittest.TestCase):
         app._set_status = Mock()
         app._use_imported_file = Mock(return_value=True)
         app._configure_lan = Mock(return_value=True)
+        app._apply_lan = Mock()
         app.start = Mock()
         app._t = lambda key: key
         return app

@@ -1,5 +1,16 @@
 # iOS validation record
 
+## 2026-10-19 network and session regression update
+
+The current Apple correction is described in
+[`docs/apple-review-2026-10-19.zh-CN.md`](../../docs/apple-review-2026-10-19.zh-CN.md).
+It adds emitted-network-snapshot, controller session/queue, accounting freshness
+and native cancellation coverage. The existing real-framework transport tests
+remain enabled. Current-commit Apple CI results are recorded in its draft PR;
+the historical runs below are evidence only for their stated old revisions.
+No physical-device, signing, foreground-to-background service guarantee or
+complete Clash-profile parity is inferred from those tests.
+
 Updated 2026-10-18. Simulator success is not physical-device or Portal proof.
 
 ## Final complete build/test/package gate

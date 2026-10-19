@@ -14,8 +14,15 @@ var lifecycleMu sync.Mutex
 var mu sync.Mutex
 var current *engine.Engine
 
-// SubscriptionInfo returns only bounded accounting values provided by the server.
-func SubscriptionInfo(url string) string { return engine.SubscriptionInfo(url) }
+// SubscriptionInfo returns bounded server accounting values for the running
+// engine's subscription. Stop cancels the request when the app backgrounds.
+func SubscriptionInfo(url string) string {
+	app, err := activeEngine()
+	if err != nil {
+		return `{"available":false}`
+	}
+	return app.SubscriptionInfo(url)
+}
 
 // NodeCommand never holds the lifecycle mutex across download or probing, so
 // Stop can cancel in-flight work when the app leaves the foreground.

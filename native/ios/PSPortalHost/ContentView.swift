@@ -83,6 +83,12 @@ struct ContentView: View {
                             if let used = info.used, let total = info.total, total>0 {
                                 ProgressView(value: Double(min(used,total)), total: Double(total))
                             }
+                            Text(t("服务器快照 · 非实时", "Server snapshot · not live"))
+                                .font(.caption).foregroundStyle(.secondary)
+                            if let updated = model.subscriptionInfoUpdatedAt {
+                                LabeledContent(t("获取时间", "Fetched"), value: updated.formatted(date: .numeric, time: .shortened))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
                         } else {
                             Text(t("准备后显示订阅流量与到期信息，未返回的字段显示“未提供”。", "Subscription accounting appears after preparation. Missing server fields show Not provided."))
                                 .font(.caption).foregroundStyle(.secondary)
@@ -153,8 +159,7 @@ struct ContentView: View {
         .tint(.blue)
         .preferredColorScheme(model.darkAppearance ? .dark : .light)
         .onReceive(refresh) { _ in model.refreshStatus() }
-        .onReceive(network.$snapshot) { _ in model.networkChanged() }
-        .onChange(of: model.confirmOwnHotspot) { _ in model.networkChanged() }
+        .onChange(of: model.confirmOwnHotspot) { _ in model.networkChanged(network.snapshot) }
         .onChange(of: model.settings.subscriptionURL) { _ in model.clearSubscriptionInfo() }
     }
 
