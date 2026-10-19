@@ -1,2 +1,6 @@
 # This upstream notice is compared byte-for-byte with the retained source.
 /portable/docs/PyYAML-LICENSE.txt -text
+
+# Preserve exact pinned dependency bytes for provenance on all checkouts.
+native/third_party/mihomo/** -text
+native/third_party/mihomo/PSPORTAL-PATCHES/*.patch -whitespace

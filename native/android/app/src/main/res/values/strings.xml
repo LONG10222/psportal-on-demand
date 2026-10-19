@@ -3,7 +3,7 @@
     <string name="title">OnDemand</string>
     <string name="subtitle">按需局域网代理</string>
     <string name="explanation">连接同一个可信局域网。按页面显示的服务器和端口设置设备 Wi-Fi 手动 HTTP 代理。仅允许名单中的设备。</string>
-    <string name="limitations">仅支持 HTTP/HTTPS CONNECT，不中继 UDP 游戏或串流。省电限制可能中断网络，移出最近任务会停止服务。</string>
+    <string name="limitations">局域网手动代理仅支持 HTTP/HTTPS CONNECT，不中继 UDP 游戏或串流。后台共享开启时移出最近任务仍继续；Android 强行停止、省电或厂商限制可能中断服务。</string>
     <string name="phone_ip">本机私网 IPv4</string>
     <string name="choose_address">选择本机地址</string>
     <string name="no_address">未找到私网 IPv4，请先连接可信 Wi-Fi。</string>
@@ -11,9 +11,27 @@
     <string name="port">代理端口</string>
     <string name="subscription">HTTPS 订阅链接</string>
     <string name="subscription_help">订阅链接仅留在本次内存，不保存到设置。原生引擎可能在运行时将节点凭据缓存至应用私有目录。</string>
+    <string name="lan_enabled">共享给局域网设备</string>
+    <string name="phone_local_network_limit">开启本机代理后，访问家中设备等局域网功能可能不可用，直连模式也一样；关闭本机代理后恢复原来的联网方式。</string>
+    <string name="phone_apps_help">默认关闭。开启并启动时需 Android VPN 授权，不能与其他 VPN 同时使用。本机代理支持 TCP/UDP；节点不支持的 UDP 会被阻断，不会自动直连。不支持 ICMP（ping），部分应用可能不兼容，加密 DNS 可能影响域名规则。</string>
+    <string name="phone_apps">同时代理本机应用（可选）</string>
+    <string name="vpn_notification_channel">本机应用 VPN</string>
+    <string name="vpn_notification_description">显示本机应用代理状态，并提供停止全部代理的按钮</string>
+    <string name="vpn_notification_title">OnDemand 正在代理本机应用</string>
+    <string name="vpn_notification_running">本机应用 VPN 已连接 · 点击查看代理状态</string>
+    <string name="vpn_notification_stopping">正在关闭本机 VPN</string>
+    <string name="vpn_stop_phone_apps">停止本机代理</string>
+    <string name="vpn_error_conflict">检测到其他 VPN，本机代理未启动。</string>
+    <string name="vpn_error_permission">VPN 授权未获批准或已撤销。</string>
+    <string name="vpn_error_start">本机 VPN 启动失败，请检查 Android 授权后重试。</string>
+    <string name="vpn_error_runtime">本机 VPN 已中断，局域网共享状态请查看主页面。</string>
+    <string name="routing_mode">代理模式</string>
+    <string-array name="routing_mode_labels"><item>规则</item><item>全局</item><item>直连</item></string-array>
+    <string name="background_sharing">允许后台运行</string>
+    <string name="background_sharing_help">开启后回到桌面、锁屏或移出最近任务仍继续本次共享与本机代理。关闭后离开页面即停止全部代理。Android 强行停止、省电或厂商限制仍可能中断服务。</string>
     <string name="selection">节点策略</string>
     <string-array name="selection_labels">
-        <item>自动：香港 → 日本 → 其他</item>
+        <item>自动：订阅策略 / 节点回退</item>
         <item>首选，允许回退</item>
         <item>固定，不自动换节点</item>
     </string-array>
@@ -31,7 +49,7 @@
     <string name="notification_channel">局域网代理连接</string>
     <string name="notification_description">代理运行时显示状态，并提供停止按钮</string>
     <string name="notification_title">OnDemand 正在运行</string>
-    <string name="notification_starting">正在准备局域网监听</string>
+    <string name="notification_starting">正在准备所选代理</string>
     <string name="notification_running">局域网代理已就绪 · 点击打开或停止</string>
     <string name="notification_stopping">正在关闭监听和活动连接</string>
     <string name="notification_required">请允许通知，以便运行时显示状态和停止按钮。</string>

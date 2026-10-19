@@ -19,3 +19,9 @@ release directory. Preserve that directory with distributed artifacts and provid
 corresponding source/build instructions. Android and Apple app-store distribution
 requires independent review of GPL and store terms; no store compatibility claim
 is made here.
+
+The pinned local derivative in `third_party/mihomo` preserves complete upstream
+source and license and applies documented concurrency and embedding-lifecycle corrections. Its
+`PSPORTAL-PATCHES` directory contains original checksums, exact patch and
+provenance. `scripts/verify_mihomo_patch.py` checks the retained source before
+source packaging; dependency notices identify the replacement actually built.

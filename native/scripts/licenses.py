@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Collect immutable module versions and bundled license/notice texts."""
-import argparse,json,os,pathlib,shutil,subprocess,sys,time
+import argparse,hashlib,json,os,pathlib,shutil,subprocess,sys,time
+import verify_mihomo_patch
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 
 # Registry DNS/transport failures are retryable, but source/integrity failures are not.
@@ -31,10 +32,12 @@ def network_output(args, *, attempts=3, timeout=120, env=None):
   print(f'Transient module metadata failure; retry {attempt+2}/{attempts} in {delay}s',file=sys.stderr,flush=True)
   time.sleep(delay)
 TAGS = 'no_easytier,no_zerotier,no_tailscale'
+ANDROID_TAGS = TAGS + ',with_gvisor'
 # Match build.py and gomobile bind's supported device/simulator architectures.
 RELEASE_TARGETS = tuple((system, arch, '0', './cmd/psportal')
  for system in ('linux', 'windows', 'darwin') for arch in ('amd64', 'arm64')) + tuple(
- (system, arch, '1', './mobile') for system in ('android', 'ios') for arch in ('amd64', 'arm64'))
+ (system, arch, '1', './androidmobile' if system == 'android' else './mobile')
+ for system in ('android', 'ios') for arch in ('amd64', 'arm64'))
 
 def json_objects(raw):
  decoder=json.JSONDecoder()
@@ -52,7 +55,8 @@ def production_scope(go):
  required=set();targets=[]
  for system,arch,cgo,entry in RELEASE_TARGETS:
   env=dict(os.environ,GOOS=system,GOARCH=arch,CGO_ENABLED=cgo)
-  command=[go,'list','-deps','-json','-tags',TAGS,entry]
+  tags = ANDROID_TAGS if system == 'android' else TAGS
+  command=[go,'list','-deps','-json','-tags',tags,entry]
   packages=list(json_objects(network_output(command,env=env)))
   if not packages or not any(p.get('ImportPath')=='github.com/psportal/psportal/native/'+entry[2:] for p in packages):
    raise RuntimeError('Incomplete dependency graph for '+system+'/'+arch+' '+entry)
@@ -67,7 +71,7 @@ def production_scope(go):
     modules.add((module['Path'],module['Version']))
   if not modules:raise RuntimeError('No module dependencies for '+system+'/'+arch+' '+entry)
   required.update(modules)
-  targets.append(dict(goos=system,goarch=arch,cgo_enabled=cgo,entry=entry,tags=TAGS,
+  targets.append(dict(goos=system,goarch=arch,cgo_enabled=cgo,entry=entry,tags=tags,
                       modules=[dict(module=p,version=v) for p,v in sorted(modules)]))
  return required,targets
 
@@ -83,6 +87,32 @@ def missing_license_review(manifest,required,targets):
   excluded_graph_only_missing_notices=[dict(module=item['module'],version=item['version'],
    reason='Not imported by any supported production target; no module-name exemptions') for item in missing])
 
+def module_source(go,module):
+ """Resolve the source actually built, without silently reverting a local patch."""
+ replacement=module.get('Replace')
+ source=replacement or module
+ directory=source.get('Dir')
+ if not directory:
+  if replacement and not replacement.get('Version'):
+   raise RuntimeError('Missing local replacement source for '+module['Path'])
+  data=json.loads(network_output([go,'mod','download','-json',source['Path']+'@'+source['Version']]))
+  directory=data.get('Dir')
+ if not directory:raise RuntimeError('Missing downloaded source for '+module['Path'])
+ base=pathlib.Path(directory)
+ if not base.is_dir():raise RuntimeError('Missing source directory for '+module['Path'])
+ info=None
+ if replacement:
+  info=dict(path=replacement['Path'],version=replacement.get('Version'))
+  if not replacement.get('Version'):
+   # This project's only local production replacement is the reviewed Mihomo
+   # derivative. Unexpected local replacements must be reviewed explicitly.
+   provenance=verify_mihomo_patch.verify(base)
+   if (module['Path'],module['Version']) != (provenance['module'],provenance['version']):
+    raise RuntimeError('Local replacement identity differs from its provenance')
+   info.update(provenance=provenance,provenance_sha256=hashlib.sha256(
+    (base/'PSPORTAL-PATCHES'/'PROVENANCE.json').read_bytes()).hexdigest())
+ return base,info
+
 def main():
  p=argparse.ArgumentParser();p.add_argument('--go',default='go');p.add_argument('--output',required=True);a=p.parse_args()
  output=pathlib.Path(a.output);output.mkdir(parents=True,exist_ok=True)
@@ -97,16 +127,20 @@ def main():
    shutil.copyfile(goroot/name,output/('Go-'+name));combined.append('\n\n===== Go standard library / '+name+' =====\n'+(goroot/name).read_text())
  for module in modules:
   if module.get('Main'):continue
-  directory=module.get('Dir')
-  if not directory:
-   data=json.loads(network_output([a.go,'mod','download','-json',module['Path']+'@'+module['Version']]));directory=data.get('Dir')
-  if not directory:raise RuntimeError('Missing downloaded source for '+module['Path'])
-  base=pathlib.Path(directory);label=module['Path'].replace('/','_')+'@'+module['Version'];target=output/label;target.mkdir(exist_ok=True)
+  base,replacement=module_source(a.go,module)
+  label=module['Path'].replace('/','_')+'@'+module['Version'];target=output/label;target.mkdir(exist_ok=True)
   candidates=[f for f in base.rglob("*") if f.is_file() and f.suffix.lower() not in ('.go','.c','.h','.s','.py','.js','.ts') and f.name.lower().startswith(('license','licence','copying','notice','copyright'))]
   texts=[]
   for f in candidates:
    rel=f.relative_to(base);(target/rel).parent.mkdir(parents=True,exist_ok=True);(target/rel).unlink(missing_ok=True);shutil.copyfile(f,target/rel);texts.append(str(rel));combined.append('\n\n===== '+module['Path']+' '+module['Version']+' / '+str(rel)+' =====\n'+f.read_text(errors='replace'))
-  manifest.append({'module':module['Path'],'version':module['Version'],'go_mod':module.get('GoModSum'),'licenses':texts})
+  item={'module':module['Path'],'version':module['Version'],'go_mod':module.get('GoModSum'),'licenses':texts}
+  if replacement:
+   item['replacement']=replacement
+   if replacement.get('provenance'):
+    item['go_mod']=replacement['provenance']['upstream_go_mod_sum']
+    item['upstream_sum']=replacement['provenance']['upstream_module_sum']
+    shutil.copytree(base/'PSPORTAL-PATCHES',target/'PSPORTAL-PATCHES',dirs_exist_ok=True)
+  manifest.append(item)
  scope=missing_license_review(manifest,required,targets)
  (output/'DEPENDENCY-SCOPE.json').write_text(json.dumps(scope,indent=2)+'\n',encoding='utf-8')
  (output/'MODULES.json').write_text(json.dumps(manifest,indent=2)+'\n')

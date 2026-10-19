@@ -1,0 +1,284 @@
+--- a/tunnel/connection.go
++++ b/tunnel/connection.go
+@@ -14,9 +14,11 @@
+ )
+ 
+ type packetSender struct {
+-	ctx    context.Context
+-	cancel context.CancelFunc
+-	ch     chan C.PacketAdapter
++	admission sync.Mutex
++	closed    bool
++	ctx       context.Context
++	cancel    context.CancelFunc
++	ch        chan C.PacketAdapter
+ 
+ 	// destination NAT mapping
+ 	originToTarget map[string]netip.Addr
+@@ -127,6 +129,12 @@
+ }
+ 
+ func (s *packetSender) Send(packet C.PacketAdapter) {
++	s.admission.Lock()
++	defer s.admission.Unlock()
++	if s.closed {
++		packet.Drop()
++		return
++	}
+ 	select {
+ 	case <-s.ctx.Done():
+ 		packet.Drop() // sender closed before Send()
+@@ -145,6 +153,9 @@
+ }
+ 
+ func (s *packetSender) Close() {
++	s.admission.Lock()
++	defer s.admission.Unlock()
++	s.closed = true
+ 	s.cancel()
+ 	s.dropAll()
+ }
+--- a/tunnel/tunnel.go
++++ b/tunnel/tunnel.go
+@@ -78,8 +78,10 @@
+ var _ proxydialer.Tunnel = Tunnel
+ 
+ func (t tunnel) HandleTCPConn(conn net.Conn, metadata *C.Metadata) {
+-	connCtx := icontext.NewConnContext(conn, metadata)
+-	handleTCPConn(connCtx)
++	runTCPIngress(func() {
++		connCtx := icontext.NewConnContext(conn, metadata)
++		handleTCPConn(connCtx)
++	}, func() { _ = conn.Close() })
+ }
+ 
+ func initUDP() {
+@@ -97,6 +99,10 @@
+ }
+ 
+ func (t tunnel) HandleUDPPacket(packet C.UDPPacket, metadata *C.Metadata) {
++	if !admitIngress() {
++		packet.Drop()
++		return
++	}
+ 	udpInit.Do(initUDP)
+ 
+ 	packetAdapter := C.NewPacketAdapter(packet, metadata)
+@@ -109,6 +115,7 @@
+ 	case udpQueues[queueNo] <- packetAdapter:
+ 	default:
+ 		packet.Drop()
++		ingressLifetime.jobs.Done()
+ 	}
+ }
+ 
+@@ -167,7 +174,11 @@
+ 		tcpQueue = make(chan C.ConnContext, queueCapacity)
+ 		go func() {
+ 			for connCtx := range tcpQueue {
+-				go handleTCPConn(connCtx)
++				if !admitLegacyIngress() {
++					_ = connCtx.Conn().Close()
++					continue
++				}
++				go func(ctx C.ConnContext) { defer ingressLifetime.jobs.Done(); handleTCPConn(ctx) }(connCtx)
+ 			}
+ 		}()
+ 	})
+@@ -181,7 +192,11 @@
+ 		udpQueue = make(chan C.PacketAdapter, queueCapacity)
+ 		go func() {
+ 			for packet := range udpQueue {
+-				Tunnel.HandleUDPPacket(packet, packet.Metadata())
++				if !admitLegacyIngress() {
++					packet.Drop()
++					continue
++				}
++				func() { defer ingressLifetime.jobs.Done(); Tunnel.HandleUDPPacket(packet, packet.Metadata()) }()
+ 			}
+ 		}()
+ 	})
+@@ -413,7 +428,7 @@
+ // processUDP starts a loop to handle udp packet
+ func processUDP(queue chan C.PacketAdapter) {
+ 	for conn := range queue {
+-		handleUDPConn(conn)
++		func() { defer ingressLifetime.jobs.Done(); handleUDPConn(conn) }()
+ 	}
+ }
+ 
+@@ -482,11 +497,11 @@
+ 			oAddrPort := dialMetadata.AddrPort()
+ 			writeBackProxy := nat.NewWriteBackProxy(packet)
+ 
+-			go handleUDPToLocal(writeBackProxy, pc, sender, key, oAddrPort)
++			spawnIngressChild(func() { handleUDPToLocal(writeBackProxy, pc, sender, key, oAddrPort) })
+ 			return pc, writeBackProxy, nil
+ 		}
+ 
+-		go func() {
++		spawnIngressChild(func() {
+ 			pc, proxy, err := dial()
+ 			if err != nil {
+ 				sender.Close()
+@@ -494,7 +509,7 @@
+ 				return
+ 			}
+ 			sender.Process(pc, proxy)
+-		}()
++		})
+ 	}
+ 	sender.Send(packet) // nonblocking
+ }
+--- /dev/null
++++ b/tunnel/ingress.go
+@@ -0,0 +1,74 @@
++package tunnel
++
++import "sync"
++
++// ingressLifetime makes the asynchronous tunnel quiescent before an embedding
++// application replaces process-global configuration. Normal Mihomo execution
++// keeps admission open and is otherwise unchanged.
++var ingressLifetime = struct {
++	sync.Mutex
++	accepting     bool
++	legacyBlocked bool
++	jobs          sync.WaitGroup
++}{accepting: true}
++
++func admitIngress() bool {
++	ingressLifetime.Lock()
++	defer ingressLifetime.Unlock()
++	if !ingressLifetime.accepting {
++		return false
++	}
++	ingressLifetime.jobs.Add(1)
++	return true
++}
++
++func admitLegacyIngress() bool {
++	ingressLifetime.Lock()
++	defer ingressLifetime.Unlock()
++	if !ingressLifetime.accepting || ingressLifetime.legacyBlocked {
++		return false
++	}
++	ingressLifetime.jobs.Add(1)
++	return true
++}
++
++// A child is registered while its admitted parent is still alive. Therefore
++// WaitIngress cannot observe zero before all descendants have been registered.
++func spawnIngressChild(work func()) {
++	ingressLifetime.jobs.Add(1)
++	go func() { defer ingressLifetime.jobs.Done(); work() }()
++}
++
++// SuspendIngress rejects new TCP and UDP admission. An embedder must next
++// cancel pending dials and close its owned stream/packet connections, then call
++// WaitIngress before mutating resolver, rule, mode or proxy globals.
++func SuspendIngress() {
++	ingressLifetime.Lock()
++	ingressLifetime.accepting = false
++	ingressLifetime.legacyBlocked = true
++	ingressLifetime.Unlock()
++}
++
++// WaitIngress joins queued work and every UDP resolve, sender and reader child.
++// Admission must remain suspended until this call returns.
++func WaitIngress() { ingressLifetime.jobs.Wait() }
++
++// ResumeIngress admits a newly configured generation. Call only after the
++// previous generation was suspended, closed and completely joined. Lifecycle
++// management permanently rejects the deprecated raw TCPIn/UDPIn queues: those
++// unversioned channel APIs cannot identify a submission from an old generation.
++func ResumeIngress() {
++	ingressLifetime.Lock()
++	ingressLifetime.accepting = true
++	ingressLifetime.legacyBlocked = true
++	ingressLifetime.Unlock()
++}
++
++func runTCPIngress(work func(), reject func()) {
++	if !admitIngress() {
++		reject()
++		return
++	}
++	defer ingressLifetime.jobs.Done()
++	work()
++}
+--- /dev/null
++++ b/tunnel/ingress_test.go
+@@ -0,0 +1,72 @@
++package tunnel
++
++import (
++	C "github.com/metacubex/mihomo/constant"
++	"net"
++	"sync"
++	"sync/atomic"
++	"testing"
++	"time"
++)
++
++func TestEmbeddingIngressJoinsDescendants(t *testing.T) {
++	ResumeIngress()
++	if !admitIngress() {
++		t.Fatal("new ingress rejected")
++	}
++	SuspendIngress()
++	if admitIngress() {
++		t.Fatal("suspended ingress admitted")
++	}
++	done := make(chan struct{})
++	go func() { WaitIngress(); close(done) }()
++	childStarted, release := make(chan struct{}), make(chan struct{})
++	spawnIngressChild(func() { close(childStarted); <-release })
++	ingressLifetime.jobs.Done()
++	<-childStarted
++	select {
++	case <-done:
++		t.Fatal("wait returned before admitted child")
++	case <-time.After(time.Millisecond):
++	}
++	close(release)
++	<-done
++	ResumeIngress()
++	if admitLegacyIngress() {
++		ingressLifetime.jobs.Done()
++		t.Fatal("unversioned legacy queue admitted after lifecycle opt-in")
++	}
++}
++
++type countedPacket struct{ drops atomic.Int32 }
++
++func (p *countedPacket) Data() []byte { return nil }
++func (p *countedPacket) LocalAddr() net.Addr {
++	return &net.UDPAddr{IP: net.IPv4(198, 18, 0, 1), Port: 1234}
++}
++func (p *countedPacket) WriteBack(b []byte, _ net.Addr) (int, error) { return len(b), nil }
++func (p *countedPacket) Drop()                                       { p.drops.Add(1) }
++
++func TestPacketSenderCloseDoesNotStrandConcurrentAdmission(t *testing.T) {
++	for round := 0; round < 200; round++ {
++		s := newPacketSender()
++		packets := make([]*countedPacket, 256)
++		var wg sync.WaitGroup
++		start := make(chan struct{})
++		for i := range packets {
++			p := &countedPacket{}
++			packets[i] = p
++			wg.Add(1)
++			go func() { defer wg.Done(); <-start; s.Send(C.NewPacketAdapter(p, &C.Metadata{})) }()
++		}
++		wg.Add(1)
++		go func() { defer wg.Done(); <-start; s.Close() }()
++		close(start)
++		wg.Wait()
++		for _, p := range packets {
++			if p.drops.Load() != 1 {
++				t.Fatalf("packet dropped %d times", p.drops.Load())
++			}
++		}
++	}
++}

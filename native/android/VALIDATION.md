@@ -1,15 +1,49 @@
 # Android validation record
 
-**Current source: version 0.3.0-dev / code 3, simple-home UI.** Its local results
-are recorded under “Current simple-home source validation” below: 168 JVM
-assertions, actual Android Java/resource compilation and three Java-to-Go config
-round-trips. A new native AAR/APK build and on-device UI validation are still pending.
+## Current v4 full-core / optional VPN source
 
-**Historical evidence follows.** The build 1 hashes, signed candidates, emulator
-runs and CI artifacts below belong to the prior implementation, not the current
-code 3 UI. They are retained for provenance and must not be presented as evidence
-that this update was built, signed or run on Android. Neither set establishes
-physical-device or Portal release signoff.
+Version 0.4.0-dev / code 4 has these local source-level results, separate from
+all historical builds below:
+
+- 229 JVM assertions and 36 Java-to-real-Android-core configuration round trips
+- 32 Android core tests repeated three times with the race detector
+- Real Mihomo TCP rule/global/direct fixtures and actual SOCKS5 UDP_ASSOCIATE wire
+  capture; unsupported UDP and explicit UDP opt-outs never silently use DIRECT
+- Same-source/different-destination UDP isolation; bounded flow and DNS ownership;
+  protected sockets; cancellation; dual-stack DNS-to-domain-rule mapping
+- 150 generations ×256 queued UDP packets during Stop/restart, plus deterministic
+  blocked TCP/UDP metadata/rule work and sender saturation/close regressions
+- Patched upstream log and tunnel regressions; focused standard-library queue
+  concurrency regression. Full upstream queue package needs dependency sources
+  unavailable locally and is included in the normal CI gate
+- 17 license/source/patch tests, 10 compiled-manifest parser regressions, complete
+  upstream source/patch verification and fresh real Java/Objective-C bindings
+- Android arm64 source compilation with actual gVisor selected, not its stub;
+  existing adapter/CLI race tests and eight unchanged iOS source guards pass
+
+These are local sockets and synthetic data, not actual Android TUN/device tests.
+No public subscription, host VPN or system network setting was used. Native SDK,
+Java/resource, APK, alignment, complete vendored source and artifact provenance
+are checked by the exact-revision Android CI run; inspect that run's result and
+packaged audit rather than inheriting a prior revision's green checks.
+
+Local vendored archive generation was blocked by uncached dependency sources
+under an offline policy; no partial archive success is claimed. CI uses its
+normal explicitly authorized dependency build flow. The original development
+signing key is absent; no substitute identity is made. Same-key upgrade and
+signed installation cannot be verified here. Physical Android, screen-off/Doze,
+carrier/hotspot, Portal and game acceptance remain unverified.
+
+## Previous v3 baseline
+
+PR #5 exact head `a0dcf23336f91e4e9b4e6bd163731a90d1ccd05f` passed Android
+unsigned build/audit in run `39187047377`. Its APK and complete source were checked
+for artifact provenance. It has no optional phone VPN and uses the older adapter
+entrypoint. Its CI success must not be reused as v4 validation.
+
+**Historical evidence follows.** Build 1 hashes, signed candidates and emulator
+runs below belong to the earlier implementation, not current v4. No evidence
+here establishes physical-device or Portal release signoff.
 
 ## Historical baseline: passed
 
@@ -45,7 +79,7 @@ Historical build 1 unsigned APK: `app/build/outputs/apk/release/app-release-unsi
 
 Development-signed test APK: `app/build/outputs/apk/release/psportal-android-development.apk`
 
-- Size: 75,216,056 bytes
+- Size: 75,229,056 bytes
 - SHA256: `4327d921988cbca20b520ff32ba8f57085e327567ca7ab17420faad0d53f3c62`
 - Public signing certificate SHA256:
   `7239e963e690e62a50bbd14939c15b749b51e14b7e3454795ef379ec12c5ec60`
