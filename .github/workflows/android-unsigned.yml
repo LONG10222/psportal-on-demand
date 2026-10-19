@@ -11,6 +11,9 @@ name: Native Android Unsigned
     paths:
       - 'native/engine/**'
       - 'native/mobile/**'
+      - 'native/androidcore/**'
+      - 'native/androidmobile/**'
+      - 'native/third_party/**'
       - 'native/android/**'
       - 'native/scripts/**'
       - 'native/go.mod'
@@ -61,6 +64,7 @@ jobs:
           path: |
             native/android/build/ci-build.log
             native/android/build/reports/*.json
+            native/android/build/reports/compiled-manifest.txt
             native/android/app/build/reports/lint-results-release.*
           if-no-files-found: ignore
           retention-days: 1

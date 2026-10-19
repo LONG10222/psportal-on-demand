@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -283,6 +284,12 @@ func (r Request) ForwardedHeader(external bool) []byte {
 
 // Proxy handles one strict HTTP request per connection; CONNECT is a byte
 // tunnel. The bounded parser intentionally avoids net/http's lenient parsing.
+type clientRecord struct {
+	Active   uint64 `json:"active"`
+	Accepted uint64 `json:"accepted"`
+	LastSeen int64  `json:"last_seen"`
+}
+
 type Proxy struct {
 	cfg         Config
 	core        Core
@@ -296,15 +303,17 @@ type Proxy struct {
 	closing     bool
 	connections map[net.Conn]struct{}
 	wg          sync.WaitGroup
+	clients     map[string]*clientRecord
 	stats       map[string]uint64
+	lastError   string
 	resolver    ipResolver
 	dial        func(context.Context, string, string) (net.Conn, error)
 }
 
 func NewProxy(cfg Config, core Core) *Proxy {
 	return &Proxy{cfg: cfg, core: core, timeout: time.Duration(cfg.RequestTimeout) * time.Second,
-		allowed: map[string]bool{}, connections: map[net.Conn]struct{}{},
-		stats:    map[string]uint64{"accepted": 0, "denied_clients": 0, "local_requests": 0, "external_requests": 0, "errors": 0, "active": 0},
+		allowed: map[string]bool{}, clients: map[string]*clientRecord{}, connections: map[net.Conn]struct{}{},
+		stats:    map[string]uint64{"accepted": 0, "denied_clients": 0, "local_requests": 0, "external_requests": 0, "errors": 0, "active": 0, "waking": 0, "forwarding": 0},
 		resolver: systemResolver, dial: (&net.Dialer{}).DialContext}
 }
 func (p *Proxy) Start() error {
@@ -360,6 +369,9 @@ func (p *Proxy) Stop() error {
 	}
 	p.mu.Unlock()
 	p.wg.Wait()
+	p.mu.Lock()
+	clear(p.clients)
+	p.mu.Unlock()
 	return nil
 }
 func (p *Proxy) Status() map[string]any {
@@ -369,9 +381,38 @@ func (p *Proxy) Status() map[string]any {
 	if p.listener != nil {
 		out["listen_address"] = p.listener.Addr().String()
 	}
+	clients := make([]map[string]any, 0)
+	activeDevices := 0
+	now := time.Now().Unix()
+	keys := make([]string, 0, len(p.clients))
+	for ip, item := range p.clients {
+		if item.Active == 0 && now-item.LastSeen >= 300 {
+			delete(p.clients, ip)
+			continue
+		}
+		keys = append(keys, ip)
+	}
+	sort.Strings(keys)
+	for _, ip := range keys {
+		item := p.clients[ip]
+		if item.Active > 0 {
+			activeDevices++
+		}
+		clients = append(clients, map[string]any{"ip": ip, "active": item.Active, "accepted": item.Accepted, "last_seen": item.LastSeen})
+	}
+	out["devices"] = clients
+	out["active_devices"] = activeDevices
 	for key, value := range p.stats {
 		out[key] = value
 	}
+	activeIPs := make([]string, 0, activeDevices)
+	for _, ip := range keys {
+		if p.clients[ip].Active > 0 {
+			activeIPs = append(activeIPs, ip)
+		}
+	}
+	out["client_ips"], out["connected_clients"], out["active_connections"] = activeIPs, activeDevices, p.stats["active"]
+	out["error"] = p.lastError
 	return out
 }
 func (p *Proxy) increment(key string) { p.mu.Lock(); p.stats[key]++; p.mu.Unlock() }
@@ -404,15 +445,25 @@ type timedConn struct {
 	timeout time.Duration
 	// Set only by the single reader before header parsing, preventing a
 	// slow client from extending the total header timeout one byte at a time.
-	readLimit time.Time
+	readLimit  time.Time
+	readClosed atomic.Bool
 }
 
 func (c *timedConn) Read(b []byte) (int, error) {
+	if c.readClosed.Load() {
+		return 0, net.ErrClosed
+	}
 	deadline := time.Now().Add(c.timeout)
 	if !c.readLimit.IsZero() && c.readLimit.Before(deadline) {
 		deadline = c.readLimit
 	}
 	_ = c.Conn.SetReadDeadline(deadline)
+	if c.readClosed.Load() {
+		// CloseRead may have raced with the deadline refresh above. Never
+		// let a new read restore the idle timeout after cancellation.
+		_ = c.Conn.SetReadDeadline(time.Now())
+		return 0, net.ErrClosed
+	}
 	return c.Conn.Read(b)
 }
 func (c *timedConn) Write(b []byte) (int, error) {
@@ -420,10 +471,16 @@ func (c *timedConn) Write(b []byte) (int, error) {
 	return c.Conn.Write(b)
 }
 func (c *timedConn) CloseRead() error {
+	c.readClosed.Store(true)
+	// Socket shutdown alone need not cancel a pending asynchronous read on
+	// Windows. An expired deadline wakes Go's poller without closing writes.
+	err := c.Conn.SetReadDeadline(time.Now())
 	if half, ok := c.Conn.(interface{ CloseRead() error }); ok {
-		return half.CloseRead()
+		if closeErr := half.CloseRead(); closeErr != nil {
+			return closeErr
+		}
 	}
-	return c.Conn.SetReadDeadline(time.Now())
+	return err
 }
 func (c *timedConn) CloseWrite() error { return closeWriteUpstream(c.Conn) }
 
@@ -645,8 +702,22 @@ func (p *Proxy) handle(ctx context.Context, raw net.Conn) {
 	}
 	p.stats["active"]++
 	p.stats["accepted"]++
+	item := p.clients[peer]
+	if item == nil {
+		item = &clientRecord{}
+		p.clients[peer] = item
+	}
+	item.Active++
+	item.Accepted++
+	item.LastSeen = time.Now().Unix()
 	p.mu.Unlock()
-	defer func() { p.mu.Lock(); p.stats["active"]--; p.mu.Unlock() }()
+	defer func() {
+		p.mu.Lock()
+		p.stats["active"]--
+		item.Active--
+		item.LastSeen = time.Now().Unix()
+		p.mu.Unlock()
+	}()
 	var responded atomic.Bool
 	err = p.serve(ctx, client, &responded)
 	if err == nil {
@@ -668,6 +739,11 @@ func (p *Proxy) handle(ctx context.Context, raw net.Conn) {
 		status = 504
 	case errors.As(err, &timeout) && timeout.Timeout():
 		status = 504
+	}
+	if status == 502 || status == 504 {
+		p.mu.Lock()
+		p.lastError = "Forwarding failed; check the proxy engine and connectivity"
+		p.mu.Unlock()
 	}
 	p.writeError(client, status)
 }
@@ -700,7 +776,11 @@ func (p *Proxy) serve(ctx context.Context, client *timedConn, responded *atomic.
 			startupTimeout = p.timeout
 		}
 		startupCtx, startupCancel := context.WithTimeout(ctx, startupTimeout)
+		p.increment("waking")
 		endpoint, e := p.core.Acquire(startupCtx)
+		p.mu.Lock()
+		p.stats["waking"]--
+		p.mu.Unlock()
 		startupCancel()
 		if e != nil {
 			return e
@@ -735,9 +815,11 @@ func (p *Proxy) serve(ctx context.Context, client *timedConn, responded *atomic.
 		p.mu.Unlock()
 		return context.Canceled
 	}
+	p.stats["forwarding"]++
+	p.lastError = ""
 	p.connections[rawUpstream] = struct{}{}
 	p.mu.Unlock()
-	defer func() { p.mu.Lock(); delete(p.connections, rawUpstream); p.mu.Unlock() }()
+	defer func() { p.mu.Lock(); delete(p.connections, rawUpstream); p.stats["forwarding"]--; p.mu.Unlock() }()
 	upstream := &timedConn{Conn: rawUpstream, timeout: p.timeout}
 	upReader := bufio.NewReaderSize(upstream, MaxLineBytes+2)
 	if request.Method == "CONNECT" {

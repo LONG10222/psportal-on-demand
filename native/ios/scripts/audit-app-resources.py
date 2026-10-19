@@ -48,7 +48,9 @@ def audit(app):
     reasons = {entry["NSPrivacyAccessedAPIType"]: entry["NSPrivacyAccessedAPITypeReasons"] for entry in entries}
     assert len(reasons) == len(entries) and reasons == EXPECTED, "Review changed required-reason declarations"
     assert info["NSLocalNetworkUsageDescription"]
-    assert not info.get("UIBackgroundModes") and not info.get("UIFileSharingEnabled")
+    assert info.get("UIBackgroundModes") == ["processing"]
+    assert info.get("BGTaskSchedulerPermittedIdentifiers") == ["org.psportal.host.foreground.sharing.*"]
+    assert not info.get("UIFileSharingEnabled")
     assert not (app / "embedded.mobileprovision").exists(), "Unexpected device provisioning"
     assert not list(app.rglob("*.appex")), "Unexpected extension target"
     # Newly linked categories need review instead of silently adding blanket reasons.

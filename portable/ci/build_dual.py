@@ -38,6 +38,7 @@ def main():
     print('Fixture python3 on PATH:', shutil.which('python3'), flush=True)
     system = {'Linux': 'linux', 'Darwin': 'darwin', 'Windows': 'windows'}[platform.system()]
     arch = {'x86_64': 'amd64', 'AMD64': 'amd64', 'aarch64': 'arm64', 'arm64': 'arm64'}[platform.machine()]
+    run([sys.executable, PORTABLE / 'scripts/fetch_yaml_sources.py'])
     run([sys.executable, NATIVE / 'scripts/build.py', '--target', f'{system}/{arch}'])
     run([sys.executable, NATIVE / 'scripts/source_release.py'])
     native = NATIVE / 'dist' / f'psportal-{system}-{arch}' / ('psportal.exe' if system == 'windows' else 'psportal')
@@ -75,6 +76,14 @@ def main():
     skips = re.search(r'OK \(skipped=(\d+)\)', tested.stdout)
     assert count, 'Test runner did not report its count'
     release = PORTABLE / 'release'
+    # Recheck source/license presence after acceptance tests and before upload.
+    sys.path.insert(0, str(PORTABLE))
+    from scripts.pyyaml_runtime import installed_evidence, verify_archive_notices
+    yaml_evidence = installed_evidence(strict=True)
+    archives = list(release.glob('PSPortalProxy-' + system + '-*'))
+    assert len(archives) == 1, 'Expected one exact tested desktop archive'
+    verify_archive_notices(archives[0], PORTABLE / 'dist/PSPortalProxy/licenses/pyyaml-6.0.3',
+                           macos=system == 'darwin')
     if system == 'darwin':
         archives = list(release.glob('PSPortalProxy-darwin-*.tar.gz'))
         assert len(archives) == 1, 'Expected one final macOS archive'
@@ -90,6 +99,8 @@ def main():
         native_platform_frozen_window_smoke_tested=args.frozen_window,
         source_tk_gui_both_modes_tested=args.source_tk or args.xvfb,
         matching_bundled_native_discovery_tested=True,
+        exact_pyyaml_wheel_and_frozen_modules_verified=yaml_evidence['reviewed'],
+        complete_pyyaml_libyaml_notices_and_sources_archived=True,
         exact_cpython_runtime_notices=args.cpython_runtime_notices,
         exact_debian_runtime_notices=args.debian_runtime_notices,
         final_macos_archive_acceptance_tested=system == 'darwin',

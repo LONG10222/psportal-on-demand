@@ -1,4 +1,26 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package main
-import("os";"fmt";"github.com/psportal/psportal/native/engine")
-func main(){ b,e:=os.ReadFile(os.Args[1]);if e!=nil{panic(e)};c,e:=engine.ParseConfig(string(b));if e!=nil{panic(e)};if c.PreferredNode!="香港 A" || c.AllowedClients[0]!="192.168.1.30"{panic("roundtrip mismatch")};fmt.Println("PASS: Android-generated config accepted by real Go engine.ParseConfig") }
+
+import (
+    "fmt"
+    "os"
+    "github.com/psportal/psportal/native/androidcore"
+)
+func main() {
+    bytes, err := os.ReadFile(os.Args[1]); if err != nil { panic(err) }
+    config, err := androidcore.ParseConfig(string(bytes)); if err != nil { panic(err) }
+    if len(os.Args) != 4 || config.RoutingMode != os.Args[2] { panic("routing roundtrip mismatch") }
+    topology := os.Args[3]
+    if config.LANEnabled != (topology != "vpn") || config.PhoneVPN != (topology != "lan") { panic("session option roundtrip mismatch") }
+    switch config.SelectionMode {
+    case "fixed", "prefer":
+        if config.PreferredNode != "香港 A" || config.LANEnabled && config.AllowedClients[0] != "192.168.1.30" { panic("named-node roundtrip mismatch") }
+    case "auto":
+        if config.LANEnabled && len(config.AllowedClients) != 253 { panic("subnet roundtrip mismatch") }
+        for _, ip := range config.AllowedClients { if config.LANEnabled && (ip == config.ListenHost || ip == "192.168.1.0" || ip == "192.168.1.255") { panic("unsafe subnet client") } }
+    case "fastest":
+        if config.SwitchThresholdMS != 75 || config.PreferredNode != "" { panic("fastest roundtrip mismatch") }
+    default: panic("unexpected mode")
+    }
+    fmt.Println("PASS: Android-generated", config.SelectionMode, config.RoutingMode, topology, "config accepted by real Go androidcore.ParseConfig")
+}

@@ -1,0 +1,27 @@
+[
+  {
+    "bundle": "/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/ios-derived/Build/Products/Debug-iphonesimulator/PSPortalHost.app",
+    "bundle_id": "org.psportal.host.foreground",
+    "platform": [
+      "iPhoneSimulator"
+    ],
+    "required_reason_imports": [],
+    "privacy_manifest_sha256": "0ab816119593af398a4fdef28ef7744378e26d43f3f1e456912b6f30bc82da1b",
+    "required_reasons": {
+      "NSPrivacyAccessedAPICategoryFileTimestamp": [
+        "C617.1"
+      ],
+      "NSPrivacyAccessedAPICategorySystemBootTime": [
+        "35F9.1"
+      ]
+    },
+    "notice_sha256": {
+      "GPL-3.0.txt": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+      "PROJECT-MIT.txt": "2c74cada35e8bc75849fbb75b5ac6ce7f80bcf3373aec175c5b26d6ba131df28",
+      "THIRD-PARTY-NOTICES.txt": "c563c80d8c3618d61ed6682041bf1c39a63dfd9fe305a9c5fe67718dff7ab2af",
+      "ENGINE-NOTICES.txt": "7d17847fa0b85799d19bca8202711f4d478b2d063c3d112ca704bb72578b0cb5"
+    },
+    "app_icon_declared": false,
+    "scope": "Required-reason/resource guardrail only; not App Store validation or a full data-flow/privacy audit"
+  }
+]

@@ -1,69 +1,112 @@
-# PS Portal On-Demand
+# 星渡 StarPass · 按需代理与设备共享
 
-为 PlayStation Portal 提供按需启动的 HTTP/HTTPS 代理。外网请求唤醒代理核心，空闲后关闭；局域网连接直连。
+星渡 StarPass 延续 PS Portal On-Demand 项目。新界面以「游戏／混合／Clash」区分接入用途，
+与规则／全局／直连分流设置分开；[各平台的实际模式范围与限制](docs/starpass-platform-modes.zh-CN.md)
+说明了哪些能力已实现。桌面不自动设置系统代理，Android 本机代理仍需 VPN 授权，iOS 仍限前台共享。
 
-[下载与安装](docs/downloads.zh-CN.md) · [路由器指南](README.zh-CN.md) · [桌面指南](portable/docs/desktop.md) · [验证记录](docs/portable-status.zh-CN.md)
+让不方便安装代理客户端的设备，通过电脑、手机或路由器上的 HTTP/HTTPS 代理接入网络。外网请求按需唤醒自己管理的核心，空闲后回收；局域网请求直连。界面参考 Clash 的使用习惯，核心仍是设备共享与按需运行。
 
-## 功能
+[本机开发版使用说明](START-HERE.md) · [本轮验证](VALIDATION-LOCAL.md) · [需求与进度](REBUILD.md) · [历史产物下载](docs/downloads.zh-CN.md) · [路由器指南](README.zh-CN.md)
 
-- 独立运行，不依赖 OpenClash 服务，不改系统代理、DNS 或 VPN
-- 使用自己的 Clash/Mihomo 订阅，支持自动选择、首选回退和固定节点
-- 按客户端 IP 限制接入；活跃外网连接不会被空闲计时器中断
-- Windows、macOS、Linux 共用桌面界面；Android 与 iOS 使用共享原生引擎
+2026-10-19：已整合设备连接统计、独立订阅的节点切换及最低延迟自动选择，并纳入 GitHub 新增的 Windows/Linux 只读网络识别与 YAML 打包审计修复。[云端检查与日志说明](GITHUB-STATUS.md)。
 
-本项目处理 HTTP 和 HTTPS CONNECT，不转发任意 UDP，也不能保证 Portal 的所有流量都会使用手动代理。真实 Portal/Wi-Fi 与订阅节点仍需验收。
+当前是开发预览版，未发布本轮独立安装包。仓库中的 `OnDemand Desktop Local.app` 仅供已准备运行环境的当前开发工作区使用，不能单独复制到其他电脑。历史下载产物不包含本轮界面改动。
 
-## 平台
+## Android 手机独立运行
 
-当前提供开发预览版，尚未发布正式 Release。
+Android v4 开发源码改为单应用内嵌 Mihomo，局域网共享、代理本机应用和后台继续运行分别可选，提供规则／全局／直连模式。本机代理默认关闭，开启须通过 Android 系统 VPN 授权；仅本机代理时不开放局域网端口。支持范围、未验证项目与签名限制见 [Android 说明](native/android/FULL-CORE.md)。下面的两种方式主要说明桌面流程。
 
-| 平台 | 可用形式 | 说明 |
+## 两种使用方式
+
+| 模式 | 操作 | 节点与规则由谁管理 |
 | --- | --- | --- |
-| OpenWrt / iStoreOS | Lua 服务、可选 LuCI 页面 | 原有路由器版本；需目标设备验收 |
-| Windows x64 | 桌面程序 | 无需另装 Python；未做代码签名 |
-| macOS Apple Silicon | 桌面 `.app` | 至少 macOS 13，实测 macOS 15；未做 Developer ID 签名或公证 |
-| Linux x86_64 | 桌面程序 | 实测 Debian 13；需 GLIBC_2.38 符号及图形环境 |
-| Linux / Windows / macOS | amd64、arm64 原生 CLI | 六种组合已在对应系统运行；功能仍为实验性 |
-| Android | arm64-v8a、x86_64 APK | Android 8+，开发签名；运行证据来自 x86_64 模拟器 |
-| iOS | arm64 Simulator、未签名设备构建 | 仅前台运行；设备版需自行签名与配置 |
+| 导入自己的订阅 | 粘贴 HTTPS 订阅 → 一键准备并启动 → 按页面提示设置设备 Wi-Fi 手动 HTTP 代理 | OnDemand 管理自己的 Mihomo；完整配置保留原节点、策略组与规则 |
+| 关联现有 Clash／系统代理 | 检测本机已配置的回环 HTTP 代理 → 点击复用 → 设置设备 Wi-Fi 代理 | 原 Clash 客户端管理节点、测速、规则与核心；OnDemand 只提供局域网入口 |
 
-架构、运行条件和每个产物对应的提交见[下载说明](docs/downloads.zh-CN.md)。编译、模拟器测试和手机实测不等价。
+本程序不切换原 Clash 的节点、不修改其配置，也不停止原 Clash。打开窗口与切换语言不会启动代理服务，不修改系统代理、DNS、VPN 或防火墙。
 
-## 快速开始
+![简洁中文首页](evidence/simple-home-zh.png)
 
-### 桌面
+## 桌面快速开始
 
-1. 下载并解压匹配系统的完整桌面归档。若拿到的是 `runtime`、`native-engine`、`corresponding-source` 三个小包，**解压到同一个目录**；不要混用不同版本
-2. 打开桌面程序，填写本机局域网 IPv4、Portal 的固定 IPv4、端口（默认 `10081`）和自己的 HTTPS 订阅
-3. 选择引擎：默认 `external` 使用自行准备的可信 [Mihomo](https://github.com/MetaCubeX/mihomo/releases)；实验性 `embedded` 使用随包原生引擎。两者失败时不会自动互换
-4. 保存并启动监听，等到状态显示就绪。Portal 的手动 HTTP 代理填写这台电脑的地址和端口，IP/网关/DNS 保持原有设置
+Mac 已经准备好本机开发环境时，双击 `OnDemand Desktop Local.app` 或 `Launch macOS.command`。源码运行与依赖准备见 [portable/README.md](portable/README.md)，默认使用自己提供的可信 [Mihomo](https://github.com/MetaCubeX/mihomo/releases)。
 
-电脑需保持运行并与 Portal 网络互通。完整解压命令、运行依赖和移动端安装见[安装说明](docs/downloads.zh-CN.md)。路由器用户直接看[OpenWrt / iStoreOS 安装](README.zh-CN.md#快速开始)，不要在桌面执行 `install.sh`。
+Windows/Linux 使用对应平台构建的程序或源码入口；简洁流程只读取物理接口与真实掩码，接口不明确时转入高级设置，不修改系统网络。
 
-### 节点选择
+1. 粘贴 Clash/Mihomo 的 HTTPS YAML/JSON 订阅，点击“一键准备并启动”；也可以点击“复用已有 Clash／系统代理”。
+2. 程序识别当前局域网 IPv4，优先保留端口 **10081**，被占用时才选择备用端口。
+3. 等待监听就绪，打开“局域网共享”。让设备接入同一个可互通的 Wi-Fi，在其 Wi-Fi 设置中选择 **HTTP 代理 → 手动**，填写页面显示的服务器地址、端口，认证关闭。
+4. 使用结束后点击“停止”。关联模式只停止我们自己的入口和连接；独立模式回收我们自己的核心。
 
-| 模式 | 行为 |
+以界面实际显示的地址、端口为准。地址由当前网络分配，应用无法保证 DHCP 地址永远不变；网络变化后需要重新准备并更新设备代理。若要长期固定地址，可自行在路由器设置地址保留。自动接入仅支持当前私网 `/24` 至 `/30` 网段；更大范围使用高级精确 IP 名单。
+
+## 订阅与信息显示
+
+- 直接导入订阅时，读取服务器返回的 `subscription-userinfo`，展示已用、总量、剩余流量、到期时间及使用进度。
+- 字段缺失时显示“未提供”，不把缺失统计解释为无限流量。桌面统计截至上次导入，再次准备会刷新。
+- 标准 Clash Verge 数据目录可只读提取当前订阅名称和套餐缓存，标明“只读、非实时”与更新时间；不读取控制器来更新原订阅，不输出订阅 URL 或令牌。
+- 当前接受 Clash/Mihomo YAML 与 JSON，不支持原始 Base64、单节点 URI；HTTPS 下载不跟随重定向。
+
+右上角支持中英文即时切换；高级设置保留本地配置导入、节点策略、规则预览、日志、主题及原来的实验性 embedded 引擎。完整配置在运行副本中关闭 TUN、额外 DNS 服务监听和额外入口，原订阅文件不变。
+
+## 节点选择与设备连接
+
+实时控制的模式、资源上限与逐组行为见[控制说明](portable/docs/runtime-controls.md)。
+
+普通 provider 保留原来的 `auto`（香港 → 日本 → 其他）、`prefer`（首选失败回退）、`fixed`（固定且不静默回退）。独立订阅的 Mac 外部核心模式已增加实时节点控制；完整 profile 使用原策略组。
+
+节点页明确区分两种模式：
+
+- **关联 Clash**：节点选择、测速与自动化全部交给 Clash，OnDemand 不接管。
+- **直接订阅**：启动监听后，打开“代理策略”并点击“加载节点”。选择策略组与节点，点击“切换节点”或双击行；可单独测速，也可点击“自动选择最低延迟”。当前节点、协议、最近延迟及组策略均可见。
+- **自动最低延迟**：按真实健康检查延迟选择，未测量与 0 ms 区分。桌面与旧版 Android 适配器的稳定策略要求健康节点切换超过延迟差、连续两个完整轮次并经过保持期；部分完成的测速不会推进切换轮次。核心休眠时不为周期测速重新唤醒。完整配置保留组本身的回退语义，iOS 原有即时最低延迟行为保留。延迟不是游戏服务器延迟。
+- **设备连接**：首页显示按来源 IP 去重的活跃设备数与连接数；“设备连接”页列出来源 IP、当前连接数、累计接入和最近时间。连接关闭后活跃数下降，最近记录在内存中保留 5 分钟，停止服务后清空。
+- **运行反馈**：首页突出“正在启动”“已启动·等待设备接入”“设备正在使用代理”，并显示实际接入地址。设备有连接不代表外网访问已成功；设备页可查看错误计数。
+
+完整配置中的 Fallback/URLTest 保留原组的健康回退行为；请求的偏好不等于当前实际出口，不能把它描述为稳定固定路由。普通订阅的外层 Selector 则保留固定选择语义。
+
+切换节点只影响新建连接，不强制断开现有连接。成功的手动选择和自动模式保存在本程序的私有配置中，核心空闲回收后仍保留；导入另一份配置会清除旧组偏好。普通 provider 在图形界面下增加 Selector 外层，默认仍走原地区策略；CLI 原策略保留。iOS 已同步共享状态、节点列表和设备面板；手机使用自己的内置适配器池，节点选择只在本次运行中保留，不导入完整 Clash 分组与规则。Android 与实验性 embedded 桌面界面尚未接入这些面板；桌面 embedded 显示统计不可用，避免把未知数显示为零。
+
+## iPhone / iPad 使用
+
+手机端仅采用订阅链接导入与自己的内置核心，无需同时运行另一款代理应用。用户要求的后台持续局域网共享尚未实现；默认切后台／锁屏会停止；新增 iOS 26+ 真机 15/30/60 分钟后台实验，必须获系统实际授权，模拟器不可用，尚未真机验收，不能按后台常驻产品验收。见 [手机需求与后台可行性](native/ios/MOBILE-REQUIREMENTS.md)。
+
+粘贴订阅后，在“共享”页一键准备并启动；默认优先端口 10081。按页面指引给其他设备配置 Wi-Fi 手动 HTTP 代理。“节点”页点击“载入节点”后可查看名称、协议、延迟并点选切换，或启用最低延迟自动选择；“设备”页显示实际代理来源和连接。所有控制只作用于自己的内置核心，不连接其他客户端控制器。
+
+Wi-Fi 与蜂窝上行自动识别；蜂窝不等于个人热点已开启，仍需用户确认本机热点，并检测到实际私网共享接口。网络接口、地址或掩码变化时，一键启动的监听停止并提示重新配置。iOS 无实际后台任务授权时切后台或锁屏会停止服务；限时实验不保证系统授予或完整运行时长。详情见 [iOS 说明](native/ios/README.md)。
+
+## 平台与验证状态
+
+| 平台 | 当前状态 |
 | --- | --- |
-| `auto` | 香港 → 日本 → 其他节点，结合健康状态选择 |
-| `prefer` | 优先指定节点，不可用时按自动顺序回退 |
-| `fixed` | 只用指定节点；名称不存在或节点不可用时失败，不换节点、不直连外网 |
+| macOS Apple Silicon | 用户 PR #4 基线在 macOS 27.0.1 回归：238 项通过、9 项跳过；包含真实窗口、独立后端、真实 Mihomo 控制及证书校验测试 |
+| iOS | 用户 PR #4 基线新增共享／节点／设备三页；真实 XCFramework 重建，iOS 27.0 Simulator 20 项通过、1 项硬件检查跳过；只支持前台且解锁时提供服务 |
+| Windows / Linux | 已整合只读物理网络与现有代理识别，并在本机执行受控解析测试；真实主机和本轮云端打包结果仍需分别验收 |
+| Android | v3 中文默认简洁界面、主题/语言与实时控制已完成源码回归；重新整合后的 AAR/APK 与设备运行待验证 |
+| OpenWrt / iStoreOS | 保留 Lua 服务与可选 LuCI；见[路由器指南](README.zh-CN.md) |
 
-`prefer` / `fixed` 填写订阅中的**完整节点名**。桌面还可选择本地 provider 文件；非空文件路径优先于 URL。移动端使用 HTTPS 订阅。内置引擎只导入节点数据，不接受完整配置中的脚本、系统路由或任意文件引用；支持范围见[原生引擎说明](native/README.md)。
+上述历史 Mac/iOS 结果不代表新整合提交已通过。精确代码与平台验收范围见 [更新日志](CHANGELOG.md)。
 
-## 使用限制
+2026-10-18 用户反馈手机已经接入并可使用；这是用户提供的实际使用反馈，不替代开发侧的独立端到端验收。真实 iPhone 个人热点、游戏机、公网加密节点及不同设备仍需逐项验证。编译、模拟器与真机验证不等价。
 
-只在可信局域网使用，不要把监听端口转发到公网。IP 白名单不是身份认证；订阅 URL 可能含凭据，不要贴到日志或 Issue。程序不自动放行防火墙。
+## 边界
 
-Android 需要用户主动启动前台服务；关屏短时测试通过不代表 Doze 或所有手机省电策略均可用。iOS 切到后台会停止代理，不提供后台常驻承诺。真实手机、Portal 和公网加密节点端到端验证仍有缺口，详见[验证记录](docs/portable-status.zh-CN.md)。
+本项目转发 HTTP 与 HTTPS CONNECT，**不是任意 UDP 游戏中继**，不能保证所有游戏流量都遵循设备的手动 HTTP 代理。只在可信局域网使用，不向公网转发监听端口。活跃设备统计只能反映连接到本程序的客户端，不能枚举路由器上的所有 Wi-Fi 设备。
+
+iPhone 使用公开接口区分 Wi-Fi 与蜂窝；蜂窝连接不代表个人热点已开启。热点模式需要真实可读取的私网共享接口及用户确认。iOS 不能任意读取其他代理应用的私有配置，切换应用或锁屏后会停止服务。
 
 ## 文档与开发
 
-- [路由器配置、OpenClash 共存与排障](docs/guide.zh-CN.md) · [English router guide](docs/router-readme.en.md)
-- [节点偏好与 LuCI](docs/node-preferences.zh-CN.md)
-- [桌面源码运行与测试](portable/README.md)
-- [原生引擎与构建](native/README.md) · [Android](native/android/README.md) · [iOS](native/ios/README.md)
+- [本机验证记录与复现](VALIDATION-LOCAL.md) · [Clash 开源参考与只读范围](SOURCE-REFERENCE.md)
+- [桌面源码与构建](portable/README.md) · [原生引擎](native/README.md) · [iOS](native/ios/README.md) · [Android](native/android/README.md)
+- [路由器配置与排障](docs/guide.zh-CN.md) · [English router guide](docs/router-readme.en.md)
 - [安全说明](SECURITY.md) · [GitHub Actions](https://github.com/LONG10222/psportal-on-demand/actions)
 
 ## 许可证
 
-原有路由器代码与桌面包装层使用 [MIT](LICENSE)。链接 Mihomo 的原生引擎使用 [GPL-3.0-only](native/LICENSE)，依赖遵循各自许可证。分发原生程序时，请保留同版本完整对应源码、vendor 依赖和许可证；不要只转发二进制。
+原有路由器代码与桌面包装层使用 [MIT](LICENSE)。链接 Mihomo 的原生引擎使用 [GPL-3.0-only](native/LICENSE)，依赖遵循各自许可证。Clash Verge 仅作为界面与格式参考，未复制其图标或组件。分发原生程序时需保留同版本完整对应源码、依赖和许可证；本轮未完成公共发行许可审查，详见验证记录。
+
+
+## 本轮手机界面设计
+
+iPhone/iPad 已按星渡品牌调整为共享、节点、设备、设置四页：首页突出订阅导入与启停，接入地址和 Wi-Fi 三步说明集中显示；节点支持搜索、可用筛选和延迟排序；设置结果在原页反馈。中英文、深浅色及 iPhone 13 mini 窄屏已检查。源码与验证见 [手机设计说明](native/ios/MOBILE-DESIGN.md)。后台能力保持当前实际限制。

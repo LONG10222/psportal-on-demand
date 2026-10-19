@@ -27,7 +27,14 @@ test -f "$ANDROID_NDK_HOME/source.properties"
 java -version
 go version
 ./tools/test-host.sh
+python3 tests/test_apk_manifest.py
 ./tools/test-binding-config.sh
+python3 "$NATIVE/scripts/verify_mihomo_patch.py"
+(cd "$NATIVE" && go test -race github.com/metacubex/mihomo/log github.com/metacubex/mihomo/tunnel)
+(cd "$NATIVE/third_party/mihomo" && go test -race ./common/queue)
+(cd "$NATIVE" && go test -race -count=10 -tags=no_easytier,no_zerotier,no_tailscale -run '^TestSelectorSelection' github.com/metacubex/mihomo/adapter/outboundgroup)
+(cd "$NATIVE" && go test -race -tags=no_easytier,no_zerotier,no_tailscale,with_gvisor ./androidcore ./androidmobile)
+(cd "$NATIVE/scripts" && python3 -m unittest test_licenses test_source_release test_mihomo_patch)
 (cd "$NATIVE" && ./scripts/mobile.sh tools && ./scripts/mobile.sh android)
 ./gradlew --no-daemon --max-workers=2 :app:assembleRelease :app:lintRelease
 python3 tools/audit-apk.py app/build/outputs/apk/release/app-release-unsigned.apk \
@@ -37,7 +44,7 @@ OUT="$NATIVE/dist/android-unsigned"
 mkdir -p "$OUT"
 cp app/build/outputs/apk/release/app-release-unsigned.apk "$OUT/psportal-android-unsigned.apk"
 cp "$NATIVE/dist/psportal-native-corresponding-source.tar.gz" "$OUT/"
-cp build/reports/apk-audit.json README.md VALIDATION.md "$OUT/"
+cp build/reports/apk-audit.json README.md VALIDATION.md FULL-CORE.md BACKGROUND.md PHONE-VPN.md "$OUT/"
 cp "$NATIVE/LICENSE" "$NATIVE/THIRD_PARTY_NOTICES.md" "$OUT/"
 tar -czf "$OUT/engine-dependency-licenses.tar.gz" -C "$NATIVE/dist" licenses
 { git -C "$NATIVE" rev-parse HEAD; java -version 2>&1; go version; cat "$ANDROID_NDK_HOME/source.properties"; } >"$OUT/build-toolchain.txt"

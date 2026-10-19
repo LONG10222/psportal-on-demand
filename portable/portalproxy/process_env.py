@@ -34,10 +34,12 @@ def external_environment():
     return env
 
 
-async def launch_external(*args):
+async def launch_external(*args, cwd=None):
     """Only changes the spawned core's environment; never invokes a shell."""
     kwargs = dict(env=external_environment(), stdout=asyncio.subprocess.DEVNULL,
                   stderr=asyncio.subprocess.DEVNULL)
+    if cwd is not None:
+        kwargs['cwd'] = str(cwd)
     setter = None
     if sys.platform == 'win32':
         kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW

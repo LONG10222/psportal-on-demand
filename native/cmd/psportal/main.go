@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -62,11 +64,27 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(quit)
+	control := &runtimeControl{app: app}
 	var parentClosed <-chan struct{}
 	if *desktopChild {
 		closed := make(chan struct{})
 		parentClosed = closed
-		go func() { _, _ = io.Copy(io.Discard, os.Stdin); close(closed) }()
+		go func() {
+			defer close(closed)
+			scanner := bufio.NewScanner(os.Stdin)
+			scanner.Buffer(make([]byte, 4096), 4097)
+			for scanner.Scan() {
+				line := scanner.Text()
+				if strings.TrimSpace(line) == "stop" {
+					return
+				}
+				control.accept(line)
+			}
+		}()
+		if *status <= 0 {
+			*status = time.Second
+		}
+		control.publish()
 	}
 	if *status <= 0 {
 		select {
@@ -84,7 +102,7 @@ func main() {
 		case <-parentClosed:
 			return
 		case <-ticker.C:
-			fmt.Println(app.Status())
+			control.publish()
 		}
 	}
 }

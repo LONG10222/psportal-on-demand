@@ -159,3 +159,42 @@ async def resolve_destination(host: str, port: int) -> Route:
     if has_external:
         return Route("external")
     return Route("local", local_addresses[0])
+
+
+class FastestSelection:
+    """Measured latency selection with a deadband, two rounds, and hold-down.
+
+    Unhealthy/missing current nodes fail over immediately. Healthy nodes only
+    switch after the same challenger wins two complete probe rounds, improving
+    latency by more than the configured threshold, and a 30-second hold-down.
+    """
+    def __init__(self):
+        self.current = ''
+        self.challenger = ''
+        self.rounds = 0
+        self.switched_at = float('-inf')
+
+    def choose(self, nodes, threshold_ms=50, now=None, measured=True):
+        import time
+        now = time.monotonic() if now is None else now
+        if not measured:
+            self.challenger, self.rounds = "", 0
+        healthy = {n['name']: n['delay_ms'] for n in nodes
+                   if n.get('healthy') is True and type(n.get('delay_ms')) in (int, float)
+                   and n['delay_ms'] >= 0}
+        if not healthy:
+            self.challenger, self.rounds = '', 0
+            return ''
+        best = min(healthy, key=lambda name: (healthy[name], name))
+        if self.current not in healthy:
+            self.current, self.switched_at = best, now
+            self.challenger, self.rounds = '', 0
+        elif measured and best != self.current and healthy[self.current] - healthy[best] > threshold_ms:
+            self.rounds = self.rounds + 1 if self.challenger == best else 1
+            self.challenger = best
+            if self.rounds >= 2 and now - self.switched_at >= 30:
+                self.current, self.switched_at = best, now
+                self.challenger, self.rounds = '', 0
+        elif measured:
+            self.challenger, self.rounds = '', 0
+        return self.current

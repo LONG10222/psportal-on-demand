@@ -7,6 +7,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (nullable NSString *)startWithConfigJSON:(NSString *)configJSON NS_SWIFT_NAME(start(configJSON:));
 + (void)stop NS_SWIFT_NAME(stop());
 + (NSString *)statusJSON NS_SWIFT_NAME(statusJSON());
++ (NSString *)subscriptionInfo:(NSString *)url NS_SWIFT_NAME(subscriptionInfo(url:));
++ (NSString *)nodeCommand:(NSString *)command NS_SWIFT_NAME(nodeCommand(_:));
 @end
 NS_ASSUME_NONNULL_END
 

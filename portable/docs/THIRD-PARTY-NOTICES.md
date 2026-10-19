@@ -10,12 +10,13 @@ Authoritative license sources:
 - Tcl: https://github.com/tcltk/tcl/blob/core-9-0-branch/license.terms
 - Tk: https://github.com/tcltk/tk/blob/core-9-0-branch/license.terms
 - PyInstaller: https://github.com/pyinstaller/pyinstaller/blob/v6.16.0/COPYING.txt
+- PyYAML 6.0.3 and its statically linked LibYAML 0.2.5 (MIT): the desktop profile importer uses this pinned dependency. Complete upstream notices and source archives are retained under `licenses/pyyaml-6.0.3/`. The exact upstream wheel extension and all 17 frozen Python module sources are verified independently of CPython/Debian. See `portable/notices/pyyaml-6.0.3/manifest.json` for the source URLs and SHA-256 hashes.
 - Mihomo (not bundled): https://github.com/MetaCubeX/mihomo/blob/Meta/LICENSE
 
 Release gate: audit the exact bundled native libraries and retain their complete matching license files before any public redistribution. The set depends on the Python installation and target OS; builds without a completed exact-runtime inventory remain gated. Check Tcl/Tk, OpenSSL, compression, ffi, graphics/font and platform runtime libraries where present. Do not assume a link substitutes for a required copyright notice.
 
 ## Audited Debian Linux build option
 
-`build.py --debian-runtime-notices` is limited to the tested distro Python 3.13/Tk 8.6 runtime. It fails on unmapped ELF components and retains the complete installed Debian copyright files for the exact bundled objects, plus a SHA256 manifest. The known component set includes Python, Tcl/Tk, OpenSSL, libffi, bzip2, xz, zlib/zstd, Brotli, Expat, PNG, FreeType, Fontconfig and X11 client libraries. FreeType is used under the FTL option. See `licenses/debian/README.txt` and full notices in that package. This does not automatically approve a different OS or Python distribution.
+`build.py --debian-runtime-notices` is limited to the tested distro Python 3.13/Tk 8.6 runtime. The separate pinned PyYAML/LibYAML extension is mapped to its upstream wheel, installed source, full notices and source archives, never to a Debian package. It fails on unmapped ELF components and retains the complete installed Debian copyright files for the exact bundled objects, plus a SHA256 manifest. The known component set includes Python, Tcl/Tk, OpenSSL, libffi, bzip2, xz, zlib/zstd, Brotli, Expat, PNG, FreeType, Fontconfig and X11 client libraries. FreeType is used under the FTL option. See `licenses/debian/README.txt` and full notices in that package. This does not automatically approve a different OS or Python distribution.
 
 When explicitly selected with `--native-engine` and `--native-source`, the package also includes the separate native GPL-3.0 engine process. Its matching full source/vendor archive and complete dependency notices are included under `native/`. The default external-core package does not include this component.

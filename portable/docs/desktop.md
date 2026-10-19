@@ -1,8 +1,39 @@
-# Portable desktop app: Linux-priority preview, Windows and macOS build paths
+# 星渡 StarPass desktop: Windows, macOS and Linux
 
-This is an implementation and native build path, not a signed or fully native-accepted release. One Tk desktop window can select either the established Python listener with separate Mihomo (`external`, the default), or the experimental shared native engine (`embedded`). External mode still uses a separately supplied trusted Mihomo executable. Embedded mode uses the project's native executable with Mihomo adapters linked into that one process. No installer, TUN adapter, administrator service, system proxy, router change, firewall change, automatic startup, or downloaded core is added by the app.
+This is an implementation and native build path, not a signed or fully native-accepted release. One Tk desktop window can select either the established Python listener with separate Mihomo (`external`, the default), or the experimental shared native engine (`embedded`). External mode still uses a separately supplied trusted Mihomo executable with `-post-up` readiness support (tested with official v1.19.32). Embedded mode uses the project's native executable with Mihomo adapters linked into that one process. No installer, TUN adapter, administrator service, system proxy, router change, firewall change, automatic startup, or downloaded core is added by the app.
 
-The application must remain running on an awake computer on the Portal's LAN. Normal Portal use permits only configured exact private LAN IPv4 clients. An optional development-only mode binds to `127.0.0.1` and requires the sole allowed client to be `127.0.0.1`; a real Portal cannot reach that loopback listener. Keep the Portal's IP stable with an existing DHCP reservation. The local Mihomo proxy and controller bind to loopback; the Portal-facing HTTP listener binds only to the configured private LAN address.
+The application must remain running on an awake computer on the Portal's LAN. Normal Portal use permits only configured exact private LAN IPv4 clients. Clash product mode binds to `127.0.0.1` and requires the sole allowed client to be `127.0.0.1`; a real Portal cannot reach that loopback listener. Keep the Portal's IP stable with an existing DHCP reservation. The local Mihomo proxy and controller bind to loopback; the Portal-facing HTTP listener binds only to the configured private LAN address.
+
+## Game, Mixed and Clash product modes
+
+These describe listener inputs, independently of the subscription's routing rules:
+
+- **Game** binds the selected LAN address and permits explicit device IPs, excluding
+  the host's own LAN IP. LAN sharing is HTTP/CONNECT TCP, not arbitrary game UDP
+- **Mixed** includes the host's own LAN IP in addition to the allowed devices.
+  Configure local applications manually to use the displayed LAN address/port
+- **Clash** binds only 127.0.0.1 and accepts only 127.0.0.1. Configure each local
+  application to use that endpoint; LAN devices cannot reach this mode
+
+No OS proxy, TUN, VPN, DNS, firewall or autostart setting is changed. Complete
+profile behavior still requires the external Mihomo path; selecting Clash does
+not make the experimental embedded adapter pool a complete Clash client.
+The mode chooser preserves LAN form preferences, subscription and node choices.
+Changing a mode while stopped only sets up the next run, and does not start it.
+The effective bind/source policy is validated before the backend runs.
+New `product_mode` records the selected use case; `product_lan_preferences`
+retains the editable LAN address/list separately from an effective loopback
+listener. Only explicit `product_lan_automatic: true` allows automatic subnet
+lists to follow a changed network. Legacy saved allowlists are treated as manual,
+not inferred to authorize access for an entire new subnet.
+
+Prepare & start reuses a saved local provider/profile only when `source_provenance`
+records the same accepted subscription URL and exact file path, and revalidates the
+bounded local content before launch. Editing the URL and saving does not relabel
+an old file; legacy unknown provenance with a URL triggers import again. An explicit
+file-picker choice records a local override, shown in the UI. Mode changes preserve
+same-source node choices. Use **Import subscription** for an explicit refresh. Cached
+accounting remains a timestamped server snapshot, not renewed by switching modes.
 
 ## Run from source on Windows
 
@@ -52,7 +83,7 @@ The subscription URL is saved as plaintext in this local file so the proxy can u
 
 Embedded launch creates one temporary allowlisted JSON configuration in a private session directory, mode `0700` with a `0600` file on POSIX. It omits Python-only settings, unknown fields and the unused subscription URL when a local provider is selected. The temporary file is removed after failed launch or observed child exit. Stopping or closing the app cooperatively stops the native child before cleanup. A hard crash or forced OS termination can leave the private temporary directory behind; verify the child is stopped before removing a stale `psportal-native-*` directory. The child stops when its parent's stdin pipe closes, including parent disappearance. Neither mode sends subscription tokens on the command line.
 
-The GUI's log reports listener lifecycle and sanitized diagnostics, not live node/core telemetry. It does not query the controller or wake a core to display status. `auto`/`prefer` fallback and real node health depend on the selected Mihomo release and subscription; check actual behavior before relying on it.
+The GUI displays sanitized live listener/core state, distinct active source IPs, connection counts and node controls over its child process pipes. Displaying status does not wake the core; explicit preparation and latency tests can. Owned direct-subscription controls support manual and measured fastest selection; linked Clash continues to manage its own nodes. See [live runtime controls and resource limits](runtime-controls.md). Real-node behavior still needs validation with the intended subscription and network.
 
 ## Build a native executable
 
@@ -63,6 +94,7 @@ Windows, from `portable` in PowerShell:
 ```powershell
 py -3.12 -m venv .venv-build
 .\.venv-build\Scripts\python.exe -m pip install -r requirements-build.txt
+.\.venv-build\Scripts\python.exe scripts/fetch_yaml_sources.py
 .\.venv-build\Scripts\python.exe build.py
 ```
 
@@ -71,10 +103,11 @@ macOS/Linux, from `portable`:
 ```sh
 python3 -m venv .venv-build
 .venv-build/bin/python -m pip install -r requirements-build.txt
+.venv-build/bin/python scripts/fetch_yaml_sources.py
 .venv-build/bin/python build.py
 ```
 
-The exact PyInstaller build dependency is pinned in `requirements-build.txt`; review and update intentionally before release. Its dependency installation requires access to the official package registry. Do not package real configuration or subscription data.
+The exact PyInstaller build dependency is pinned in `requirements-build.txt`; review and update intentionally before release. Its dependency installation requires access to the official package registry. The separate source-preparation command fetches the exact SHA-pinned public PyYAML/LibYAML source archives into the generated build cache; unchanged cache files can be reused offline. `build.py` never downloads them and fails if they are missing or modified. Do not package real configuration or subscription data.
 
 `build.py` runs the unit tests, creates a one-folder application, checks bundled imports with `--smoke-test`, then writes an archive under `release/`. This is a bundling smoke test, not real GUI or device acceptance. Test skips are not passes. The intentionally available `--skip-tests` option is only for investigating build problems.
 
@@ -82,7 +115,9 @@ The exact PyInstaller build dependency is pinned in `requirements-build.txt`; re
 - macOS: `dist/PSPortalProxy.app`; distribute its `.tar.gz` archive so executable modes and bundle symlinks are preserved. The build applies a final outer ad-hoc seal after assembly, preserves nested binary bytes, and requires strict code-signature verification. The unified CI also verifies and launches the app extracted from the final archive. This is not Developer ID signing or Apple notarization; those remain separate release requirements. The executable inside is `PSPortalProxy.app/Contents/MacOS/PSPortalProxy`.
 - Linux: `dist/PSPortalProxy/PSPortalProxy`; distribute the whole `.tar.gz` folder. Build on the oldest supported target distribution and test its libc/Tk compatibility.
 
-In external mode a frozen app re-executes its own executable with `--backend`; source mode uses the same Python interpreter with `-m portalproxy`. In embedded mode the desktop launches the chosen native executable directly with an argument array and a private temporary configuration. Both stop through stdin EOF. No shell is involved. The default build includes Python and Tk and excludes both Mihomo and the optional native engine. An explicitly prepared dual-engine package may also include the native binary, its complete license notices and corresponding source; see that package's release manifest. Never bundle real subscription data, code-signing identities or credentials. Preserve all supplied license and third-party notices with the package.
+In external mode a frozen app re-executes its own executable with `--backend`; source mode uses the same Python interpreter with `-m portalproxy`. In embedded mode the desktop launches the chosen native executable directly with an argument array and a private temporary configuration. Both stop through stdin EOF and are launched with argument arrays. The external
+Mihomo core additionally uses a fixed, nonce-only `-post-up` readiness hook in its
+private session directory, as documented in [runtime controls](runtime-controls.md#external-core-startup-readiness); no user data is interpolated into that hook. The default build includes Python and Tk and excludes both Mihomo and the optional native engine. An explicitly prepared dual-engine package may also include the native binary, its complete license notices and corresponding source; see that package's release manifest. Never bundle real subscription data, code-signing identities or credentials. Preserve all supplied license and third-party notices with the package.
 
 `ci/portable-build.yml.example` is an inactive workflow draft. It is outside `.github/workflows`, has not been published or run, and uploads no artifacts. Activate it only after review. Every platform still needs the [native acceptance checklist](native-acceptance.md), including real Portal and real Mihomo testing.
 

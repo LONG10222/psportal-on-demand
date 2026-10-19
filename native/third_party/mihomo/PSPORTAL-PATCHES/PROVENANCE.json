@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "module": "github.com/metacubex/mihomo",
+  "version": "v1.19.32",
+  "upstream_url": "https://github.com/MetaCubeX/mihomo",
+  "upstream_commit": "88dcbf7f1614a67c3b36b848ee3592dfa92ada36",
+  "upstream_tag": "refs/tags/v1.19.32",
+  "upstream_module_sum": "h1:uD7ZC3P77isWD554NNvtee65L+99+/C5hyc+Lk8rVEk=",
+  "upstream_go_mod_sum": "h1:d7xWi5iEktkC9PqXkD/Vo4AEcb0Q92XikfLoySUDWls=",
+  "upstream_zip_sha256": "2a63640dcdd4ff2fb429488b120515c2e2fb2391cf6d2c2d6f21a8dc86b864e4",
+  "upstream_file_count": 1009,
+  "upstream_source_bytes": 4899564,
+  "modified_files": [
+    {
+      "path": "adapter/outboundgroup/selector.go",
+      "upstream_sha256": "db50ca838305e1fef4cad4b1d2a070b7043af6a61ef1192bf5516cb9553b6019",
+      "local_sha256": "efc1589123f8324f966a63f6c72626e5cfe77291e932c92ffe131a0e21225b63"
+    },
+    {
+      "path": "common/queue/queue.go",
+      "upstream_sha256": "dce56d5c8e57c4a5df35c2960ced52ee19b4441864e9908692c3321be84e71de",
+      "local_sha256": "78bfa8cb6c73f2b6cf6e1c6df107c25a6d9b8eb4557953bf1dec42d15214ef5a"
+    },
+    {
+      "path": "log/log.go",
+      "upstream_sha256": "5ed821bf17536b7a012506baa1fe00550451c81b7f36e291799234ccdd7940df",
+      "local_sha256": "e97abf7f878c970ca5b3f78445ddd3d414b755fd45375ac018912c27a0d05262"
+    },
+    {
+      "path": "tunnel/connection.go",
+      "upstream_sha256": "1e48fbdff3551c8d0dcbe5265088c3b56db0b66eb9c7512af5aaa31e8e65af1b",
+      "local_sha256": "5756c6154cc882075c77e487f8cd418927fbe0be48a7db11a33435a8f2777b2a"
+    },
+    {
+      "path": "tunnel/tunnel.go",
+      "upstream_sha256": "bd0818dddd04779aad3f078819b3ca050bd8bdce29ba57e5a377770539278596",
+      "local_sha256": "bc789778a71a6c4cc0a7d33356ba8f042143938bca0f197fcef05d8f83f6c1fb"
+    }
+  ],
+  "added_files": [
+    {
+      "path": "NOTICE-PSPORTAL-PATCH.md",
+      "sha256": "c07e1245167ca9c64a86e7449c831f815bfa7020f7714040842cae5ee97927c1"
+    },
+    {
+      "path": "adapter/outboundgroup/selector_concurrency_test.go",
+      "sha256": "25b569a246a11c7996ecc9736d131bb8a074c40d14ee2f1fd0dcfd82206d0ab7"
+    },
+    {
+      "path": "common/queue/queue_concurrency_test.go",
+      "sha256": "fc9e4303b681b0afde9cc2533b30c42c382eefba7b75a08ef8d3e75bd2860783"
+    },
+    {
+      "path": "log/log_concurrency_test.go",
+      "sha256": "67b2c7e8be63c00b2b9af7aca44e6703d0ffbdff05f9345c55895b9eefd2957b"
+    },
+    {
+      "path": "tunnel/ingress.go",
+      "sha256": "2964aab8078e4b718838ddfe5eaafea9b4148bbc9da8132c96c141385e591b79"
+    },
+    {
+      "path": "tunnel/ingress_test.go",
+      "sha256": "ec0e6305f017047eb3fbd762880446c85e3d33fcfd915f532dd82b33711c3a3c"
+    }
+  ],
+  "license": "GPL-3.0-only; upstream LICENSE retained unchanged",
+  "reviewed_upstream_binary_assets": [
+    {
+      "path": "Meta.png",
+      "sha256": "0dc1c7df03c02ac34ea60b7b169020648abdc6e199627c2e1276d337249289c8",
+      "bytes": 81167,
+      "reason": "Immutable upstream documentation logo preserved only for complete corresponding source; not used as app branding"
+    },
+    {
+      "path": "docs/logo.png",
+      "sha256": "0d48a2ea1ee05ad4579b6e6996889548fa8a61a5ff6c85a32f7622cddfcb5782",
+      "bytes": 14428,
+      "reason": "Immutable upstream documentation logo preserved only for complete corresponding source; not used as app branding"
+    }
+  ],
+  "omitted_upstream_files": [],
+  "metadata_sha256": {
+    "UPSTREAM-FILES.sha256": "48cc1a00b933c6237bf2dea6c7f664017ae5ff59e3f28b0a9b5d5b6092f0db3f",
+    "README.md": "680f1d93b978feeb06e1854919accd92a704d6551f3835c8de9c2033852fca9e",
+    "0001-atomic-log-level.patch": "24fc4ee29b7661f84320044fe7f72239d2c92a172cf76d777bd516c6cd3be1d9",
+    "0002-ingress-quiescence.patch": "9e2b61461c72818a45b9eb8a60ba7d31b897b4afa2120ce96e89edb74ad5616c",
+    "0003-queue-synchronization.patch": "fa8482e116aa266ba4a4bac656bb03b720f69e8cdb0b16a1e938ef35f7a6b1d7",
+    "0004-selector-synchronization.patch": "4518e6adff3624198691347670ea10f466080c2499f2e2e036971fa79d962cce"
+  },
+  "patches": [
+    "0001-atomic-log-level.patch",
+    "0002-ingress-quiescence.patch",
+    "0003-queue-synchronization.patch",
+    "0004-selector-synchronization.patch"
+  ]
+}

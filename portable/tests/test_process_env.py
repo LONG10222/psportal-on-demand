@@ -39,9 +39,10 @@ class LaunchTests(unittest.IsolatedAsyncioTestCase):
     async def test_launch_uses_array_and_sanitized_environment(self):
         fake = AsyncMock(return_value='child')
         with patch('asyncio.create_subprocess_exec', fake), patch.object(sys, 'frozen', False, create=True):
-            self.assertEqual(await launch_external('/path with spaces/mihomo', '-t'), 'child')
+            self.assertEqual(await launch_external('/path with spaces/mihomo', '-t', cwd='/private session'), 'child')
         self.assertEqual(fake.call_args.args, ('/path with spaces/mihomo', '-t'))
         self.assertNotIn('shell', fake.call_args.kwargs)
+        self.assertEqual(fake.call_args.kwargs['cwd'], '/private session')
         self.assertEqual(fake.call_args.kwargs['stdout'], asyncio.subprocess.DEVNULL)
 
 

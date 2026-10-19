@@ -1,9 +1,16 @@
-# PS Portal On-Demand
+# 星渡 StarPass
 
 [![CI](https://github.com/LONG10222/psportal-on-demand/actions/workflows/check.yml/badge.svg)](https://github.com/LONG10222/psportal-on-demand/actions/workflows/check.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 简体中文 | [English](README.md)
+
+**星渡 StarPass** 是从 PS Portal 局域网代理延伸出的跨平台按需代理开发版，
+保留仓库、程序标识和原项目来源。新界面将**游戏设备、混合、本机 Clash**用途分开；
+用途模式不等于规则／全局／直连，也不代表任意游戏 UDP 加速。
+详见[三种用途、平台对照与验证边界](docs/starpass-platform-modes.zh-CN.md)。
+桌面不会自动修改系统代理、VPN、DNS 或防火墙；Android 本机代理仍需系统 VPN 授权。
+
 
 PS Portal 的 OpenWrt / iStoreOS 按需代理。访问外网时启动 Mihomo，空闲 60 秒后自动关闭。
 

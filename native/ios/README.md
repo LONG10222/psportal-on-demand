@@ -1,4 +1,8 @@
-# iOS foreground-only development host
+# iOS development host with experimental timed background sharing
+
+Mobile uses subscription-link import and its own embedded engine. Default sharing remains foreground-only. An opt-in iOS 26+ **timed background experiment** requests a real continued-processing task for 15/30/60 minutes. Simulator and older SDK/system builds cannot grant it. This is not unlimited keepalive, and physical-device LAN/background/lock behavior remains unverified. See [mobile requirements and API feasibility](MOBILE-REQUIREMENTS.md).
+
+Latest local validation (2026-10-20): Xcode 27 arm64 Simulator, **38 XCTest total: 37 passed, one hardware-only Data Protection skip**; eight source guardrails passed. Five added lifecycle tests use an injected scheduler and prove orchestration only. Historical validation below describes earlier revisions.
 
 This SwiftUI app embeds the real Go/Mihomo engine in `../engine`, through
 `../mobile`. [CI run 39110679850](https://github.com/LONG10222/psportal-on-demand/actions/runs/39110679850)
@@ -21,6 +25,16 @@ metadata in that immutable development package. This source revision adds the
 file-metadata/timer manifest and exact bundle/import checks; its Apple CI result
 must be recorded before treating the correction as built. See `PRIVACY-AUDIT.md`.
 
+## 2026-10-19 mobile sharing update
+
+The app now has Share, Nodes and Devices tabs with immediate Chinese/English switching. Share highlights listener state, actual device/connection counts, subscription accounting and manual Wi-Fi proxy instructions. The default port remains 10081 unless unavailable. Wi-Fi/cellular uplink detection does not pretend to prove that Personal Hotspot is enabled: an actual private bridge and explicit confirmation are still required. A quick-start interface/address/mask change stops the listener.
+
+Nodes controls only our embedded adapter pool: Load nodes explicitly downloads and tests the subscription, latency tests show successful health-request round trips, and tapping a healthy node pins new connections without fallback. Lowest-latency mode sorts healthy adapters by measured delay, retaining fallback among healthy nodes and retesting on the existing health interval (default five minutes). Failed probes never become zero-latency winners or change the selection policy. Existing connections retain their adapters. Automatic maintenance does not wake an idle pool. Policies stay in process memory across idle teardown and reset when sharing stops. Complete Clash groups/rules and other applications' controllers are not imported.
+
+Devices lists actual allowlisted source IPs, active sockets, accepted connection totals and last activity. It does not scan the LAN or collect destination browsing history. Recent records expire after five minutes and clear on Stop. Listener connections include direct LAN requests and are distinct from outbound pool leases; neither alone proves Internet success. Request-error and denied-client counters aid diagnosis.
+
+The actual simulator XCFramework was rebuilt and linked locally. XCTest: **21 total, 20 passed, one hardware-only Data Protection skip**; this includes actual bridge telemetry and command ABI, real HTTP/CONNECT, denied clients, Stop/restart and UI model checks. Shared Go engine/mobile tests passed under the race detector. Manual UI inspection verified all three tabs and hot language switching in iOS 27.0. No real subscription, encrypted public-node route, game console, physical hotspot or background-serving acceptance is claimed by these fixtures. The prior source a18d25d completed all six GitHub workflows; this update requires its own CI.
+
 ## Honest execution model
 
 - The user taps **Start** to bind one configured RFC1918 LAN IPv4 address. There
@@ -28,18 +42,14 @@ must be recorded before treating the correction as built. See `PRIVACY-AUDIT.md`
 - Only allowlisted private IPv4 clients can use the HTTP/HTTPS-CONNECT listener.
   The first external request loads the HTTPS subscription and real embedded
   Mihomo outbound adapters. The core's idle timer releases the outbound pool.
-- Keep the app foregrounded and the device unlocked. Scene backgrounding,
-  UIKit background notification, or protected-data lock notification requests
-  **Stop**, which cancels loading and closes the listener and owned connections.
+- Without a real unexpired continued-processing grant, background and lock notifications request **Stop**. A grant permits only the finite experiment; system expiry/cancellation, session deadline and network changes still stop sharing. The scheduler uses immediate-failure submission, unique identifiers and a five-second grant timeout; no queued restart or renewal.
 - A serialized engine queue and generation checks make repeated Start taps,
   Stop during Start, and stale status callbacks safe. The UI does not report
   stopped until the native Stop returns. UIKit may still suspend or terminate
   the process; hard timing and lock/background behavior need device testing.
 - A finite UIKit background assertion is requested **only while closing**
   connections. It ends on completion or expiration, is never renewed, and is
-  not a background proxy service. There are no `UIBackgroundModes`, Network
-  Extension targets, VPN profiles, Packet Tunnel entitlements, background audio,
-  background fetch, or background keep-alive loops.
+  not a continuing-service mechanism. The only `UIBackgroundModes` entry is `processing`, with the app-specific continued-task identifier prefix. There are no Network Extension targets, VPN profiles, background audio/location or automatic renewal loops.
 - Optional keep-awake is off by default. It applies only to the active app while
   starting/listening, and restores the previous idle-timer value on Stop,
   startup failure, backgrounding, or temporary inactivity. It consumes battery
@@ -82,8 +92,9 @@ every save. Do not add the subscription to UserDefaults, state restoration,
 analytics, logs, document exports, crash reports, or backupable caches.
 
 The native adapter pool retains credentials only in process memory and disables
-Mihomo logging. The UI does not expose raw native errors, node names, or status
-JSON. It shows a secure URL field and an opaque cover while inactive. These
+Mihomo logging. The UI does not expose raw native errors or raw status JSON. Node names and
+client IPs are shown only in the corresponding local panels, marked privacy-sensitive,
+and are not saved to logs or settings. It shows a secure URL field and an opaque cover while inactive. These
 reduce accidental exposure but are not screenshot/recording protection, memory
 zeroization, or a guarantee about operating-system crash diagnostics. Forget
 removes saved settings/runtime files and clears the fields, only after stopping.

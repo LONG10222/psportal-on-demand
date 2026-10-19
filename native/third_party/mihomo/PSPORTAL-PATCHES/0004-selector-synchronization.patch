@@ -1,0 +1,166 @@
+--- a/adapter/outboundgroup/selector.go
++++ b/adapter/outboundgroup/selector.go
+@@ -4,6 +4,7 @@
+ 	"context"
+ 	"encoding/json"
+ 	"errors"
++	"sync"
+ 
+ 	C "github.com/metacubex/mihomo/constant"
+ 	P "github.com/metacubex/mihomo/constant/provider"
+@@ -16,6 +17,7 @@
+ type Selector struct {
+ 	*GroupBase
+ 	disableUDP bool
++	selectedMu sync.RWMutex
+ 	selected   string
+ 	testUrl    string
+ }
+@@ -83,7 +85,7 @@
+ func (s *Selector) Set(name string) error {
+ 	for _, proxy := range s.GetProxies(false) {
+ 		if proxy.Name() == name {
+-			s.selected = name
++			s.ForceSet(name)
+ 			return nil
+ 		}
+ 	}
+@@ -92,7 +94,9 @@
+ }
+ 
+ func (s *Selector) ForceSet(name string) {
++	s.selectedMu.Lock()
+ 	s.selected = name
++	s.selectedMu.Unlock()
+ }
+ 
+ // Unwrap implements C.ProxyAdapter
+@@ -102,8 +106,13 @@
+ 
+ func (s *Selector) selectedProxy(touch bool) C.Proxy {
+ 	proxies := s.GetProxies(touch)
++	// Provider health checks may read a nested selector while the controller
++	// changes its choice. Snapshot only the name; never hold a lock while dialing.
++	s.selectedMu.RLock()
++	selected := s.selected
++	s.selectedMu.RUnlock()
+ 	for _, proxy := range proxies {
+-		if proxy.Name() == s.selected {
++		if proxy.Name() == selected {
+ 			return proxy
+ 		}
+ 	}
+--- /dev/null
++++ b/adapter/outboundgroup/selector_concurrency_test.go
+@@ -0,0 +1,111 @@
++// SPDX-License-Identifier: GPL-3.0-only
++package outboundgroup_test
++
++import (
++	"context"
++	"encoding/json"
++	"net/netip"
++	"sync"
++	"testing"
++
++	"github.com/metacubex/mihomo/adapter"
++	"github.com/metacubex/mihomo/adapter/outbound"
++	"github.com/metacubex/mihomo/adapter/outboundgroup"
++	"github.com/metacubex/mihomo/adapter/provider"
++	C "github.com/metacubex/mihomo/constant"
++	P "github.com/metacubex/mihomo/constant/provider"
++)
++
++func selectorFixture(t *testing.T, selected string) *outboundgroup.Selector {
++	t.Helper()
++	// Reject adapters return in-memory connections. No DNS, external socket,
++	// background timer, global executor or host network configuration is used.
++	proxies := []C.Proxy{
++		adapter.NewProxy(outbound.NewRejectWithOption(outbound.RejectOption{Name: "A"})),
++		adapter.NewProxy(outbound.NewRejectWithOption(outbound.RejectOption{Name: "longer-B"})),
++	}
++	hc := provider.NewHealthCheck(proxies, "", 1, 0, true, nil)
++	pd, err := provider.NewCompatibleProvider("choices", proxies, hc)
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Cleanup(func() { _ = pd.Close() })
++	s, err := outboundgroup.NewSelector(outboundgroup.GroupCommonOption{Name: "Choice"},
++		outboundgroup.SelectorOption{DefaultSelected: selected}, proxies[0], []P.ProxyProvider{pd})
++	if err != nil {
++		t.Fatal(err)
++	}
++	return s
++}
++
++func TestSelectorSelectionSemantics(t *testing.T) {
++	s := selectorFixture(t, "longer-B")
++	if s.Now() != "longer-B" {
++		t.Fatal("default-selected was not retained")
++	}
++	if err := s.Set("missing"); err == nil || s.Now() != "longer-B" {
++		t.Fatal("invalid Set must preserve the current choice")
++	}
++	s.ForceSet("missing")
++	if s.Now() != "A" {
++		t.Fatal("missing forced choice must retain first-member fallback")
++	}
++	if err := s.Set("longer-B"); err != nil || s.Now() != "longer-B" {
++		t.Fatal("valid Set must replace the forced choice")
++	}
++}
++
++func TestSelectorSelectionConcurrentWithReaders(t *testing.T) {
++	s := selectorFixture(t, "A")
++	const workers, operations = 4, 1000
++	start := make(chan struct{})
++	var done sync.WaitGroup
++	for worker := 0; worker < workers; worker++ {
++		done.Add(1)
++		go func(worker int) {
++			defer done.Done()
++			<-start
++			metadata := &C.Metadata{NetWork: C.TCP, DstIP: netip.MustParseAddr("192.0.2.1"), DstPort: 443}
++			for i := 0; i < operations; i++ {
++				choice := []string{"A", "longer-B"}[i%2]
++				switch worker {
++				case 0:
++					if err := s.Set(choice); err != nil {
++						t.Error(err)
++					}
++				case 1:
++					s.ForceSet(choice)
++				default:
++					if got := s.Now(); got != "A" && got != "longer-B" {
++						t.Errorf("invalid current selection: %q", got)
++					}
++					if got := s.Unwrap(metadata, true).Name(); got != "A" && got != "longer-B" {
++						t.Errorf("invalid unwrapped selection: %q", got)
++					}
++					if !s.SupportUDP() || s.IsL3Protocol(metadata) {
++						t.Error("selection changed adapter capabilities")
++					}
++					if raw, err := s.MarshalJSON(); err != nil || !json.Valid(raw) {
++						t.Error("concurrent selector status is invalid")
++					}
++					// URLTest and nested automatic-group probes enter this same
++					// DialContext path independently of the embedder's active count.
++					conn, err := s.DialContext(context.Background(), metadata)
++					if err != nil {
++						t.Error(err)
++					} else {
++						_ = conn.Close()
++					}
++					packet, err := s.ListenPacketContext(context.Background(), metadata)
++					if err != nil {
++						t.Error(err)
++					} else {
++						_ = packet.Close()
++					}
++				}
++			}
++		}(worker)
++	}
++	close(start)
++	done.Wait()
++}

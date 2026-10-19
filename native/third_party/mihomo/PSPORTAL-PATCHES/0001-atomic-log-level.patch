@@ -1,0 +1,93 @@
+--- a/log/log.go
++++ b/log/log.go
+@@ -3,6 +3,7 @@
+ import (
+ 	"fmt"
+ 	"os"
++	"sync/atomic"
+ 
+ 	"github.com/metacubex/mihomo/common/observable"
+ 
+@@ -12,10 +13,11 @@
+ var (
+ 	logCh  = make(chan Event)
+ 	source = observable.NewObservable[Event](logCh)
+-	level  = INFO
++	level  atomic.Int64
+ )
+ 
+ func init() {
++	level.Store(int64(INFO))
+ 	log.SetOutput(os.Stdout)
+ 	log.SetLevel(log.DebugLevel)
+ 	log.SetFormatter(&log.TextFormatter{
+@@ -72,15 +74,15 @@
+ }
+ 
+ func Level() LogLevel {
+-	return level
++	return LogLevel(level.Load())
+ }
+ 
+ func SetLevel(newLevel LogLevel) {
+-	level = newLevel
++	level.Store(int64(newLevel))
+ }
+ 
+ func print(data Event) {
+-	if data.LogLevel < level {
++	if data.LogLevel < Level() {
+ 		return
+ 	}
+ 
+--- /dev/null
++++ b/log/log_concurrency_test.go
+@@ -0,0 +1,48 @@
++// SPDX-License-Identifier: GPL-3.0-only
++// PSPortal regression for concurrent ApplyConfig and adapter-finalizer logging.
++package log
++
++import (
++	"sync"
++	"testing"
++)
++
++func TestLevelRoundTrip(t *testing.T) {
++	previous := Level()
++	t.Cleanup(func() { SetLevel(previous) })
++	for _, want := range []LogLevel{DEBUG, INFO, WARNING, ERROR, SILENT, -1, 12345} {
++		SetLevel(want)
++		if got := Level(); got != want {
++			t.Fatalf("Level() = %v; want %v", got, want)
++		}
++	}
++}
++
++func TestConcurrentLevelAndDebugLogging(t *testing.T) {
++	previous := Level()
++	t.Cleanup(func() { SetLevel(previous) })
++	SetLevel(INFO)
++	start := make(chan struct{})
++	var done sync.WaitGroup
++	for worker := 0; worker < 8; worker++ {
++		done.Add(1)
++		go func(writer bool) {
++			defer done.Done()
++			<-start
++			for i := 0; i < 2000; i++ {
++				if writer {
++					// Keep DEBUG suppressed so this test does not emit log output.
++					SetLevel(INFO + LogLevel(i%4))
++				} else {
++					if got := Level(); got < INFO || got > SILENT {
++						t.Errorf("concurrent Level() = %v", got)
++					}
++					// Same public read path used by adapter finalizers.
++					Debugln("atomic level regression")
++				}
++			}
++		}(worker%2 == 0)
++	}
++	close(start)
++	done.Wait()
++}

@@ -1,0 +1,14 @@
+# This upstream notice is compared byte-for-byte with the retained source.
+/portable/docs/PyYAML-LICENSE.txt -text
+
+# Preserve exact pinned dependency bytes for provenance on all checkouts.
+native/third_party/mihomo/** -text
+native/third_party/mihomo/PSPORTAL-PATCHES/*.patch -whitespace
+
+# Generated StarPass text is hashed byte-for-byte alongside binary icons.
+# Keep its LF bytes even with core.autocrlf=true on Windows checkouts.
+/native/assets/branding/manifest.json text eol=lf
+/native/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher*.xml text eol=lf
+/native/android/app/src/main/res/values/branding.xml text eol=lf
+/native/ios/PSPortalHost/Assets.xcassets/Contents.json text eol=lf
+/native/ios/PSPortalHost/Assets.xcassets/*/Contents.json text eol=lf

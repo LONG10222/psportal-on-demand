@@ -83,7 +83,7 @@ class NativeTkWindowTests(unittest.TestCase):
                     self.assertNotIn('Core: starting', app.log_widget.get('1.0', 'end'))
 
                 wait_for(root.winfo_viewable, 'a real mapped Tk window')
-                self.assertEqual(root.title(), 'PS Portal On-Demand')
+                self.assertEqual(root.title(), '星渡 StarPass')
                 self.assertEqual(app.vars['engine_mode'].get(), mode)
                 self.assertEqual(app.status_var.get(), 'Stopped')
                 self.assertFalse((directory / 'runtime').exists(), 'Opening the window must not start a listener')

@@ -81,6 +81,42 @@ class CoreTests(unittest.IsolatedAsyncioTestCase):
         await self.core.acquire()
         self.assertNotEqual(self.core.process.pid, first)
         await self.core.release()
+    async def test_readiness_waits_for_fresh_post_up_after_open_controller(self):
+        with patch.dict(os.environ, {'PSPORTAL_FIXTURE_READY_DELAY': '0.6'}):
+            task = asyncio.create_task(self.core.acquire())
+            try:
+                for _ in range(150):
+                    try:
+                        await asyncio.to_thread(self.core._request, '/version')
+                        break
+                    except OSError:
+                        await asyncio.sleep(.02)
+                else:
+                    self.fail('Fixture controller did not start')
+                self.assertEqual(self.core.state, 'starting')
+                self.assertFalse(task.done())
+                self.assertEqual(self.core.active, 0)
+                await task
+                self.assertEqual(self.core.state, 'running')
+                self.assertEqual((self.core.runtime / 'psportal-ready').read_bytes()[-2:], b'\r\n')
+                await self.core.release()
+            finally:
+                if not task.done():
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+
+    async def test_missing_or_stale_post_up_marker_never_publishes_running(self):
+        self.cfg['wakeup_timeout'] = .6
+        for mode in ('missing', 'stale'):
+            with self.subTest(mode=mode), patch.dict(os.environ, {'PSPORTAL_FIXTURE_READY_MODE': mode}):
+                # A previous session's marker cannot authorize a new launch.
+                (self.core.runtime / 'psportal-ready').write_text('previous-run')
+                with self.assertRaisesRegex(CoreError, 'timed out'):
+                    await self.core.acquire()
+                self.assertIsNone(self.core.process)
+                self.assertNotEqual(self.core.state, 'running')
+                self.assertEqual(self.core.active, 0)
+
     async def test_missing_fixed_node_stops_owned_core(self):
         self.cfg.update(selection_mode='fixed', preferred_node='missing')
         with self.assertRaisesRegex(CoreError, 'Fixed node'):

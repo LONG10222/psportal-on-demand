@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 import tarfile
 import tempfile
 import unittest
+from yaml_packaging_fixtures import add_yaml_evidence
 from scripts.verify_macos_release import (APP_EXECUTABLE, NATIVE_EXECUTABLE, NATIVE_RESOURCE_ALIAS, NATIVE_COMPATIBILITY_LINKS, METHOD,
     companion_candidates, resolve_bundle_path, verify_archive, verify_inventory, verify_final_seal, within_posix)
 
@@ -33,11 +34,12 @@ class MacOSReleaseGateTests(unittest.TestCase):
         report = dict(inventory_complete=True, issues=[], app='/app', build='/build', binaries=binaries,
             files=[dict(path=b['path'],sha256=b['sha256']) for b in binaries], symlinks=copy.deepcopy(reviewed['expected_bundle_symlinks']),
             runtime=dict(python='3.13.15 (exact)',pyinstaller='6.16.0',base_prefix='/Python'))
+        add_yaml_evidence(report, 'darwin')
         return report,reviewed
 
     def test_full_byte_proof_accepts_and_changed_regions_fail(self):
         report,reviewed=self.fixture()
-        self.assertEqual(len(verify_inventory(report,reviewed)[0]),64)
+        self.assertEqual(len(verify_inventory(report,reviewed)[0]),65)
         report['binaries'][0]['origin_transformation_proofs'][0]['normalized_packaged_sha256']='f'*64
         with self.assertRaises(ValueError):verify_inventory(report,reviewed)
 

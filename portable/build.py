@@ -37,10 +37,19 @@ def main(argv=None):
             if not (args.native_engine.parent / name).exists():
                 parser.error('Native release is missing its required license/source notices: ' + name)
     root = Path(__file__).resolve().parent
+    # Retained platform icons are verified with the standard library; rebuilding
+    # the application does not install Pillow or regenerate artwork implicitly.
+    subprocess.run([sys.executable, str(root.parent / 'native/scripts/generate_brand_assets.py'),
+                    '--verify'], check=True)
     if importlib.util.find_spec('PyInstaller') is None:
         parser.error('PyInstaller is missing. Install requirements-build.txt in a local build virtualenv first.')
     if importlib.util.find_spec('tkinter') is None:
         parser.error('This Python has no Tk support. Install a Tk-enabled Python before building.')
+    if importlib.util.find_spec('yaml') is None:
+        parser.error('PyYAML is missing. Install requirements-runtime.txt before building.')
+    from scripts.pyyaml_runtime import installed_evidence, retain_notices, verify_build_modules, verify_archive_notices, verify_source_archives, SOURCE_CACHE
+    verify_source_archives(SOURCE_CACHE)
+    yaml_evidence = installed_evidence(strict=args.cpython_runtime_notices or args.debian_runtime_notices)
     if not args.skip_tests:
         subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-v'], cwd=root, check=True)
     build_env = dict(os.environ)
@@ -58,6 +67,7 @@ def main(argv=None):
         '--distpath', str(root / 'dist'), '--workpath', str(root / 'build'),
         str(root / 'packaging' / 'portalproxy.spec'),
     ], cwd=root, check=True, env=build_env)
+    verify_build_modules(root / 'build/portalproxy', yaml_evidence)
     folder = root / 'dist' / 'PSPortalProxy'
     executable = folder / ('PSPortalProxy.exe' if sys.platform == 'win32' else 'PSPortalProxy')
     subprocess.run([str(executable), '--smoke-test'], check=True, timeout=30)
@@ -77,6 +87,9 @@ def main(argv=None):
     shutil.copy2(root / 'docs' / 'THIRD-PARTY-NOTICES.md', notices / 'THIRD-PARTY-NOTICES.md')
     for filename in ('Tcl-license.terms', 'Tk-license.terms'):
         shutil.copy2(root / 'docs' / filename, notices / filename)
+    retain_notices(notices / 'pyyaml-6.0.3',
+                   strict=args.cpython_runtime_notices or args.debian_runtime_notices)
+    shutil.copy2(root / 'notices/pyyaml-6.0.3/PyYAML-LICENSE.txt', notices / 'PyYAML-LICENSE.txt')
     python_license = Path(sysconfig.get_path('stdlib')) / 'LICENSE.txt'
     if not python_license.is_file():
         python_license = Path(sys.base_prefix) / 'LICENSE.txt'
@@ -124,6 +137,7 @@ def main(argv=None):
         shutil.copy2(root / 'docs' / 'desktop.md', folder / 'desktop.md')
         shutil.copy2(root / 'docs' / 'native-acceptance.md', folder / 'native-acceptance.md')
         archive = shutil.make_archive(str(release / name), 'gztar', root_dir=folder.parent, base_dir=folder.name)
+    verify_archive_notices(archive, notices / 'pyyaml-6.0.3', macos=sys.platform == 'darwin')
     print('Built local archive:', archive)
     print('Native GUI, real Mihomo, Portal, signing and firewall acceptance still required.')
     return 0

@@ -1,62 +1,64 @@
-# PSPortal Android host
+# 星渡 StarPass · Android host
 
-Native Android host for the shared Go/Mihomo adapter engine in `../mobile`.
-The Activity edits a per-run configuration; an explicitly started foreground
-service owns the embedded JNI engine. There is no Python runtime, VPN service,
-root requirement, shell subprocess or downloaded executable in the app.
+Android v4 (`0.4.0-dev`, code 4) embeds pinned Mihomo in one application through
+`androidcore` / `androidmobile`. No external Clash, Python, root, shell subprocess
+or downloaded executable is needed. The Chinese-first simple UI retains language,
+theme and subscription-usage choices.
 
-**Development status (2026-10-18):** the real arm64/x86_64 engine AAR and
-APK build successfully. Compilation, release lint, 90 JVM assertions, Java-to-Go
-configuration round-trip and 16 KiB ELF/APK alignment checks pass. An explicitly
-authorized project-only development signing identity was used for isolated
-emulator tests; ordinary Gradle/CI builds remain unsigned.
+## Product modes
 
-The signed candidate has passed actual Android 8 / API 26 installation, Activity
-and JNI startup, controlled LAN HTTP/CONNECT, source-IP filtering, background
-continuation and Recents teardown. That runtime test found and verified a fix for
-an idle service left behind after task removal. Android 16 / API 36 ATD also passed
-installation, visible notification permission denial/grant, connected-device
-foreground-service enforcement, real JNI startup and Activity Stop. ATD cannot
-establish full notification/Recents UI or Doze behavior. See
-[VALIDATION.md](VALIDATION.md) for exact artifacts and test boundaries. Physical Portal,
-arm64/16 KiB hardware, external subscription and screen-off/OEM behavior remain
-unverified; this is a development build, not a parity or release signoff.
+- **Game**: LAN sharing on, phone VPN off. HTTP/HTTPS CONNECT TCP for devices
+  that use a manual proxy; not arbitrary UDP game acceleration
+- **Mixed**: LAN sharing plus phone-app VPN, after Android system consent
+- **Clash**: phone-app VPN only with LAN off; embedded Mihomo, no second Clash app
 
-## Runtime behavior
+These are next-session input presets, separate from rule/global/direct routing.
+They do not start anything, erase a typed subscription or persist phone-VPN
+opt-in for a future process. Change them only while stopped. Existing explicit
+input switches remain available; both off disables Start.
 
-1. Connect phone and Portal to a trusted reachable LAN. Reserve the Portal IPv4
-   address in the router. Client isolation must not separate them.
-2. Choose the phone's specific RFC1918 IPv4 address; enter the Portal address,
-   HTTPS proxy-provider subscription, proxy port and selection mode.
-3. Tap **Start proxy** while the Activity is visible. Android 13+ notification
-   permission is requested if needed. This app refuses to serve without a visible
-   notification, although Android technically permits some foreground services
-   without notification permission.
-4. Set the Portal's manual HTTP proxy to that address and port (default 10081).
-   Public HTTP/CONNECT requests wake the embedded adapters on demand. The native
-   engine, not this UI, owns node selection, allowlisting, direct LAN routing and
-   idle teardown. `running` in native status means listener active; core `state`
-   may remain `stopped` while waiting for traffic. That is normal.
-5. Stop from the Activity or persistent notification. Removing the app from
-   Recents also requests a complete stop. Restore the Portal's proxy setting when
-   no longer using the host.
+## Choose the session
 
-The app never starts at boot, never uses sticky service restart, and never resumes
-an old session after process death. Start/Stop/status operations share a single
-process-owned executor. New starts are rejected until teardown finishes; queued
-starts canceled by Stop never open a listener. Native work runs off the UI thread.
-The foreground notification remains while normal teardown runs. The service also
-stops when the configured LAN address disappears, notifications are disabled, or
-required local-network permission is revoked. An OS force-stop/process kill may
-skip callbacks; the OS then closes process sockets.
+- **LAN sharing**, on by default: HTTP/HTTPS CONNECT on a specific LAN address,
+  restricted to explicitly allowed client IPs. Configure the other device's manual
+  HTTP proxy using the displayed address and port. This input is TCP-only.
+- **Proxy this phone's apps**, off by default: optional Android `VpnService` input
+  with IPv4/IPv6 TCP and supported-node UDP. Android system consent is required;
+  an existing VPN conflict is shown. VPN-only opens no LAN listener.
+- Both inputs can run together; both off disables Start. Granting VPN consent
+  alone does not start LAN sharing. The app's own sockets are excluded/protected.
+- **Rule / global / direct** applies to the selected inputs. Choose before Start.
+  Full subscription profiles retain supported policy groups; unsupported required
+  features are rejected. Overridden host/DNS settings are visibly identified.
+- **Continue in background** is independent. Home/lock/Recents continuation is
+  best effort when enabled; disabling it stops when the UI is hidden (not on
+  rotation). Stop, notification Stop, network loss and VPN revocation clean up
+  the selected session. Turning phone VPN off can leave LAN sharing running.
 
-This is an HTTP / HTTPS-CONNECT proxy, **not a UDP/game-streaming relay**. No system
-proxy, Wi-Fi configuration, routing, DNS or firewall setting is changed. No wake
-lock, battery-optimization exemption, always-on VPN or boot receiver is installed.
-Foreground service status does not guarantee uninterrupted Wi-Fi during Doze,
-OEM battery controls or thermal pressure. Background and screen-off behavior
-still requires physical-device tests. The source-IP allowlist is not strong
-client authentication; never expose the listener to the Internet.
+Unsupported-node UDP is rejected without silent DIRECT fallback. ICMP/ping is
+not forwarded. Private/loopback destinations are currently blocked for phone VPN,
+even in DIRECT mode, so local-device apps may fail until phone VPN is turned off.
+The LAN HTTP input retains approved private-network direct handling. See
+[FULL-CORE.md](FULL-CORE.md) for exact configuration, DNS and protocol boundaries,
+and [BACKGROUND.md](BACKGROUND.md) for Doze/manufacturer limitations.
+
+Foreground notification permission is requested from the visible Activity. The
+app refuses to serve without a visible notification. There is no boot receiver,
+Android always-on/lockdown support, battery-exemption prompt or wake-lock promise.
+
+## Policy groups and live status
+
+Load live nodes explicitly; use Test latency for measurements. Full inline
+profiles expose actual manual `select` groups and their bounded members. Only
+an existing member may be chosen; `url-test`, `fallback` and `load-balance`
+groups keep their own algorithms. Group selection requires no active connection
+and phone VPN off. It survives idle engine reload within this session, but Stop
+clears it. Old dialogs/results cannot act on a restarted session.
+
+Unavailable/unmeasured latency is shown as unavailable, including Mihomo's
+65535-ms sentinel. Accounting shows the time usable response-header fields were
+received and remains a server snapshot, not live traffic. Rotation can discard
+this Activity-local accounting view; it is not persisted as account data.
 
 ## Private data
 
@@ -70,17 +72,12 @@ behavior must be audited alongside the engine. Logs/UI never display Java
 exception messages from the engine. URL tokens are not passed to notifications.
 There is no telemetry or crash-upload integration.
 
-## Android platform choices
+## Platform and build
 
-- Application ID: `org.psportal.host`
-- min SDK 26, compile/target SDK 36
-- Android Gradle plugin 8.13.2, Gradle 8.13, Java language level 17
-- Service type: `connectedDevice`, for an external Portal over a network
-- `FOREGROUND_SERVICE_CONNECTED_DEVICE`, `FOREGROUND_SERVICE` and `INTERNET`
-  are declared. `CHANGE_NETWORK_STATE` satisfies the documented connected-device
-  foreground-service prerequisite; this app does not invoke network-changing APIs
-- `POST_NOTIFICATIONS` is requested only from the visible Activity
-- No boot receiver, exported service, `VpnService`, storage permission or installer
+Application ID `org.psportal.host`; min SDK 26, compile/target SDK 36; AGP 8.13.2,
+Gradle 8.13 and Java language level 17. LAN sessions use connectedDevice foreground
+typing; consented VPN-only sessions use systemExempted. Services are non-exported,
+and the VPN service is protected by BIND_VPN_SERVICE. No storage permission is used.
 
 ### Android 17 / target SDK 37
 
@@ -106,138 +103,48 @@ Official references (checked 2026-10-18):
 - https://developer.android.com/build/releases/agp-8-13-0-release-notes
 - https://developer.android.com/develop/background-work/services/fgs/launch
 
-## Build without generating signing credentials
+## Build unsigned without creating credentials
 
-Use a JDK 17+ (JDK 21 works), Go matching `../go.mod`, Android SDK platform 36,
-Build Tools 35.0.0, and a modern NDK with 16 KiB page support (tested r30,
-30.0.16248370). Install only after accepting the applicable SDK terms yourself or
-explicitly authorizing acceptance:
-
+Use pinned Go 1.27.2, JDK 17+ (CI uses 21), SDK platform 36, Build Tools 35.0.0 and
+NDK 30.0.16248370. SDK terms must already be accepted:
 https://developer.android.com/studio/terms
 
-The build scripts do not run `sdkmanager --licenses`, write fabricated license
-acceptance files, or auto-download Android SDK components. `android.builder.sdkDownload`
-is disabled. Missing SDK/NDK is a real build blocker, not a reason to package a
-fake native engine. Install paths may be task-local; Android Studio is unnecessary.
-
-Set `JAVA_HOME`, `ANDROID_HOME`, `ANDROID_NDK_HOME` and add the JDK/Go tools to PATH.
-Build the actual `../mobile` package with the engine's pinned tool workflow:
+Set JAVA_HOME, ANDROID_HOME and ANDROID_NDK_HOME. From `native/`:
 
 ```sh
-# From native/; choose a task-local GOBIN and place it on PATH:
 ./scripts/mobile.sh tools
 ./scripts/mobile.sh android
-```
-
-The Android build uses `-target=android/arm64,android/amd64 -androidapi=26`,
-`-javapkg=org.psportal.engine`, the engine's supported mobile feature tags and
-16 KiB linker alignment. It collects and copies full dependency licenses with
-`ENGINE-NOTICES.txt` and writes `android/app/libs/psportal-engine.aar`. It requires
-an already installed/licensed SDK and NDK and never accepts agreements itself.
-
-The generated Java API is `org.psportal.engine.mobile.Mobile.start(String)`
-(throws Exception), `.stop()` and `.status()`. The native implementation is called
-directly. The AAR must include `classes.jar` and `jni/arm64-v8a/libgojni.so`. The
-Gradle build fails before compilation if it or ENGINE-NOTICES.txt is missing. An x86_64 slice is useful
-for emulator testing; real arm64 hardware remains required.
-
-Collect the native dependency license notices with the engine's
-`../scripts/licenses.sh` release workflow, preserve the full release notice
-folder, and copy its text notices into `app/src/main/assets/licenses/` before
-distribution. `GPL-3.0.txt`, `NATIVE-NOTICES.txt` and original project MIT attribution
-are already included. See **License** below.
-
-```sh
+cd android
 ./tools/test-host.sh
-./tools/test-binding-config.sh  # JDK + Go; validates JSON with the actual Go engine
-./gradlew --no-daemon :app:lintRelease :app:assembleRelease
-python3 tools/audit-apk.py app/build/outputs/apk/release/app-release-unsigned.apk \
-  --sdk "$ANDROID_HOME" --report build/reports/apk-audit.json
+./tools/test-binding-config.sh
+./gradlew --no-daemon :app:assembleRelease :app:lintRelease
 ```
 
-Result on a successful build:
-`app/build/outputs/apk/release/app-release-unsigned.apk`.
+The Android-only binding is `org.psportal.engine.androidmobile.Androidmobile`.
+The build includes actual gVisor (`with_gvisor`), arm64-v8a and x86_64 JNI libraries,
+16 KiB page alignment and full dependency notices. iOS retains its existing
+`mobile` binding. Missing AAR/notices fail the build; no fake engine is substituted.
 
-For smaller standalone downloads, opt into normal Gradle ABI splits:
+`.github/workflows/android-unsigned.yml` runs the actual build and audits compiled
+manifest, exact version, service permissions, ELF/ZIP alignment and unsigned
+status. It packages matching complete source, local upstream patch, vendored
+source and notices. Artifacts have one-day retention. The SDK installer receives
+no license-acceptance input; changed/unaccepted terms fail closed.
 
-```sh
-./gradlew --no-daemon -PpsportalAbiSplits=true :app:assembleRelease :app:lintRelease
-python3 tools/audit-apk.py app/build/outputs/apk/release/app-arm64-v8a-release-unsigned.apk \
-  --sdk "$ANDROID_HOME" --abis arm64-v8a --report build/reports/arm64-apk-audit.json
-python3 tools/audit-apk.py app/build/outputs/apk/release/app-x86_64-release-unsigned.apk \
-  --sdk "$ANDROID_HOME" --abis x86_64 --report build/reports/x86_64-apk-audit.json
-```
+The original project development signing key is unavailable. No replacement is
+created. CI APKs remain unsigned; install-ready signing and same-key upgrade
+compatibility are not established.
 
-Each per-ABI APK is a complete standalone app, not an install-together split
-package. Choose arm64-v8a for compatible phones and x86_64 for compatible emulators.
-Both contain the same Java code, resources, licenses and corresponding native
-library as the universal build. Without the property, the default remains the
-universal APK. Preserve a tested artifact before switching output modes.
+## Verification boundaries
 
-Both debug and release signing configurations are explicitly null; these commands
-must not create an Android debug keystore. Unsigned APKs cannot be installed.
-Signing requires a separately authorized existing key or explicit permission to
-create one. No signing keys or passwords are included in this project. The isolated test
-identity is stored outside the source tree and must never be added to CI or public
-artifacts. Google accounts and Play Console configuration are not required.
-
-Before any release, inspect ELF segment alignment (16 KiB), APK zip alignment,
-ABI contents, AAR dependency licenses and corresponding source. The Gradle wrapper
-is from Gradle v8.13.0, with its JAR verified against the official wrapper SHA256
-`81a82aaea5abcc8ff68b3dfcb58b3c3c429378efd98e7433460610fecd7ae45f`.
-The distribution is checksum-pinned in `gradle-wrapper.properties`.
-
-## Optional unsigned CI
-
-`../ci/android-unsigned.yml.example` is an inactive, manually activated GitHub
-Actions template for a standard public-repository `ubuntu-24.04` runner. Review
-and copy it to `.github/workflows/android-unsigned.yml` to enable it. It builds
-the real AAR, runs JVM/configuration tests, assembles/lints/audits the unsigned APK,
-and uploads the APK together with exact vendored corresponding source, licenses,
-checksums and diagnostics. Artifacts are retained for one day. It has read-only
-repository permissions and never creates signing credentials.
-
-The helper `tools/ci-unsigned.sh` uses the runner's installed licensed SDK/NDK.
-Pull requests install missing exact packages under the runner's existing accepted
-SDK license; manual runs expose an install toggle. In either case `sdkmanager`
-receives no license-acceptance input. A missing or changed agreement therefore
-fails closed instead of being auto-accepted.
-The template has also been activated in the public development PR; successful
-run links are recorded in [VALIDATION.md](VALIDATION.md). CI does not make an
-unsigned APK installable or replace device tests.
-
-## Tests and device release gates
-
-`tools/test-host.sh` uses `javac` and the installed JVM. A JRE-only host can set
-`ECJ_JAR` to an approved Eclipse compiler JAR; the script never downloads tools.
-The 90 JVM assertions cover config validation/JSON escaping, duplicate Start,
-Stop before/during Start, stale status, multiple Stop callers, restart sequencing,
-error redaction and failed teardown. Python structural checks cover manifest,
-resources, direct JNI imports, unsigned builds, the task-removal cleanup guard
-and no boot/VPN/subprocess paths.
-The fake Java engine is confined to tests and is never bundled in the app.
-
-Required device matrix:
-
-- Android 8+ base flow; Android 13 notification permission grant/deny; Android 14+
-  connected-device FGS restrictions; Android 16 and Android 17 with current target
-- Physical arm64 phone with real bundled Mihomo AAR; 16 KiB page-size runtime
-- Open UI, rotate, background, return, double Start, Start then immediate Stop,
-  repeated Stop, notification Stop, Recents removal, process kill, clean restart
-- Invalid/unassigned address and occupied port; Wi-Fi disconnect/roam/address
-  change; notification/channel disable and future local-network revocation
-- No packets before Start; only allowlisted Portal admitted; LAN requests do not
-  wake remote adapters; one cold wake on concurrent requests; idle stop; next wake
-- Fixed-node failure remains fail-closed; no private-network upstream bypass
-- Screen-off/Doze/OEM battery tests and real Portal login/HTTPS behavior
-- Confirm no UDP/game-streaming parity claim; no credentials in logs, saved state,
-  backups, notification contents or screenshots
+See [VALIDATION.md](VALIDATION.md) for current versus historical evidence. Local
+JVM, source, Go race, captured TCP/UDP and DNS fixtures do not establish Android
+VPN consent UI, actual TUN traffic, screen-off endurance, hotspot/carrier/Portal
+behavior, OEM battery handling or 16 KiB hardware runtime. These require a signed
+build on real devices. Prior signed build-1 emulator evidence does not validate v4.
 
 ## License
 
-This Android host and the combined embedded-Mihomo app are **GPL-3.0-only**; see
-`LICENSE` and `../THIRD_PARTY_NOTICES.md`. The original repository's MIT attribution
-is preserved separately. A binary release must include required dependency
-licenses and provide corresponding source/build instructions. Google Play and
-other store compatibility has not been established. Nothing is uploaded or
-published by these scripts.
+The combined application is GPL-3.0-only. Preserve the complete corresponding
+source and dependency notices with distributed binaries. The original project's
+MIT attribution remains separate. No app-store compatibility is claimed.

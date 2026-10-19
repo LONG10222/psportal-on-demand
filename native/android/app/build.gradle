@@ -13,8 +13,9 @@ android {
         applicationId 'org.psportal.host'
         minSdk 26
         targetSdk 36
-        versionCode 1
-        versionName '0.1.0-dev'
+        versionCode 4
+        versionName '0.4.0-dev'
+        testInstrumentationRunner 'org.psportal.host.SimpleHomeInstrumentation'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
@@ -41,7 +42,7 @@ def engineAar = file('libs/psportal-engine.aar')
 tasks.register('verifyEmbeddedEngine') {
     doLast {
         if (!engineAar.isFile()) {
-            throw new GradleException('Missing real native engine: build ../mobile as documented in README.md, then place psportal-engine.aar in app/libs. No placeholder engine is provided.')
+            throw new GradleException('Missing real native engine: build ../androidmobile as documented in README.md, then place psportal-engine.aar in app/libs. No placeholder engine is provided.')
         }
         if (!file('src/main/assets/licenses/ENGINE-NOTICES.txt').isFile()) {
             throw new GradleException('Missing embedded dependency licenses: run native/scripts/mobile.sh android, which generates ENGINE-NOTICES.txt with the real AAR')

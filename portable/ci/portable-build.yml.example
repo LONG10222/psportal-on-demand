@@ -25,6 +25,8 @@ jobs:
       - name: Install pinned build dependency from package registry
         run: python -m pip install -r requirements-build.txt
       - name: Run tests and build local archive
-        run: python build.py
+        run: |
+          python scripts/fetch_yaml_sources.py
+          python build.py
       # Native UI, firewall, real Mihomo, Portal and signing tests remain manual.
       # Add architecture-specific jobs only after testing those targets.

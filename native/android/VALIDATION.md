@@ -1,9 +1,98 @@
 # Android validation record
 
-Checked 2026-10-18. These are actual development build results, not a physical-device
-or Portal release signoff.
+## 2026-10-19 StarPass product modes and profile selectors
 
-## Passed
+Local checked source adds Game/Mixed/Clash next-session input presets, manual
+full-profile select groups, accounting retrieval time, unavailable-latency
+handling and a live visible network label. Existing VPN consent, input admission,
+phone-private-network restrictions, package identity and unsigned state remain.
+
+- 348 JVM assertions: 241 host/controller, 84 runtime/product/accounting,
+  8 background and 15 phone state; source/XML guards pass
+- 17 compiled-manifest/notice helper tests pass; Java syntax parsing does not
+  substitute for SDK/JNI compilation or instrumentation
+- New real-Mihomo group tests cover membership, automatic groups, active/VPN
+  guards, idle restore, Stop/reset and actual A/B route selection via local fixtures
+- New selector concurrency tests exercise Set/ForceSet concurrently with Now,
+  Unwrap, JSON status, TCP and UDP paths, using in-memory reject adapters
+- Go/compiler/SDK stages run in exact-revision GitHub Actions, not locally.
+  The denied local dependency-fetch route was not retried
+- No physical device, signed APK, permission UI, hotspot, actual phone TUN,
+  OEM endurance or Portal/game acceptance is established by these checks
+
+
+## 2026-10-19 startup-callback and notice correction
+
+The current correction preserves Android v4 (`0.4.0-dev`, code 4), its phone
+network policy and unsigned distribution. It separates accepted session identity
+from Android's newer start IDs for ignored duplicate commands. Completion is
+checked when dispatched, so Stop/restart and failed-start retry suppress stale
+callbacks without suppressing the still-current phone-VPN launch.
+
+- 243 JVM assertions: 220 host/config/lifecycle, 8 background, 15 phone-state
+- Deterministic real `SessionController` queue regressions cover duplicate Start,
+  failure cleanup, delayed completion after Stop/restart/retry and Stop during
+  native startup; source guards verify `ProxyService` uses the newest start ID
+- These are JVM/controller and source-wiring checks, not Android service-delivery
+  instrumentation or a physical-phone VPN test
+- 17 compiled-manifest/notice tests, including missing/stale notice rejection;
+  the real APK audit compares its short native notice to this exact source
+- 17 source/license/upstream-patch tests and complete patch provenance pass
+- Go/Android SDK are unavailable in this local verification environment; no
+  dependency-fetch retry was made. Full core/race, Java-to-core binding, actual
+  APK/lint/alignment and source gates run in the authorized exact-revision CI
+
+The earlier v4 results below describe the base implementation. Do not treat
+them as fresh execution of those stages for this correction. Signing and all
+physical-device limits remain unchanged.
+
+
+## Current v4 full-core / optional VPN source
+
+Version 0.4.0-dev / code 4 has these local source-level results, separate from
+all historical builds below:
+
+- 229 JVM assertions and 36 Java-to-real-Android-core configuration round trips
+- 32 Android core tests repeated three times with the race detector
+- Real Mihomo TCP rule/global/direct fixtures and actual SOCKS5 UDP_ASSOCIATE wire
+  capture; unsupported UDP and explicit UDP opt-outs never silently use DIRECT
+- Same-source/different-destination UDP isolation; bounded flow and DNS ownership;
+  protected sockets; cancellation; dual-stack DNS-to-domain-rule mapping
+- 150 generations ×256 queued UDP packets during Stop/restart, plus deterministic
+  blocked TCP/UDP metadata/rule work and sender saturation/close regressions
+- Patched upstream log and tunnel regressions; focused standard-library queue
+  concurrency regression. Full upstream queue package needs dependency sources
+  unavailable locally and is included in the normal CI gate
+- 17 license/source/patch tests, 10 compiled-manifest parser regressions, complete
+  upstream source/patch verification and fresh real Java/Objective-C bindings
+- Android arm64 source compilation with actual gVisor selected, not its stub;
+  existing adapter/CLI race tests and eight unchanged iOS source guards pass
+
+These are local sockets and synthetic data, not actual Android TUN/device tests.
+No public subscription, host VPN or system network setting was used. Native SDK,
+Java/resource, APK, alignment, complete vendored source and artifact provenance
+are checked by the exact-revision Android CI run; inspect that run's result and
+packaged audit rather than inheriting a prior revision's green checks.
+
+Local vendored archive generation was blocked by uncached dependency sources
+under an offline policy; no partial archive success is claimed. CI uses its
+normal explicitly authorized dependency build flow. The original development
+signing key is absent; no substitute identity is made. Same-key upgrade and
+signed installation cannot be verified here. Physical Android, screen-off/Doze,
+carrier/hotspot, Portal and game acceptance remain unverified.
+
+## Previous v3 baseline
+
+PR #5 exact head `a0dcf23336f91e4e9b4e6bd163731a90d1ccd05f` passed Android
+unsigned build/audit in run `39187047377`. Its APK and complete source were checked
+for artifact provenance. It has no optional phone VPN and uses the older adapter
+entrypoint. Its CI success must not be reused as v4 validation.
+
+**Historical evidence follows.** Build 1 hashes, signed candidates and emulator
+runs below belong to the earlier implementation, not current v4. No evidence
+here establishes physical-device or Portal release signoff.
+
+## Historical baseline: passed
 
 - 90 JVM configuration/lifecycle assertions with the real `HostConfig` and
   `SessionController`; fake native engine is test-only
@@ -28,7 +117,7 @@ or Portal release signoff.
 
 ## Artifact provenance
 
-Current unsigned APK: `app/build/outputs/apk/release/app-release-unsigned.apk`
+Historical build 1 unsigned APK: `app/build/outputs/apk/release/app-release-unsigned.apk`
 
 - Size: 75,204,521 bytes
 - SHA256: `7a66562bd24716f823e139155bf2d12278f563ccd7074dfee4692071c03eb35f`
@@ -37,7 +126,7 @@ Current unsigned APK: `app/build/outputs/apk/release/app-release-unsigned.apk`
 
 Development-signed test APK: `app/build/outputs/apk/release/psportal-android-development.apk`
 
-- Size: 75,216,056 bytes
+- Size: 75,229,056 bytes
 - SHA256: `4327d921988cbca20b520ff32ba8f57085e327567ca7ab17420faad0d53f3c62`
 - Public signing certificate SHA256:
   `7239e963e690e62a50bbd14939c15b749b51e14b7e3454795ef379ec12c5ec60`
@@ -232,3 +321,46 @@ head `4ef16d63a16fa9783e26cef5b69c488f5be5d80a`. Its separate unsigned APK SHA25
 `9bf6f8b78b5b0c6eab96c88330e4f84bb2a2ea6b8e7efcdd9eebd895e5306132`.
 CI artifacts expire after one day and contain unsigned APKs. They are not an
 installable or durable release.
+
+## Current simple-home source validation, 2026-10-18
+
+Based on PR4 `49a8467702e949bd517f9abc9da27c922cf73bdf`, preserving current Mac/iOS
+files and existing native adapter/service behavior. Reference images inspected:
+`evidence/simple-home-zh.png` and `evidence/ios-simple-home-zh.png`.
+
+This run used the cloud Linux workspace, not a user computer or Android emulator.
+The Java 21 runtime contains the compiler module but no `javac` launcher or Java
+17 release metadata. ECJ 3.39.0 from Maven Central was used for the JVM suite.
+Official Google Android SDK platform 36 r02 and Build Tools 35.0.0 were downloaded
+to a task-local directory under the already approved SDK terms and verified
+against Google's repository SHA-1 checksums. No SDK license acceptance files,
+signing identities, system networking changes or fake native APIs were created.
+
+- 168 JVM assertions pass, covering original config/session lifecycle plus bounded
+  subnet allowlists, interface filtering, port conflict choice, missing accounting,
+  overflow, quota/expiry formatting, real-state presentation, live node operations,
+  cancellation, Stop during probes and restart isolation
+- Python structure/XML/privacy guards pass, including explicit password
+  transformation after single-line input configuration
+- Android app and dummy-only instrumentation Java sources compile against actual
+  API 36 classes and freshly generated current native/mobile Java bindings
+- aapt2 compiles and links the actual resources and merged namespace manifest
+- Java configuration output is accepted by the real current Go engine.ParseConfig
+- The dummy-only instrumentation is added and source-compiled, but has NOT been
+  executed on a device in this run
+- Full Gradle release lint/APK/native AAR rebuild, visual Android validation,
+  physical device/hotspot/Portal, notification behavior and Doze tests have NOT
+  been run for this UI change; historical results above do not establish them
+
+Source/resource check (requires installed licensed SDK and pinned current bindings):
+
+```sh
+ANDROID_JAR=/path/to/platforms/android-36/android.jar \
+AAPT2=/path/to/build-tools/35.0.0/aapt2 \
+MOBILE_JAVA=/path/to/current-gobind-output/java \
+./tools/check-ui-compile.sh
+ECJ_JAR=/path/to/ecj-3.39.0.jar ./tools/test-host.sh
+```
+
+The resource-link output is intentionally not an app artifact: it contains no
+compiled native engine and must never be distributed as an installable build.

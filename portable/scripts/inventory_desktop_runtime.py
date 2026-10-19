@@ -215,6 +215,14 @@ def main(argv=None):
     runtime = dict(python=sys.version, executable=sys.executable, base_prefix=sys.base_prefix,
                    prefix=sys.prefix, stdlib=sysconfig.get_path('stdlib'), platform=platform.platform(),
                    build_python=build_python)
+    try:
+        if __package__:
+            from .pyyaml_runtime import installed_evidence
+        else:
+            from pyyaml_runtime import installed_evidence
+        runtime['pyyaml'] = installed_evidence(strict=True)
+    except (ValueError, ImportError, OSError) as error:
+        issues.append('PyYAML runtime provenance unavailable: ' + str(error))
     runtime['stdlib_components'] = {}
     for module_name, version_attribute in (
             ('ssl', 'OPENSSL_VERSION'), ('zlib', 'ZLIB_RUNTIME_VERSION'),
@@ -383,6 +391,9 @@ def main(argv=None):
             add_candidate(Path(distribution.locate_file(item)), {'PyInstaller'}, {'installed'})
     except importlib.metadata.PackageNotFoundError:
         issues.append('Installed PyInstaller package metadata unavailable')
+    yaml_license = runtime.get('pyyaml', {}).get('installed_license', {}).get('source')
+    if yaml_license:
+        add_candidate(Path(yaml_license), {'PyYAML'}, {'installed'})
     for path in app.rglob('*'):
         if not path.is_symlink() or path.resolve().is_relative_to(app):
             add_candidate(path, {component(path)}, {'already-packaged'},

@@ -1,0 +1,2 @@
+# Developer-only regeneration tool, never included in application requirements.
+Pillow==12.3.0

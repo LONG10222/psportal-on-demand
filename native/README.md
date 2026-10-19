@@ -4,6 +4,13 @@ An actual Windows/macOS/Linux executable and the shared in-process engine for
 Android/iOS. GPL-3.0-only because it embeds **Mihomo v1.19.32**. The repository's
 original OpenWrt/Lua implementation remains separate with its original license.
 
+## Android v4 routing scope
+
+Android now has a separate full-core entrypoint (`androidcore` / `androidmobile`)
+with optional, consent-gated phone VPN and independent LAN sharing. See
+[Android full-core scope](android/FULL-CORE.md). The CLI/iOS adapter behavior below
+is unchanged and does not describe the new Android VPN.
+
 ## Run on Linux first
 
 Extract the matching release, copy `config.example.json` to `config.json`, and set:

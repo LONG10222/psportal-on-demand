@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Read-only structural audit for the unsigned development APK; not device execution."""
 import argparse, hashlib, json, pathlib, struct, subprocess, zipfile
+from apk_manifest import VERSION_CODE, VERSION_NAME, audit_manifest
 p = argparse.ArgumentParser()
 p.add_argument('apk', type=pathlib.Path)
 p.add_argument('--sdk', type=pathlib.Path, required=True)
@@ -14,6 +15,9 @@ report = {'apk': a.apk.name, 'sha256': hashlib.sha256(a.apk.read_bytes()).hexdig
 with zipfile.ZipFile(a.apk) as apk:
     for asset in ['assets/licenses/ENGINE-NOTICES.txt', 'assets/licenses/GPL-3.0.txt', 'assets/licenses/PROJECT-MIT.txt', 'classes.dex', 'AndroidManifest.xml']:
         assert apk.getinfo(asset).file_size > 0, asset
+    # The short bundled notice must describe the same patched core as this source.
+    native_notices = pathlib.Path(__file__).resolve().parents[2] / 'THIRD_PARTY_NOTICES.md'
+    assert apk.read('assets/licenses/NATIVE-NOTICES.txt') == native_notices.read_bytes(), 'Stale or missing native source/patch notice'
     expected_native = {f'lib/{abi}/libgojni.so' for abi in a.abis}
     assert {name for name in apk.namelist() if name.startswith('lib/')} == expected_native, 'Unexpected or missing native ABI payload'
     for abi in a.abis:
@@ -38,8 +42,13 @@ report['zipalign_16k'] = 'passed'
 badging = subprocess.check_output([str(tools/'aapt2'), 'dump', 'badging', str(a.apk)], text=True)
 for expected in ["package: name='org.psportal.host'", "minSdkVersion:'26'", "targetSdkVersion:'36'", "launchable-activity: name='org.psportal.host.MainActivity'"]:
     assert expected in badging, expected
-assert 'BIND_VPN_SERVICE' not in badging and 'RECEIVE_BOOT_COMPLETED' not in badging
+assert 'RECEIVE_BOOT_COMPLETED' not in badging
+manifest = subprocess.check_output([str(tools/'aapt2'), 'dump', 'xmltree', str(a.apk), '--file', 'AndroidManifest.xml'], text=True)
+a.report.parent.mkdir(parents=True, exist_ok=True)
+(a.report.parent/'compiled-manifest.txt').write_text(manifest)
+report['compiled_manifest'] = audit_manifest(manifest)
 report['package'] = 'org.psportal.host'; report['min_sdk'] = 26; report['target_sdk'] = 36
+report['version_code'] = VERSION_CODE; report['version_name'] = VERSION_NAME
 signature = subprocess.run([str(tools/'apksigner'), 'verify', '--verbose', str(a.apk)], text=True, capture_output=True)
 # This workflow intentionally creates no signing identity. Require the specific
 # unsigned failure, not an arbitrary verifier error, so packaging defects fail.

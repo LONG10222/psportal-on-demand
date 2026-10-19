@@ -13,7 +13,9 @@ public final class PortalApplication extends Application {
         Handler main = new Handler(Looper.getMainLooper());
         session = new SessionController(new NativeEngine(), Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "portal-native-owner"); t.setDaemon(true); return t;
-        }), main::post);
+        }), main::post, Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "portal-node-probes"); t.setDaemon(true); return t;
+        }));
     }
     public SessionController session() { return session; }
 }

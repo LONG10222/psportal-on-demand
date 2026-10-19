@@ -99,6 +99,12 @@ def verify_inventory(report, reviewed):
     require(report.get('inventory_complete') is True and not report.get('issues'), 'Runtime inventory has unresolved issues')
     require(reviewed.get('architecture') == 'arm64' and reviewed.get('python_version') == '3.13.15' and
             reviewed.get('pyinstaller_version') == '6.16.0', 'Unreviewed runtime manifest')
+    try:
+        from .pyyaml_runtime import verify_python_inventory
+    except ImportError:
+        from pyyaml_runtime import verify_python_inventory
+    yaml_review, yaml_extension = verify_python_inventory(report, 'darwin')
+    yaml_path = 'Contents/Frameworks/' + yaml_review['extension_path']
     runtime = report['runtime']
     require(runtime['pyinstaller'] == reviewed['pyinstaller_version'] and
             runtime['base_prefix'] == reviewed['original_python_prefix'] and
@@ -107,12 +113,13 @@ def verify_inventory(report, reviewed):
     binaries = unique_records(report.get('binaries', []), 'binary')
     links = {key: value['target'] for key, value in unique_records(report.get('symlinks', []), 'symlink').items()}
     expected_links = {key: value['target'] for key, value in unique_records(reviewed['expected_bundle_symlinks'], 'reviewed symlink').items()}
+    expected_links['Contents/Resources/yaml'] = '../Frameworks/yaml'
     require(links == expected_links and all(links.get(path) == target for path, target in NATIVE_COMPATIBILITY_LINKS.items()),
             'Bundle symlink topology differs from review')
     for path in links:
         resolve_bundle_path(path, links)
-    require(len(binaries) == reviewed['expected_binary_path_count'] == 64 and
-            set(binaries) == set(reviewed['runtime_files']) | {APP_EXECUTABLE, NATIVE_EXECUTABLE, NATIVE_RESOURCE_ALIAS}, 'Unexpected frozen binaries')
+    require(reviewed['expected_binary_path_count'] == 64 and len(binaries) == 65 and
+            set(binaries) == set(reviewed['runtime_files']) | {yaml_path, APP_EXECUTABLE, NATIVE_EXECUTABLE, NATIVE_RESOURCE_ALIAS}, 'Unexpected frozen binaries')
     require(binaries[NATIVE_EXECUTABLE]['sha256'] == binaries[NATIVE_RESOURCE_ALIAS]['sha256'] and
             resolve_bundle_path(NATIVE_RESOURCE_ALIAS, links) == NATIVE_EXECUTABLE,
             'Native resource alias differs from the actual code helper')
@@ -131,6 +138,10 @@ def verify_inventory(report, reviewed):
             source = str(PurePosixPath(runtime['base_prefix']) / expected['source_relative'])
             require(verified_origin(binary, source, expected['source_sha256'], packaged, expected['type']),
                     'Runtime full-byte origin proof failed: ' + path)
+        elif path == yaml_path:
+            require(within_posix(yaml_extension['source'], runtime['prefix']) and
+                    verified_origin(binary, yaml_extension['source'], yaml_review['extension_sha256'], packaged, 'EXTENSION'),
+                    'YAML extension full-byte wheel origin proof failed')
         elif path == APP_EXECUTABLE:
             source = str(PurePosixPath(build) / 'PSPortalProxy')
             require(any(verified_origin(binary, source, candidate.get('sha256'), packaged, 'EXECUTABLE')
@@ -276,6 +287,8 @@ def main(argv=None):
     from retain_cpython_notices import verified_supplement_files, MACOS_INSTALLED_LICENSE_SHA256, MACOS_INSTALLED_NOTICES, MACOS_COMPONENTS
     notices = ROOT / 'dist/PSPortalProxy/licenses'
     require(Path(report['companion_notice_directory']).resolve() == notices.resolve(), 'Unexpected companion notices')
+    from pyyaml_runtime import verify_retained_notices
+    verify_retained_notices(notices / 'pyyaml-6.0.3', report['runtime']['pyyaml'])
     retained = notices / 'cpython-3.13.15-macos'
     source = ROOT / 'notices/cpython-3.13.15-macos'
     for path in verified_supplement_files(source, 'darwin'):
