@@ -1,6 +1,8 @@
 """Actual listener-policy/config coverage, with no system networking changes."""
 import asyncio
 import copy
+from contextlib import contextmanager
+import errno
 import ipaddress
 import json
 import os
@@ -399,7 +401,8 @@ class ProductModeDesktopTests(unittest.TestCase):
 
 
 class ProductModeLoopbackTests(unittest.TestCase):
-    def test_clash_owned_child_listens_only_locally_and_rejects_other_source(self):
+    @contextmanager
+    def owned_listener(self):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
             provider = folder / 'provider.json'
@@ -423,17 +426,7 @@ class ProductModeLoopbackTests(unittest.TestCase):
                     self.assertIsNone(owner.process.poll())
                     time.sleep(.02)
                 self.assertTrue(owner.ready)
-                with socket.create_connection(('127.0.0.1', listen), timeout=2) as client:
-                    client.sendall(b'invalid request\r\n\r\n')
-                    self.assertIn(b'400 Bad Request', client.recv(1024))
-                # Windows may not route another 127/8 source identically; the
-                # complete host ACL is also checked independently above.
-                if sys.platform != 'win32':
-                    with socket.socket() as client:
-                        client.settimeout(2)
-                        client.bind(('127.0.0.2', 0))
-                        client.connect(('127.0.0.1', listen))
-                        self.assertIn(b'403 Forbidden', client.recv(1024))
+                yield folder, listen
                 self.assertFalse(list((folder / 'runtime').glob('session-*/config.json')),
                                  'No accepted request must wake the upstream core')
             finally:
@@ -441,6 +434,57 @@ class ProductModeLoopbackTests(unittest.TestCase):
                 if owner.process:
                     owner.process.wait(timeout=15)
                     owner.poll()
+
+    def test_clash_owned_child_listens_locally_without_waking_core(self):
+        # This positive test runs independently on every platform, even where
+        # the OS does not provide an additional configured loopback address.
+        with self.owned_listener() as (_folder, listen):
+            with socket.create_connection(('127.0.0.1', listen), timeout=2) as client:
+                client.sendall(b'invalid request\r\n\r\n')
+                self.assertIn(b'400 Bad Request', client.recv(1024))
+
+    def bind_alternate_source(self, client):
+        try:
+            client.bind(('127.0.0.2', 0))
+        except OSError as error:
+            if error.errno == errno.EADDRNOTAVAIL:
+                self.skipTest('This OS does not provide a bindable 127.0.0.2 source address')
+            raise  # Permissions, resource exhaustion and unexpected errors fail.
+
+    def test_clash_owned_child_rejects_available_alternate_loopback_source(self):
+        # Capability probe only: never configure a loopback alias or mutate the
+        # host network. macOS normally exposes only 127.0.0.1 without an alias.
+        with socket.socket() as client:
+            client.settimeout(2)
+            self.bind_alternate_source(client)
+            with self.owned_listener() as (_folder, listen):
+                client.connect(('127.0.0.1', listen))
+                self.assertIn(b'403 Forbidden', client.recv(1024))
+
+    def test_alternate_source_probe_skips_only_unavailable_address(self):
+        with self.assertRaises(unittest.SkipTest):
+            self.bind_alternate_source(SimpleNamespace(bind=Mock(
+                side_effect=OSError(errno.EADDRNOTAVAIL, 'unavailable fixture'))))
+        for number in (errno.EACCES, errno.EADDRINUSE):
+            with self.subTest(errno=number), self.assertRaises(OSError):
+                self.bind_alternate_source(SimpleNamespace(bind=Mock(
+                    side_effect=OSError(number, 'unexpected fixture'))))
+
+    def test_clash_backend_rejects_other_source_ips_without_os_aliases(self):
+        # Exercise the actual backend ACL branch everywhere, independently of
+        # platform routing or whether any additional IP can be bound locally.
+        for source in ('127.0.0.2', '192.168.50.30', '::1'):
+            with self.subTest(source=source):
+                core = SimpleNamespace(acquire=AsyncMock(), release=AsyncMock())
+                proxy = ProxyServer(product_modes.effective_config(dict(sample(), product_mode='clash')), core)
+                reader = SimpleNamespace(readuntil=AsyncMock())
+                writer = SimpleNamespace(get_extra_info=Mock(return_value=(source, 32100)),
+                    write=Mock(), drain=AsyncMock(), close=Mock(), wait_closed=AsyncMock())
+                asyncio.run(proxy._handle(reader, writer))
+                self.assertIn(b'403 Forbidden', writer.write.call_args.args[0])
+                self.assertEqual(proxy.stats['denied_clients'], 1)
+                reader.readuntil.assert_not_awaited()
+                core.acquire.assert_not_awaited()
 
 
 @unittest.skipUnless(os.environ.get('PSPORTAL_TK_TEST') == '1', 'Real Tk product-mode UI opt-in')

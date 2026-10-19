@@ -1,9 +1,12 @@
 """Check icon bytes, native containers, platform wiring and source provenance."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import plistlib
+import shutil
 import struct
+import subprocess
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -41,6 +44,61 @@ def png_dimensions(data):
 
 
 class BrandAssetTests(unittest.TestCase):
+    def test_generated_text_retains_canonical_lf_bytes(self):
+        manifest = brand.verify(ROOT)
+        text_paths = [brand.MANIFEST] + [path for path in manifest["outputs"]
+                                        if Path(path).suffix in (".xml", ".json")]
+        self.assertEqual(len(text_paths), 7)
+        for path in text_paths:
+            data = (ROOT / path).read_bytes()
+            self.assertNotIn(b"\r", data, path)
+            self.assertTrue(data.endswith(b"\n"), path)
+
+    @unittest.skipUnless(shutil.which("git"), "Checkout regression requires Git")
+    def test_autocrlf_checkout_preserves_hashes_and_corruption_detection(self):
+        attributes = ROOT.parent / ".gitattributes"
+        if not attributes.exists():
+            self.skipTest("Source archive has no repository checkout attributes")
+        manifest = brand.verify(ROOT)
+        with tempfile.TemporaryDirectory() as tmp:
+            repository = Path(tmp) / "repository"
+            checkout = Path(tmp) / "checkout"
+            repository.mkdir()
+            (repository / ".gitattributes").write_bytes(attributes.read_bytes())
+            # This deliberately unprotected file demonstrates that checkout is
+            # actually applying Windows-style conversion, rather than a no-op.
+            (repository / "control.txt").write_bytes(b"first\nsecond\n")
+            for path in [brand.SOURCE, brand.MANIFEST, *manifest["outputs"]]:
+                destination = repository / "native" / path
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes((ROOT / path).read_bytes())
+            env = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull,
+                       GIT_ATTR_NOSYSTEM="1")
+            def git(*args):
+                return subprocess.run(["git", "-c", "core.autocrlf=true", "-c", "core.eol=crlf",
+                                       "-c", "core.safecrlf=false", "-c", "core.attributesfile=", *args],
+                                      cwd=repository, env=env, check=True, capture_output=True)
+            git("init", "--quiet")
+            git("add", "--", ".gitattributes", "control.txt", "native")
+            git("checkout-index", "--all", "--prefix=" + checkout.as_posix() + "/")
+            self.assertEqual((checkout / "control.txt").read_bytes(), b"first\r\nsecond\r\n")
+            native = checkout / "native"
+            self.assertEqual(brand.verify(native), manifest)
+            self.assertEqual((native / brand.MANIFEST).read_bytes(), (ROOT / brand.MANIFEST).read_bytes())
+            for path in manifest["outputs"]:
+                self.assertEqual((native / path).read_bytes(), (ROOT / path).read_bytes(), path)
+            # No newline normalization is allowed inside the verifier. Either
+            # text corruption or binary corruption must still fail closed.
+            for path in (brand.ANDROID + "/mipmap-anydpi-v26/ic_launcher.xml",
+                         brand.DESKTOP + "/starpass-64.png"):
+                target = native / path
+                original = target.read_bytes()
+                target.write_bytes(original.replace(b"\n", b"\r\n") if path.endswith(".xml") else original + b"\0")
+                with self.assertRaisesRegex(ValueError, "Generated asset differs"):
+                    brand.verify(native)
+                target.write_bytes(original)
+            brand.verify(native)
+
     def test_original_and_every_generated_asset_match_manifest(self):
         manifest = brand.verify(ROOT)
         self.assertEqual(manifest["brand"], "星渡 StarPass")
