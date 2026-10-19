@@ -86,6 +86,8 @@ class NodeControl:
         inventory = await self.inventory()
         previous_group = self.core.selection_group
         previous_mode = self.core.profile_mode
+        previous_config = (self.core.config['selection_mode'], self.core.config['preferred_node'])
+        previous_fastest = self.core.fastest
         try:
             for group, policy in self.policies.items():
                 item = self.group(inventory, group)
@@ -97,8 +99,13 @@ class NodeControl:
                 else:
                     self.last_test[group] = 0
         finally:
+            # Refreshing each saved group also changes its preferred node and
+            # fastest-selector state. Restore the complete active scope before
+            # refreshing it, even if a later group's saved policy is invalid.
             self.core.selection_group = previous_group
             self.core.profile_mode = previous_mode
+            self.core.config['selection_mode'], self.core.config['preferred_node'] = previous_config
+            self.core.fastest = previous_fastest
             await self.core._refresh_nodes()
 
     def snapshot(self, inventory, selected=None):

@@ -226,6 +226,67 @@ public final class HostTests {
         check(new HostConfig("10.0.0.1", java.util.Arrays.asList("10.0.0.2"), "10081", "https://example.com/", "fastest", "", "60", 75).toJson("/private/runtime").contains("\"switch_threshold_ms\":75"), "Fastest config carries threshold");
         rejects(() -> new HostConfig("10.0.0.1", java.util.Arrays.asList("10.0.0.2"), "10081", "https://example.com/", "fastest", "", "60", -1));
     }
+    private static void startCompletionIdentityTests() {
+        // Android assigns a new startId even when the active session rejects a
+        // duplicate Start. The original completion must still run exactly once.
+        Fixture duplicate = new Fixture();
+        int[] latestStartId = {11}, launched = {0}, launchStartId = {0};
+        check(duplicate.session.start("first", () -> {
+            if (duplicate.session.snapshot().phase == SessionController.Phase.RUNNING) {
+                launched[0]++; launchStartId[0] = latestStartId[0];
+            }
+        }), "Accept initial phone startup");
+        latestStartId[0] = 12;
+        check(!duplicate.session.start("duplicate", () -> { throw new AssertionError("Duplicate startup completed"); }), "Reject duplicate during native startup");
+        duplicate.work.drain();
+        latestStartId[0] = 13;
+        check(!duplicate.session.start("duplicate", () -> { throw new AssertionError("Duplicate startup completed"); }), "Reject duplicate while original callback is queued");
+        duplicate.callbacks.drain();
+        check(launched[0] == 1 && launchStartId[0] == 13, "Same-session completion survives duplicate framework start IDs");
+        check(duplicate.engine.calls.equals(java.util.Arrays.asList("start")), "Duplicate start never replaces native configuration");
+
+        Fixture failed = new Fixture(); failed.engine.failStart = true;
+        int[] failedStartId = {21}, cleanedStartId = {0}, cleanups = {0};
+        failed.session.start("first", () -> {
+            if (!failed.session.snapshot().isActive()) {
+                cleanups[0]++; cleanedStartId[0] = failedStartId[0];
+            }
+        });
+        failedStartId[0] = 22;
+        check(!failed.session.start("duplicate", () -> {}), "Failed startup still rejects an in-flight duplicate");
+        failed.work.drain(); failed.callbacks.drain();
+        check(cleanups[0] == 1 && cleanedStartId[0] == 22, "Failed same-session startup cleans newest framework start ID");
+
+        Fixture stopped = new Fixture();
+        int[] staleStarts = {0}, stops = {0};
+        stopped.session.start("first", () -> staleStarts[0]++); stopped.work.drain();
+        check(stopped.callbacks.tasks.size() == 1, "Start completion is already queued before Stop");
+        stopped.session.stop(() -> stops[0]++); stopped.work.drain(); stopped.callbacks.drain();
+        check(staleStarts[0] == 0 && stops[0] == 1, "Stop suppresses queued startup completion at dispatch time");
+
+        Fixture restarted = new Fixture();
+        int[] oldStarts = {0}, newStarts = {0}, completedStops = {0};
+        restarted.session.start("old", () -> oldStarts[0]++); restarted.work.drain();
+        restarted.session.stop(() -> completedStops[0]++); restarted.work.drain();
+        check(restarted.session.start("new", () -> newStarts[0]++), "Restart accepted after native teardown before callback drain");
+        restarted.work.drain(); restarted.callbacks.drain();
+        check(oldStarts[0] == 0 && newStarts[0] == 1 && completedStops[0] == 1, "Old queued startup cannot launch or stop replacement session");
+
+        Fixture retried = new Fixture(); retried.engine.failStart = true;
+        int[] staleFailures = {0}, retryStarts = {0};
+        retried.session.start("failed", () -> staleFailures[0]++); retried.work.drain();
+        retried.engine.failStart = false;
+        check(retried.session.start("retry", () -> retryStarts[0]++), "Retry accepted before old failure callback is delivered");
+        retried.work.drain(); retried.callbacks.drain();
+        check(staleFailures[0] == 0 && retryStarts[0] == 1, "Old failure callback cannot clean up a successful retry");
+
+        Fixture during = new Fixture();
+        int[] interruptedStart = {0}, interruptedStop = {0};
+        during.engine.duringStart = () -> during.session.stop(() -> interruptedStop[0]++);
+        during.session.start("first", () -> interruptedStart[0]++);
+        during.work.drain(); during.callbacks.drain();
+        check(interruptedStart[0] == 0 && interruptedStop[0] == 1, "Stop during native startup retires its completion");
+    }
     private static void statusSizeTests() {
         Fixture fixture = new Fixture(); fixture.session.start("{}", fixture.done); fixture.work.drain();
         StringBuilder json = new StringBuilder("{\"running\":true,\"state\":\"listening\",\"connected_clients\":2,\"active_connections\":4,\"node_management\":true,\"nodes\":[");
@@ -256,6 +317,6 @@ public final class HostTests {
         check(fixture.session.snapshot().nativeStatus.equals("{}"), "Null status stays unavailable");
     }
     public static void main(String[] args) {
-        configTests(); lifecycleTests(); simpleHomeTests(); nodeControlTests(); statusSizeTests(); System.out.println("PASS: " + assertions + " Android host config/lifecycle/presentation assertions (JVM only)");
+        configTests(); lifecycleTests(); startCompletionIdentityTests(); simpleHomeTests(); nodeControlTests(); statusSizeTests(); System.out.println("PASS: " + assertions + " Android host config/lifecycle/presentation assertions (JVM only)");
     }
 }

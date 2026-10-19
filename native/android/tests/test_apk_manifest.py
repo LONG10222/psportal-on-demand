@@ -152,6 +152,8 @@ class CompiledManifestTests(unittest.TestCase):
                 for name in ('assets/licenses/ENGINE-NOTICES.txt', 'assets/licenses/GPL-3.0.txt',
                              'assets/licenses/PROJECT-MIT.txt', 'classes.dex', 'AndroidManifest.xml'):
                     archive.writestr(name, b'fixture')
+                notices = pathlib.Path(__file__).resolve().parents[2] / 'THIRD_PARTY_NOTICES.md'
+                archive.writestr('assets/licenses/NATIVE-NOTICES.txt', notices.read_bytes())
                 archive.writestr('lib/arm64-v8a/libgojni.so', elf)
             badging = "package: name='org.psportal.host'\nminSdkVersion:'26'\ntargetSdkVersion:'36'\nlaunchable-activity: name='org.psportal.host.MainActivity'\n"
             dump = aapt2_fixture().replace('N: android=', 'N: unknown=')
@@ -164,6 +166,36 @@ class CompiledManifestTests(unittest.TestCase):
                     runpy.run_path(str(script), run_name='__main__')
             self.assertEqual((report.parent / 'compiled-manifest.txt').read_text(), dump)
             self.assertFalse(report.exists())
+
+    def test_bundled_native_notice_matches_authoritative_source(self):
+        native = pathlib.Path(__file__).resolve().parents[2]
+        self.assertEqual((native / 'android/app/src/main/assets/licenses/NATIVE-NOTICES.txt').read_bytes(),
+                         (native / 'THIRD_PARTY_NOTICES.md').read_bytes())
+        self.assertIn('cp THIRD_PARTY_NOTICES.md android/app/src/main/assets/licenses/NATIVE-NOTICES.txt',
+                      (native / 'scripts/mobile.sh').read_text())
+
+    def test_missing_or_stale_native_notices_fail_before_sdk_commands(self):
+        # Exercise the real audit entrypoint with an intentionally incomplete
+        # structural fixture. Never treat this as execution of an Android APK.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            script = pathlib.Path(__file__).resolve().parents[1] / 'tools/audit-apk.py'
+            for notice in (None, b'upstream-only stale notice'):
+                with self.subTest(notice=notice):
+                    apk, report = root / 'test.apk', root / 'audit.json'
+                    with zipfile.ZipFile(apk, 'w') as archive:
+                        for name in ('assets/licenses/ENGINE-NOTICES.txt', 'assets/licenses/GPL-3.0.txt',
+                                     'assets/licenses/PROJECT-MIT.txt', 'classes.dex', 'AndroidManifest.xml'):
+                            archive.writestr(name, b'fixture')
+                        if notice is not None:
+                            archive.writestr('assets/licenses/NATIVE-NOTICES.txt', notice)
+                    argv = [str(script), str(apk), '--sdk', str(root / 'sdk'), '--report', str(report)]
+                    with mock.patch.object(sys, 'argv', argv), mock.patch('subprocess.run') as run, \
+                            mock.patch('subprocess.check_output') as output:
+                        with self.assertRaises((KeyError, AssertionError)):
+                            runpy.run_path(str(script), run_name='__main__')
+                        run.assert_not_called(); output.assert_not_called()
+                    self.assertFalse(report.exists())
 
     def test_exact_compiled_version_is_required(self):
         for old, new in [('(type 0x10)0x4', '(type 0x10)0x3'),

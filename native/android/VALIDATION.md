@@ -1,5 +1,31 @@
 # Android validation record
 
+## 2026-10-19 startup-callback and notice correction
+
+The current correction preserves Android v4 (`0.4.0-dev`, code 4), its phone
+network policy and unsigned distribution. It separates accepted session identity
+from Android's newer start IDs for ignored duplicate commands. Completion is
+checked when dispatched, so Stop/restart and failed-start retry suppress stale
+callbacks without suppressing the still-current phone-VPN launch.
+
+- 243 JVM assertions: 220 host/config/lifecycle, 8 background, 15 phone-state
+- Deterministic real `SessionController` queue regressions cover duplicate Start,
+  failure cleanup, delayed completion after Stop/restart/retry and Stop during
+  native startup; source guards verify `ProxyService` uses the newest start ID
+- These are JVM/controller and source-wiring checks, not Android service-delivery
+  instrumentation or a physical-phone VPN test
+- 17 compiled-manifest/notice tests, including missing/stale notice rejection;
+  the real APK audit compares its short native notice to this exact source
+- 17 source/license/upstream-patch tests and complete patch provenance pass
+- Go/Android SDK are unavailable in this local verification environment; no
+  dependency-fetch retry was made. Full core/race, Java-to-core binding, actual
+  APK/lint/alignment and source gates run in the authorized exact-revision CI
+
+The earlier v4 results below describe the base implementation. Do not treat
+them as fresh execution of those stages for this correction. Signing and all
+physical-device limits remain unchanged.
+
+
 ## Current v4 full-core / optional VPN source
 
 Version 0.4.0-dev / code 4 has these local source-level results, separate from
