@@ -101,6 +101,16 @@ proxy_start = service_source.split('@Override public int onStartCommand(', 1)[1]
 vpn_start = vpn.split('@Override public int onStartCommand(', 1)[1].split('private void startTunnel(', 1)[0]
 assert '(!requestedLan && !requestedPhone)' in proxy_start
 assert '(requestedPhone && (android.net.VpnService.prepare(this) != null || PhoneVpnService.hasVpnConflict(this)))' in proxy_start
+# Framework start IDs change on ignored duplicate commands. Startup identity is
+# fenced by SessionController, while service cleanup must use the newest ID.
+start_completion = proxy_start.split('session.start(config, () -> {', 1)[1].split('\n        });', 1)[0]
+assert 'latestStartId != startId' not in start_completion, 'Duplicate Start must not suppress the current session completion'
+assert 'if (destroyed) return;' in start_completion
+assert 'finishStop(latestStartId)' in start_completion, 'Failed startup must clean up the newest service command'
+assert 'requestStop(latestStartId)' in start_completion, 'VPN startup failure must stop the newest service command'
+assert 'finishStop(startId)' not in start_completion and 'requestStop(startId)' not in start_completion
+start_dispatch = session.split('public synchronized boolean start(', 1)[1].split('public synchronized void stop(', 1)[0]
+assert 'callbacks.execute(() -> {' in start_dispatch and 'if (token == generation) completion.run();' in start_dispatch, 'Fence startup completion at callback dispatch, not only before enqueue'
 assert proxy_start.index('android.net.VpnService.prepare(this)') < proxy_start.index('startForeground(')
 assert 'if (Build.VERSION.SDK_INT >= 34 && !lanEnabled)' in proxy_start
 assert 'else if (Build.VERSION.SDK_INT >= 29 && lanEnabled)' in proxy_start

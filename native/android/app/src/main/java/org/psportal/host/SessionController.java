@@ -104,7 +104,14 @@ public final class SessionController {
                             "Native cleanup failed. Force stop this app before trying again.");
                 }
             }
-            callbacks.execute(completion);
+            callbacks.execute(() -> {
+                // A Stop/restart can happen after native startup completes but
+                // before this callback is dispatched. Duplicate Start commands
+                // leave the generation unchanged and must retain this callback.
+                synchronized (this) {
+                    if (token == generation) completion.run();
+                }
+            });
         });
         return true;
     }

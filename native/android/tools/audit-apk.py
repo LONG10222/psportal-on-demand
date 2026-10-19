@@ -15,6 +15,9 @@ report = {'apk': a.apk.name, 'sha256': hashlib.sha256(a.apk.read_bytes()).hexdig
 with zipfile.ZipFile(a.apk) as apk:
     for asset in ['assets/licenses/ENGINE-NOTICES.txt', 'assets/licenses/GPL-3.0.txt', 'assets/licenses/PROJECT-MIT.txt', 'classes.dex', 'AndroidManifest.xml']:
         assert apk.getinfo(asset).file_size > 0, asset
+    # The short bundled notice must describe the same patched core as this source.
+    native_notices = pathlib.Path(__file__).resolve().parents[2] / 'THIRD_PARTY_NOTICES.md'
+    assert apk.read('assets/licenses/NATIVE-NOTICES.txt') == native_notices.read_bytes(), 'Stale or missing native source/patch notice'
     expected_native = {f'lib/{abi}/libgojni.so' for abi in a.abis}
     assert {name for name in apk.namelist() if name.startswith('lib/')} == expected_native, 'Unexpected or missing native ABI payload'
     for abi in a.abis:

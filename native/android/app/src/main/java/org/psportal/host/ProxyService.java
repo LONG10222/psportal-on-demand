@@ -127,11 +127,13 @@ public final class ProxyService extends Service {
             return START_NOT_STICKY;
         }
         session.start(config, () -> {
-            if (destroyed || latestStartId != startId) return;
-            if (!session.snapshot().isActive()) { PhoneVpnService.rejectRequest("core_unavailable"); finishStop(startId); }
+            // SessionController fences the run identity at dispatch. A newer
+            // framework ID may belong to an ignored duplicate of this Start.
+            if (destroyed) return;
+            if (!session.snapshot().isActive()) { PhoneVpnService.rejectRequest("core_unavailable"); finishStop(latestStartId); }
             else if (phoneRequested && PhoneVpnService.requestPending() && session.snapshot().phase == SessionController.Phase.RUNNING) {
                 try { startForegroundService(new Intent(this, PhoneVpnService.class).setAction(PhoneVpnService.ACTION_START)); }
-                catch (RuntimeException denied) { PhoneVpnService.rejectRequest("permission_denied"); if (!lanEnabled) requestStop(startId); }
+                catch (RuntimeException denied) { PhoneVpnService.rejectRequest("permission_denied"); if (!lanEnabled) requestStop(latestStartId); }
             }
         });
         main.removeCallbacks(statusTick);
