@@ -83,6 +83,7 @@ class NativeTkWindowTests(unittest.TestCase):
                     self.assertNotIn('Core: starting', app.log_widget.get('1.0', 'end'))
 
                 wait_for(root.winfo_viewable, 'a real mapped Tk window')
+                app.view.set_advanced(True)  # Use the fixture's explicit loopback configuration.
                 self.assertEqual(root.title(), 'PS Portal On-Demand')
                 self.assertEqual(app.vars['engine_mode'].get(), mode)
                 self.assertEqual(app.status_var.get(), 'Stopped')

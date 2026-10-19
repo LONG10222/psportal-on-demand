@@ -76,6 +76,10 @@ Automatic crash recovery and service installation are not yet implemented.
 
 ## Tests and release status
 
+Windows source/window/frozen checks and the UTF-8 control-pipe regression are
+recorded in [Windows validation (2026-10-19)](docs/windows-validation-2026-10-19.md),
+including PowerShell reproduction commands and the exact local validation scope.
+
 Run `python -m unittest discover -s tests -v` from this directory. Process tests
 explicitly use `tests/fake_core.py`, a controlled local fixture, **not Mihomo**.
 Network tests use loopback fixtures. Their success does not prove real Portal,

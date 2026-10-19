@@ -1,6 +1,6 @@
 # Portable desktop app: Linux-priority preview, Windows and macOS build paths
 
-This is an implementation and native build path, not a signed or fully native-accepted release. One Tk desktop window can select either the established Python listener with separate Mihomo (`external`, the default), or the experimental shared native engine (`embedded`). External mode still uses a separately supplied trusted Mihomo executable with `-post-up` readiness support (tested with official v1.19.32). Embedded mode uses the project's native executable with Mihomo adapters linked into that one process. No installer, TUN adapter, administrator service, system proxy, router change, firewall change, automatic startup, or downloaded core is added by the app.
+This is an implementation and native build path, not a signed or fully native-accepted release. One Tk desktop window can select either the established Python listener with separate Mihomo (`external`, the default), or the experimental shared native engine (`embedded`). External mode still uses a separately supplied trusted Mihomo executable with `-post-up` readiness support (tested with official v1.19.32). Embedded mode uses the project's native executable with Mihomo adapters linked into that one process. No installer, TUN adapter, administrator service, system proxy, router change, firewall change or automatic startup is added by the app. An explicit automatic-setup action can download checksum-pinned official Mihomo v1.19.32 on Windows x64; opening the app never downloads or starts it.
 
 The application must remain running on an awake computer on the Portal's LAN. Normal Portal use permits only configured exact private LAN IPv4 clients. An optional development-only mode binds to `127.0.0.1` and requires the sole allowed client to be `127.0.0.1`; a real Portal cannot reach that loopback listener. Keep the Portal's IP stable with an existing DHCP reservation. The local Mihomo proxy and controller bind to loopback; the Portal-facing HTTP listener binds only to the configured private LAN address.
 
@@ -9,12 +9,20 @@ The application must remain running on an awake computer on the Portal's LAN. No
 1. Install a current supported Python 3.10–3.13 from [python.org](https://www.python.org/downloads/windows/) with the Python launcher and Tcl/Tk components.
 2. Obtain Mihomo for this machine's architecture from its [official upstream releases](https://github.com/MetaCubeX/mihomo/releases), verify its published integrity information, and extract it to a local folder. A Windows machine needs the Windows executable, not an OpenWrt/Linux binary.
 3. Extract this project. Double-click `portable/launchers/windows.cmd`, or open a terminal in `portable` and run `py -3 -m portalproxy.desktop`.
-4. Fill in this computer's private LAN IPv4, the Portal's private IPv4, the Mihomo executable path and your own HTTPS subscription URL. Node selection is `auto`, `prefer` or `fixed`; the latter two require the exact node name. The URL is hidden in the form. Alternatively choose a local Clash/Mihomo provider YAML file (maximum 10 MiB); a nonempty file path takes precedence over the URL and avoids a subscription download. Clear it to resume using the URL.
-5. Select **Save / validate**, then **Start listener**. Read the status log: a running process is not proof that the listener is ready; wait for `Proxy ready ...`. Save validates local configuration without fetching the subscription. A real external request triggers the core and either the subscription fetch or local provider copy.
+4. Use **Paste link** or paste into the subscription field. One paste replaces the previous field contents, imports and privately saves a local snapshot; it never starts a listener. If typing manually, press Enter to import. Repeating the same accepted link does not download again. Use **Refresh subscription** explicitly to update the snapshot and quota metadata.
+5. Choose the trusted Mihomo executable using the visible home-page control, then click **Start sharing** in the fixed footer. It detects the physical LAN once and validates configuration before launching. Stop/restart and reopening the window reuse the saved snapshot. A changed link must be imported before its old snapshot can be used to start. Advanced settings retain exact IP allowlists, local file selection, **Save / validate**, and **Start listener** for manual configurations. Wait for the listener's actual ready state before configuring devices.
 6. In the Portal's current Wi-Fi advanced settings, keep automatic IP/gateway/DNS and set its manual HTTP proxy to this computer's LAN IPv4 and the configured proxy port, normally `10081`.
 7. If Windows prompts for firewall access, review it yourself. Permit only the required application/inbound listener on your trusted private network, ideally scoped to the Portal's address. Do not allow public-network access. The app never changes firewall policy.
 
 Use **Stop** before leaving. Closing the window asks to stop the listener and its owned core. Closing the controller's stdin also signals shutdown if its desktop parent disappears. If shutdown takes longer than expected, keep the window open and check the native acceptance steps. Repeated Start cannot launch a duplicate child from the same window. External mode separately locks its runtime directory; both modes fail if their listener address/port is already in use.
+
+An imported subscription is saved as a private draft even before choosing a core
+or configuring the LAN. It still must pass full validation on Start. A fingerprint
+binds the accepted URL to the selected snapshot; it does not replace profile/core
+validation. Account metadata from another Clash installation is shown only in
+explicitly linked mode. Import failures stay inline and do not move the current
+page. Refresh failures retain the previous snapshot. This GUI cache behavior does
+not change URL-only CLI configurations, which still fetch on a cold core start.
 
 ## Choose an engine in the same app
 
@@ -96,3 +104,12 @@ private session directory, as documented in [runtime controls](runtime-controls.
 - [PyInstaller executable/runtime paths](https://pyinstaller.org/en/stable/runtime-information.html)
 - [PyInstaller external-process environment guidance](https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html#launching-external-programs-from-the-frozen-application)
 - [Python subprocess process/pipe handling](https://docs.python.org/3/library/subprocess.html)
+
+
+## Automatic Windows setup
+
+The desktop keeps an explicitly configured core, then searches its managed versioned core directory, a frozen app sibling Mihomo and known Clash Verge stable-core install locations. It never chooses alpha builds or searches arbitrary PATH entries. Missing explicit paths are reported instead of silently replaced. “Set up automatically” repairs the choice, reusing a known stable executable first; otherwise Windows x64 downloads the official compatible v1.19.32 archive and verifies pinned SHA-256 before an atomic install. Other systems open the official release page. Download failure keeps the previous executable, gives inline retry/manual-selection guidance, and never starts sharing.
+
+With no imported or pending subscription, Start sharing automatically reuses a detected loopback system HTTP proxy. Every linked restart re-detects its current port. A pending new subscription is never replaced by this automatic choice. Existing Clash retains its core and node controls. “Open Clash” opens the installed Windows Clash Verge, or its official releases if unavailable.
+
+A separate existing-client card refreshes read-only Clash Verge subscription cache data every 10 seconds off the UI thread, including upload/download, used/total/remaining quota, expiry, remaining days and cache timestamp. It remains visible during sharing and cannot overwrite an independent subscription's accounting. Cache figures are explicitly not live traffic rates; other Clash distributions may not provide this cache format. Direct subscription accounting also remains visible after starting.

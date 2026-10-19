@@ -170,14 +170,19 @@ class ImportInterruptionTests(unittest.TestCase):
         app.quick_start_pending = True
         app._import_generation = 1
         app._import_lock = threading.Lock()
-        app._active_import = (1, threading.Event(), path, 0)
+        app._active_import = (1, threading.Event(), path, 0, 'https://fixture.example/import')
         app.backend = SimpleNamespace(process=None, log=Mock())
-        app.view = SimpleNamespace(navigation_generation=0, show=Mock())
+        app.view = SimpleNamespace(navigation_generation=0, show=Mock(), refresh=Mock(), language='en', theme='dark')
+        app.raw = {}
+        app.vars = {key: SimpleNamespace(get=lambda: '') for key in ('profile_file', 'subscription_file')}
+        app.collect = lambda: dict(profile_file='', subscription_file='')
         app.running_controls = Mock()
         app._set_status = Mock()
         app._use_imported_file = Mock(return_value=True)
         app._configure_lan = Mock(return_value=True)
         app.start = Mock()
+        app.set_language = Mock()
+        app.set_theme = Mock()
         app._t = lambda key: key
         return app
 
@@ -204,7 +209,7 @@ class ImportInterruptionTests(unittest.TestCase):
     def test_cancelled_old_import_does_not_complete_newer_import(self):
         with tempfile.TemporaryDirectory() as directory:
             app = self.app(Path(directory) / 'config.json')
-            app._active_import = (2, threading.Event(), app.path, 0)
+            app._active_import = (2, threading.Event(), app.path, 0, 'https://fixture.example/new')
             old = Path(directory) / 'old.yaml'
             old.write_text('proxies: []')
             app.import_events.put((1, old, None))
@@ -223,13 +228,14 @@ class ImportInterruptionTests(unittest.TestCase):
             self.assertFalse(provider.exists())
             self.assertTrue(app.import_events.empty())
 
-    def test_newer_navigation_wins_over_quick_start_completion(self):
+    def test_import_completion_never_starts_or_moves_the_user(self):
         with tempfile.TemporaryDirectory() as directory:
             app = self.app(Path(directory) / 'config.json')
             app.view.navigation_generation = 1
             app.import_events.put((1, Path(directory) / 'new.yaml', None))
             app._poll_import()
-            app.start.assert_called_once()
+            app.start.assert_not_called()
+            app._configure_lan.assert_not_called()
             app.view.show.assert_not_called()
 
     def test_changed_configuration_drops_old_result(self):
@@ -292,9 +298,11 @@ class ViewNavigationTests(unittest.TestCase):
 class DesktopLifecycleTests(unittest.TestCase):
     def app(self):
         app = object.__new__(DesktopApp)
-        app.closing = app.importing = False
+        app.closing = app.importing = app.setting_up = False
         app.raw = {}
         app.path = Path('/unused-offline-fixture.json')
+        app.vars = {'subscription_url': SimpleNamespace(get=lambda: '')}
+        app._imported_file = None
         app.backend = SimpleNamespace(process=None, start=Mock(), stop=Mock())
         app.view = SimpleNamespace(runtime=None)
         app.stop_button = Mock()

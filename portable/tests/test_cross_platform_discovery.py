@@ -103,6 +103,7 @@ class WindowsLANTests(unittest.TestCase):
         self.assertIn('Get-NetIPAddress', args[4]); self.assertIn('Get-NetRoute', args[4])
         self.assertNotIn('Remove-Item', args[4]); self.assertNotIn('Set-Net', args[4])
         self.assertFalse(run.call_args.kwargs['shell'])
+        self.assertEqual(run.call_args.kwargs['creationflags'], 0x08000000)
 
 
 @unittest.skipIf(os.name == "nt", "POSIX sysfs symlink fixtures; Windows adapter parser tested separately")

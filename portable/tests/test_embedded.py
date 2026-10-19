@@ -233,7 +233,7 @@ class EngineFormTests(unittest.TestCase):
         app.engine_inputs = {name: [Mock()] for name in ('core_path', 'native_path', 'backend_port', 'api_port')}
         app.mode_note_var = Mock()
         app.view = SimpleNamespace(tr=lambda key, **values: key.format(**values))
-        app.importing = False
+        app.importing = app.setting_up = False
         app.profile_selection_inputs = []
         app.closing = False
         app.dirty = False
