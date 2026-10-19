@@ -293,6 +293,13 @@ class LinkedModeTests(unittest.IsolatedAsyncioTestCase):
                      'Enable real Tk and Mihomo for desktop IPC integration')
 class RuntimeWindowTests(unittest.TestCase):
     def test_live_device_counts_node_switch_and_language_through_owned_child(self):
+        self.exercise_window('TEST-GROUP', 'Alpha', 'Beta')
+
+    def test_unicode_nodes_roundtrip_under_legacy_child_encoding(self):
+        with patch.dict(os.environ, PYTHONIOENCODING='cp1252', PYTHONUTF8='0'):
+            self.exercise_window('选择 🚀', '日本 🗾', '香港 🌏')
+
+    def exercise_window(self, group, first, selected):
         import socket
         import socketserver
         import threading
@@ -319,9 +326,9 @@ class RuntimeWindowTests(unittest.TestCase):
                 provider = folder / 'profile.json'
                 provider.write_text(json.dumps({'proxies':[
                     dict(name=name, type='http', server='127.0.0.1', port=server.server_address[1])
-                    for name in ('Alpha', 'Beta')],
-                    'proxy-groups':[dict(name='TEST-GROUP', type='select', proxies=['Alpha', 'Beta'])],
-                    'rules':['MATCH,TEST-GROUP']}))
+                    for name in (first, selected)],
+                    'proxy-groups':[dict(name=group, type='select', proxies=[first, selected])],
+                    'rules':['MATCH,' + group]}))
                 ports = set()
                 while len(ports) < 3: ports.add(port())
                 listen, backend, api = sorted(ports)
@@ -342,13 +349,13 @@ class RuntimeWindowTests(unittest.TestCase):
                 self.assertEqual(app.view.hero_var.get(), 'Ready · waiting for a device')
                 app.node_command('nodes')
                 wait(lambda: app.node_state is not None and app.pending_command is None)
-                self.assertEqual(app.node_state['group'], 'TEST-GROUP')
+                self.assertEqual(app.node_state['group'], group)
                 for item in app.view.live_node_table.get_children():
-                    if app.view.live_node_table.item(item, 'values')[0] == 'Beta':
+                    if app.view.live_node_table.item(item, 'values')[0] == selected:
                         app.view.live_node_table.selection_set(item)
                 app.node_command('select')
-                wait(lambda: app.pending_command is None and app.node_state['current'] == 'Beta')
-                self.assertEqual(json.loads(path.read_text())['node_policies']['TEST-GROUP']['name'], 'Beta')
+                wait(lambda: app.pending_command is None and app.node_state['current'] == selected)
+                self.assertEqual(json.loads(path.read_text(encoding='utf-8'))['node_policies'][group]['name'], selected)
                 client = socket.create_connection(('127.0.0.1', listen), timeout=5)
                 client.sendall(b'CONNECT 1.1.1.1:443 HTTP/1.1\r\nHost: 1.1.1.1:443\r\n\r\n')
                 self.assertIn(b'200', client.recv(4096))
