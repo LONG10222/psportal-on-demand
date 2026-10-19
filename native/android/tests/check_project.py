@@ -3,11 +3,15 @@ import pathlib
 import xml.etree.ElementTree as ET
 root = pathlib.Path(__file__).resolve().parents[1]
 a = '{http://schemas.android.com/apk/res/android}'
+t = '{http://schemas.android.com/tools}'
 manifest = ET.parse(root/'app/src/main/AndroidManifest.xml').getroot()
 permissions = {p.attrib[a+'name'] for p in manifest.findall('uses-permission')}
 assert 'android.permission.INTERNET' in permissions
+assert 'android.permission.FOREGROUND_SERVICE' in permissions
 assert 'android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE' in permissions
+assert 'android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED' in permissions
 assert 'android.permission.CHANGE_NETWORK_STATE' in permissions
+assert not permissions.intersection({'android.permission.SCHEDULE_EXACT_ALARM', 'android.permission.USE_EXACT_ALARM'}), 'VPN eligibility must not add unrelated alarm permissions'
 assert 'android.permission.ACCESS_LOCAL_NETWORK' not in permissions, 'target36 must not request target37 permission'
 assert 'android.permission.RECEIVE_BOOT_COMPLETED' not in permissions
 app = manifest.find('application')
@@ -23,6 +27,11 @@ assert vpn_service.attrib[a+'exported'] == 'false'
 assert vpn_service.attrib[a+'foregroundServiceType'] == 'systemExempted'
 assert vpn_service.find('meta-data').attrib[a+'value'] == 'false'
 assert vpn_service.find('intent-filter/action').attrib[a+'name'] == 'android.net.VpnService'
+# Lint 8.13.2 omits the runtime OP_ACTIVATE_VPN alternative. Keep its exception
+# scoped to exactly these two service elements and preserve all real permissions.
+suppressed = [element for element in manifest.iter() if t+'ignore' in element.attrib]
+assert suppressed == [service, vpn_service], 'No manifest/application-wide lint suppression'
+assert all(element.attrib[t+'ignore'] == 'ForegroundServicePermission' for element in suppressed)
 assert service.attrib[a+'stopWithTask'] == 'false', 'Background-on runs survive Recents removal'
 assert not app.findall('receiver')
 src = root/'app/src/main/java/org/psportal/host'
@@ -50,6 +59,8 @@ build = (root/'app/build.gradle').read_text()
 assert build.count('signingConfig = null') == 2
 assert 'targetSdk 36' in build and 'minSdk 26' in build
 assert 'verifyEmbeddedEngine' in build
+assert 'abortOnError true' in build and 'checkReleaseBuilds true' in build
+assert 'ForegroundServicePermission' not in build, 'Keep this lint check enabled project-wide'
 assert "gradleProperty('psportalAbiSplits')" in build and '.getOrElse(false)' in build
 assert "include 'arm64-v8a', 'x86_64'" in build and 'universalApk false' in build
 strings = {entry.attrib.get('name') for entry in ET.parse(root/'app/src/main/res/values/strings.xml').getroot()}
@@ -84,6 +95,19 @@ print('PASS: Android manifest, lifecycle, JNI, simple-home privacy/localization 
 vpn = (src/'PhoneVpnService.java').read_text()
 assert 'START_NOT_STICKY' in vpn and 'START_STICKY' not in vpn
 assert 'VpnService.prepare(this)' in vpn and 'hasVpnConflict(this)' in vpn
+# Both foreground entries must reject missing/revoked VPN consent before using
+# systemExempted. LAN operation continues to request only connectedDevice.
+proxy_start = service_source.split('@Override public int onStartCommand(', 1)[1].split('private boolean notificationsAllowed()', 1)[0]
+vpn_start = vpn.split('@Override public int onStartCommand(', 1)[1].split('private void startTunnel(', 1)[0]
+assert '(!requestedLan && !requestedPhone)' in proxy_start
+assert '(requestedPhone && (android.net.VpnService.prepare(this) != null || PhoneVpnService.hasVpnConflict(this)))' in proxy_start
+assert proxy_start.index('android.net.VpnService.prepare(this)') < proxy_start.index('startForeground(')
+assert 'if (Build.VERSION.SDK_INT >= 34 && !lanEnabled)' in proxy_start
+assert 'else if (Build.VERSION.SDK_INT >= 29 && lanEnabled)' in proxy_start
+assert 'ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE' in proxy_start
+assert 'else if (VpnService.prepare(this) != null) rejection = "consent_required";' in vpn_start
+assert vpn_start.index('VpnService.prepare(this)') < vpn_start.index('if (rejection != null)') < vpn_start.index('startForeground(')
+assert 'catch (RuntimeException denied)' in proxy_start and 'catch (RuntimeException denied)' in vpn_start
 assert '.addRoute("0.0.0.0", 0).addRoute("::", 0)' in vpn
 assert '.addDnsServer("198.18.0.2").addDnsServer("fdfe:dcba:9876::2")' in vpn
 assert '.addDisallowedApplication(getPackageName())' in vpn

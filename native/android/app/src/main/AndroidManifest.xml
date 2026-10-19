@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -24,17 +25,22 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- systemExempted uses the consent-granted VPN app-op, not alarm permissions.
+             Lint 8.13.2 omits that runtime alternative. Both services recheck
+             VpnService.prepare before using this type; see BACKGROUND.md. -->
         <service
             android:name=".ProxyService"
             android:exported="false"
             android:stopWithTask="false"
-            android:foregroundServiceType="connectedDevice|systemExempted" />
+            android:foregroundServiceType="connectedDevice|systemExempted"
+            tools:ignore="ForegroundServicePermission" />
         <service
             android:name=".PhoneVpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"
             android:exported="false"
             android:stopWithTask="false"
-            android:foregroundServiceType="systemExempted">
+            android:foregroundServiceType="systemExempted"
+            tools:ignore="ForegroundServicePermission">
             <intent-filter><action android:name="android.net.VpnService" /></intent-filter>
             <meta-data android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON" android:value="false" />
         </service>

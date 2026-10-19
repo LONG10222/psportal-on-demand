@@ -72,6 +72,32 @@ service type must fail closed rather than switching to an unjustified type.
 [VPN foreground type](https://developer.android.com/develop/background-work/services/fgs/service-types#system-exempted),
 [VPN user experience](https://developer.android.com/develop/connectivity/vpn#user_experience).
 
+### Scoped lint exception for VPN eligibility
+
+Lint 8.13.2 reports `ForegroundServicePermission` for both service declarations
+because its `systemExempted` manifest check demands an exact-alarm permission.
+The [original detector implementation](https://android.googlesource.com/platform/tools/base/+/a0929fbad55b05e068b2ee9b9af32b6b2f6f8a4d%5E%21/)
+models only the two alarm permissions in that branch, matching the observed CI
+diagnostic. The runtime policy is broader: Android's
+[foreground-service policy](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/core/java/android/app/ForegroundServiceTypePolicy.java)
+accepts `OP_ACTIVATE_VPN` as an alternative. Its app-op check accepts
+`MODE_ALLOWED`; it does not require the tunnel to be established first. Android's
+[VPN authorization implementation](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/android15-release/services/core/java/com/android/server/connectivity/Vpn.java)
+grants that app-op for VPN-service consent and checks it in
+`isVpnServicePreConsented`.
+
+Therefore each of the two service elements has only
+`tools:ignore="ForegroundServicePermission"`, using Android's documented
+[element-local XML suppression](https://developer.android.com/studio/write/lint#suppress-lint-warnings).
+There is no manifest/application-wide suppression, lint baseline, or disabled
+project check. The actual base/type permissions stay declared, and no alarm
+permission is added. The structural tests require those permissions and the
+narrow suppression scope, and guard consent rejection before both foreground
+entries. ProxyService requests `systemExempted` only for phone-only operation;
+LAN operation requests `connectedDevice`. Both services fail closed if the
+runtime denies foreground startup. This source evidence explains the lint
+exception; physical API 34+ startup/revocation checks remain required.
+
 A foreground service improves process priority but does not itself hold the CPU
 awake. A partial wake lock can help a task that must continue through ordinary
 suspend, with significant battery cost. It is not a guarantee against Doze:

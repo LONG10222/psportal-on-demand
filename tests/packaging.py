@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import hashlib
 import os
 from pathlib import Path
 import subprocess
@@ -6,6 +7,12 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+PUBLIC_UPSTREAM_CONFIGS = {
+    'native/third_party/mihomo/docs/config.yaml':
+        'e57eea09cdfb1851acf2cf130b6ef318827ac02fb6c2ebc64e2c77647e21a363',
+    'native/third_party/mihomo/.github/release/config.yaml':
+        '65696f4b2ac4ec31987b3783b712a2452418cbe464c23b648fca2a515e478377',
+}
 
 class PackagingTests(unittest.TestCase):
     def test_shell_syntax(self):
@@ -48,14 +55,52 @@ class PackagingTests(unittest.TestCase):
             self.assertIn(command, shell)
         self.assertNotIn('subscription_url', (ROOT / 'src/nodes.lua').read_text())
 
-    def test_repository_has_no_runtime_payloads(self):
+    def assert_no_runtime_payload(self, path, root):
         forbidden = {'.env', 'api-header', 'api-secret', 'status.json', 'policy.json', 'config.yaml'}
+        expected = PUBLIC_UPSTREAM_CONFIGS.get(path.relative_to(root).as_posix())
+        if expected is not None:
+            # Preserve immutable public upstream examples in corresponding
+            # source, without allowing another config or changed fixture bytes.
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), expected, path)
+        else:
+            self.assertNotIn(path.name, forbidden, path)
+        self.assertNotIn(path.suffix, {'.gz', '.zip', '.key'}, path)
+        self.assertNotRegex(path.read_text(errors='replace'), r'(?m)^-----BEGIN (?:OPENSSH |RSA |EC )?PRIVATE KEY-----', path)
+
+    def test_repository_has_no_runtime_payloads(self):
         for path in ROOT.rglob('*'):
             if '.git' in path.parts or not path.is_file():
                 continue
-            self.assertNotIn(path.name, forbidden, path)
-            self.assertNotIn(path.suffix, {'.gz', '.zip', '.key'}, path)
-            self.assertNotRegex(path.read_text(errors='replace'), r'(?m)^-----BEGIN (?:OPENSSH |RSA |EC )?PRIVATE KEY-----', path)
+            self.assert_no_runtime_payload(path, ROOT)
+
+    def test_public_upstream_config_requires_exact_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in PUBLIC_UPSTREAM_CONFIGS:
+                with self.subTest(path=name):
+                    original = (ROOT / name).read_bytes()
+                    fixture = root / name
+                    fixture.parent.mkdir(parents=True, exist_ok=True)
+                    fixture.write_bytes(original)
+                    self.assert_no_runtime_payload(fixture, root)
+                    fixture.write_bytes(original + b'\n# changed fixture\n')
+                    with self.assertRaises(AssertionError):
+                        self.assert_no_runtime_payload(fixture, root)
+
+    def test_public_upstream_config_does_not_allow_other_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for source in PUBLIC_UPSTREAM_CONFIGS:
+                original = (ROOT / source).read_bytes()
+                for name in ('config.yaml', 'native/third_party/mihomo/config.yaml',
+                             'native/third_party/mihomo/docs/other/config.yaml',
+                             *(path for path in PUBLIC_UPSTREAM_CONFIGS if path != source)):
+                    with self.subTest(source=source, path=name):
+                        fixture = root / name
+                        fixture.parent.mkdir(parents=True, exist_ok=True)
+                        fixture.write_bytes(original)
+                        with self.assertRaises(AssertionError):
+                            self.assert_no_runtime_payload(fixture, root)
 
 if __name__ == '__main__':
     unittest.main()
