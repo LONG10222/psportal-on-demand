@@ -1,5 +1,11 @@
 # iOS foreground-only development host
 
+Latest product requirement: mobile uses subscription-link import only and its own
+engine, with no dependency on another proxy app. Sustained LAN sharing while
+backgrounded is now an explicit **unmet requirement**. Current code stops when
+backgrounded/locked. See [mobile requirements and API feasibility](MOBILE-REQUIREMENTS.md)
+before treating this preview as a complete mobile product.
+
 This SwiftUI app embeds the real Go/Mihomo engine in `../engine`, through
 `../mobile`. [CI run 39110679850](https://github.com/LONG10222/psportal-on-demand/actions/runs/39110679850)
 compiled and linked actual arm64 Simulator and unsigned iPhoneOS apps with

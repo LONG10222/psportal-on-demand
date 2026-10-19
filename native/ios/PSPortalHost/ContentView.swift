@@ -209,7 +209,7 @@ struct ContentView: View {
                 }
             } header: { Text(t("点选切换节点", "Tap a node to switch")) }
             Section {
-                Text(t("手机端目前导入支持的订阅节点，不导入完整 Clash 分组和规则。关联电脑 Clash 的共享方式请在电脑端启动，并在那里切节点。", "Mobile imports supported subscription nodes, not complete Clash groups and rules. To share a computer's Clash connection, start sharing and switch nodes on that computer."))
+                Text(t("粘贴订阅链接，由本应用完成节点连接与设备共享，无需另开代理应用。当前导入支持的订阅节点，不导入完整分组和规则。", "Paste a subscription link to connect nodes and share with devices in this app. No second proxy app is needed. Supported nodes are imported; complete groups and rules are not."))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
