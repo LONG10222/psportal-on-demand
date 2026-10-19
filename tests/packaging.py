@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import hashlib
+import tarfile
 import os
 from pathlib import Path
 import subprocess
@@ -44,6 +45,45 @@ class PackagingTests(unittest.TestCase):
             self.assertFalse((target / 'usr/libexec/portalproxy').exists())
             subprocess.run(['sh', str(ROOT / 'uninstall.sh'), '--root', str(target), '--purge'], check=True, stdout=subprocess.PIPE)
             self.assertFalse(configuration.exists())
+
+    def test_linked_install_never_requires_or_copies_a_core(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / 'root'
+            subprocess.run(['sh', str(ROOT / 'install.sh'), '--root', str(target), '--openclash'], check=True, stdout=subprocess.PIPE)
+            self.assertFalse((target / 'usr/libexec/portalproxy/mihomo').exists())
+            self.assertIn("option core_mode 'openclash'", (target / 'etc/config/portalproxy').read_text())
+            self.assertFalse((target / 'etc/rc.d').exists())
+            self.assertFalse((target / 'etc/config/openclash').exists())
+            self.assertTrue((target / 'usr/libexec/portalproxy/openclash.lua').is_file())
+
+    def test_external_service_is_never_managed(self):
+        for directory in ('src', 'files', 'luci'):
+            for path in (ROOT / directory).rglob('*'):
+                if path.is_file():
+                    self.assertNotRegex(path.read_text(), r'/etc/init.d/openclash\s+(?:start|stop|restart|reload|enable|disable)')
+        core = (ROOT / 'files/portalproxy-core.init').read_text()
+        self.assertIn('c.core_mode~="openclash"', core)
+        self.assertIn('/etc/portalproxy/policy.json', core)
+        self.assertNotIn('uci -q get portalproxy.main.core_mode', core)
+        for path in ('src/nodes.lua', 'src/update-subscription.lua'):
+            self.assertIn("core_mode')~='openclash'", (ROOT / path).read_text())
+
+    def test_router_source_bundle_is_reproducible_and_core_free(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            first, second = Path(tmp) / 'first.tar.gz', Path(tmp) / 'second.tar.gz'
+            for output in (first, second):
+                subprocess.run(['python3', str(ROOT / 'scripts/build-router-source.py'), str(output)], check=True, stdout=subprocess.PIPE)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            with tarfile.open(first) as archive:
+                members = archive.getmembers()
+                self.assertTrue(all(m.isfile() and not m.issym() and not m.islnk() for m in members))
+                names = {m.name for m in members}
+                self.assertIn('starpass-router-source/src/openclash.lua', names)
+                self.assertFalse(any('mihomo' in name or 'api-secret' in name or 'policy.json' in name for name in names))
+                manifest = archive.extractfile('starpass-router-source/SHA256SUMS').read().decode()
+                for line in manifest.splitlines():
+                    expected, name = line.split('  ', 1)
+                    self.assertEqual(hashlib.sha256(archive.extractfile('starpass-router-source/' + name).read()).hexdigest(), expected)
 
     def test_optional_luci_sources_and_commands(self):
         for relative in ('controller/portalproxy.lua', 'model/cbi/portalproxy.lua'):

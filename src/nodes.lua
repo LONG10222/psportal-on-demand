@@ -11,6 +11,7 @@ local action=arg[1] or 'list'
 local ok=pcall(function()
     assert(n.getuid()==0,'root required'); n.umask('077')
     if action=='set' then
+        assert(uci:get('portalproxy','main','core_mode')~='openclash','Manage linked nodes in OpenClash')
         local mode,name=selection.validate(arg[2],arg[3])
         assert(uci:get('portalproxy','main'),'Run setup first')
         uci:set('portalproxy','main','selection_mode',mode)
@@ -24,11 +25,26 @@ local ok=pcall(function()
     local status=require 'node_status'
     local snapshot
     if action=='refresh' then
+        if cfg.core_mode~='openclash' then
         local t=require 'luci.util'.ubus('service','list',{name=cfg.core_name}) or {}
         local i=t[cfg.core_name] and t[cfg.core_name].instances
         assert(i and i.main and i.main.running,'Core is sleeping; refresh does not wake it')
+        end
         snapshot=assert(status.collect(cfg)); assert(status.write(cfg,snapshot))
     else snapshot=status.read(cfg) end
+    if cfg.core_mode=='openclash' then
+        print('Core mode: OpenClash linked (read-only; external core is unmanaged)')
+        print('Manage subscriptions and node choices in OpenClash. Rules may select DIRECT.')
+        if not snapshot then print('No matching cached snapshot; use nodes-refresh while OpenClash is running.'); return end
+        print('Cached snapshot, not a live test: '..tostring(snapshot.updated_at))
+        print('Routing mode: '..(snapshot.route_policy or 'unavailable'))
+        print('Endpoint readiness at snapshot: '..(snapshot.ready and 'available (not an Internet test)' or 'unavailable'))
+        if snapshot.reason then print('Reason: '..snapshot.reason) end
+        for _,group in ipairs(snapshot.groups or {}) do print(group.name..' | '..group.type..' | '..(group.selected or 'dynamic/unresolved')) end
+        if not snapshot.nodes_available then print('Node list unavailable; endpoint readiness is separate'); return end
+        print('Node names: '..tostring(#snapshot.nodes)..'; no single actual exit or latency is implied')
+        return
+    end
     print('Mode: '..(uci:get('portalproxy','main','selection_mode') or 'auto'))
     local preferred=uci:get('portalproxy','main','preferred_node') or ''
     if #preferred<=256 and not preferred:find('%c') then print('Preferred: '..preferred) end

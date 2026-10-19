@@ -44,7 +44,7 @@ end
 -- question is the exact wire QNAME..QTYPE..QCLASS sent by the caller. Only a
 -- complete successful IN A/AAAA response is usable. Invalid responses return
 -- nil,true; safe public/mixed or empty answers return nil,false for fallback.
-function M.parse_response(data,id,question)
+function M.parse_response(data,id,question,allow_fakeip)
     if type(data)~='string' or #data<12 or #data>4096 or
         type(question)~='string' or #question<5 or #question>259 or
         type(id)~='number' or id<0 or id>65535 or id~=math.floor(id) then return nil,true end
@@ -80,6 +80,11 @@ function M.parse_response(data,id,question)
                 ip=table.concat(words,':')
             end
             local route=protocol.destination(ip)
+            -- Linked mode may receive OpenClash's default synthetic A range.
+            -- Never connect to it directly; forward the original public name.
+            -- This exception does not affect literals, other reserved ranges,
+            -- malformed records, or local names (caller keeps it disabled).
+            if allow_fakeip==true and typ==1 and ip:match('^198%.1[89]%.') then route='external' end
             if route=='deny' or route=='name' then return nil,true end
             if i<=an then
                 if route=='external' then has_public=true end

@@ -7,7 +7,7 @@ local json = require 'luci.jsonc'
 local config = require 'config'
 n.umask('077')
 local options = {}
-local keys = {'listen_ip','client_ip','local_dns','listen_port','backend_port','api_port','dns_port','idle_seconds',
+local keys = {'core_mode','listen_ip','client_ip','local_dns','listen_port','backend_port','api_port','dns_port','idle_seconds',
     'wakeup_timeout','health_interval','health_timeout','routing_mark','core_path',
     'selection_mode','preferred_node','subscription_url','subscription_user_agent','bootstrap_dns','health_url','doh_url'}
 for _,key in ipairs(keys) do
@@ -16,10 +16,22 @@ for _,key in ipairs(keys) do
     if value ~= '' then options[key] = value end
 end
 local ok,err = pcall(function()
-    config.validate(options)
+    local validated = config.validate(options)
+    local linked
+    if validated.core_mode == 'openclash' then
+        linked = require('openclash').discover(); config.render(options,nil,nil,linked)
+    end
     if arg[1] == '--check' then print('Configuration is valid.'); return end
     fs.mkdir('/etc/portalproxy','700'); fs.mkdir('/etc/portalproxy/providers','700')
     assert(fs.chmod('/etc/portalproxy','700')); assert(fs.chmod('/etc/portalproxy/providers','700'))
+    if linked then
+        local _,policy = config.render(options,nil,nil,linked)
+        local path = '/etc/portalproxy/policy.json'
+        assert(fs.writefile(path..'.new',json.stringify(policy)))
+        assert(fs.chmod(path..'.new','600')); assert(fs.rename(path..'.new',path))
+        print('OpenClash linked policy written. External core and configuration unchanged.')
+        return
+    end
     local secret = fs.readfile('/etc/portalproxy/api-secret')
     if secret then secret = secret:gsub('%s+$','') end
     if not secret or not secret:match('^%x+$') or #secret ~= 64 then

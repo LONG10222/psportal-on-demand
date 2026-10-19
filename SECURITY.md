@@ -16,9 +16,9 @@ For an ordinary bug report, include firmware version, CPU architecture, Mihomo v
 
 普通问题报告只需固件版本、CPU 架构、核心版本、项目提交号、脱敏后的报错和离线测试结果。地址、域名、端口、令牌、节点名称及设备标识应替换成一致的示例。`.gitignore` 不会替你处理手工上传的文件。
 
-The listener allowlist is IP based, without client authentication or MAC enforcement. Keep it on a trusted LAN. Do not add WAN forwarding. The internal API is bound to loopback and uses a generated random secret. Local root administrators can read all runtime credentials. The on-demand policy is not a privacy boundary against the router administrator, network operator, or subscription provider.
+The listener allowlist is IP based, without client authentication or MAC enforcement. Keep it on a trusted LAN. Do not add WAN forwarding. In standalone mode, the internal API is bound to loopback and uses a generated random secret. Local root administrators can read all runtime credentials. The on-demand policy is not a privacy boundary against the router administrator, network operator, or subscription provider.
 
-监听器依据 IP 放行，不提供客户端身份认证或 MAC 校验。仅在可信局域网使用，不做 WAN 端口转发。内部 API 绑定回环地址，并使用随机密钥。本地 root 管理员仍可读取运行凭据。按需启停不构成对路由器管理员、网络运营方或订阅商的隐私隔离。
+监听器依据 IP 放行，不提供客户端身份认证或 MAC 校验。仅在可信局域网使用，不做 WAN 端口转发。独立模式内部 API 绑定回环地址，并使用随机密钥。本地 root 管理员仍可读取运行凭据。按需启停不构成对路由器管理员、网络运营方或订阅商的隐私隔离。
 
 Client destinations are restricted separately: only RFC1918/ULA addresses bypass the backend; loopback, link-local, CGNAT and other special addresses are denied. Router LAN addresses remain reachable, so protect LAN management services separately. See [destination policy and compatibility limits](docs/destination-policy.md).
 
@@ -27,3 +27,9 @@ Client destinations are restricted separately: only RFC1918/ULA addresses bypass
 For a vulnerability, use the repository's private vulnerability reporting feature if available. Otherwise open an issue containing only a high-level description and ask for a private reporting channel. Do not publish an exploit containing a live subscription or another person's credentials.
 
 安全问题优先通过仓库可用的私有漏洞报告渠道提交。如果没有该入口，公开 Issue 仅描述问题类型并联系私下报告方式，不附带有效订阅或他人凭据。
+
+## OpenClash linked ownership boundary / 联动边界
+
+Linked mode uses only local loopback GET requests; it never changes OpenClash configuration, services or credentials. Its existing controller may bind to LAN, which StarPass does not alter. The dashboard token stays in local process memory, never in runtime policy, caches, logs or command arguments. Proxy authentication is separate and is never copied.
+
+联动模式的最终 DNS、规则、DIRECT 与重绑定防护属于 OpenClash，不能套用独立后端生成的安全规则承诺；OpenClash 通常看见路由器来源 IP。默认 fake-IP 公共域名仅作为原域名转交外部核心，假 IP 字面目标仍拒绝。端口可达不证明节点健康或游戏成功。只在可信 LAN 使用，并保护 OpenClash 自己的控制器。详见[联动指南](docs/openclash-linked.zh-CN.md)。

@@ -43,10 +43,11 @@ local response = 'HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\
 local function run(spec)
     scenarios = scenarios + 1
     local w = {time=0, clients={}, sockets={}, jobs={}, connections={}, stops={}, kills={},
-        statuses={}, events={}, fork_attempts=0, core_running=false, scenario=spec.name}
+        statuses={}, events={}, fork_attempts=0, core_running=spec.linked or false, scenario=spec.name}
     local cfg = {run_dir='/mock/run', api_header='/mock/api-header', core_service='/mock/core',
         core_name='mock-core', api_port=19091, backend_port=18680, bind='192.168.50.2',
         port=18679, allowed_ip='192.168.50.30', local_dns='192.168.50.1',
+        core_mode=spec.linked and 'openclash' or 'standalone',proxy_kind='http',
         health_url='https://example.invalid/health', idle_seconds=spec.idle or 10,
         wakeup_timeout=spec.timeout or 60,selection_mode=spec.selection_mode or 'auto',preferred_node=spec.preferred_node or ''}
     local constants = {EAGAIN=11, EWOULDBLOCK=11, EINPROGRESS=115, ECONNREFUSED=111,
@@ -117,8 +118,9 @@ local function run(spec)
         if not readable(self) then return nil, constants.EAGAIN end
         local data = self.kind=='client' and self.spec.data or (self.spec.response or response)
         if self.kind=='api' then
-            assert(self.sent:find('GET /proxies HTTP/1.1',1,true)==1,'child uses only read-only proxy map endpoint')
-            local body='{"mock-proxies":true}'
+            local configs = self.sent:find('GET /configs HTTP/1.1',1,true)==1
+            assert(self.sent:find('GET /proxies HTTP/1.1',1,true)==1 or (spec.linked and configs),'child uses only read-only allowlisted endpoints')
+            local body=configs and '{"mock-configs":true}' or '{"mock-proxies":true}'
             data='HTTP/1.1 200 OK\r\nContent-Length: '..#body..'\r\n\r\n'..body
         end
         if self.read_at > #data then self.eof_returned=true; return '' end
@@ -242,7 +244,7 @@ local function run(spec)
     function n.open(path,flags,mode)
         equal(flags,'wronly,creat,excl','cache uses exclusive creation')
         equal(mode,'600','cache mode is private before writing')
-        if memory_files[path] then return nil end
+        if memory_files[path] or spec.fail_cache then return nil end
         memory_files[path]=''
         return {write=function(_,data) memory_files[path]=memory_files[path]..data; return #data end,close=function() return true end}
     end
@@ -280,6 +282,9 @@ local function run(spec)
         w.stops[#w.stops+1]=w.time; w.core_running=false; event('stop'); return 0
     end}
     local json = {parse=function(value)
+            if value=='{"mock-configs":true}' then
+                return spec.runtime or {port=cfg.backend_port,mode='rule',authentication={}}
+            end
             if value=='{"mock-proxies":true}' then
                 w.health_queries=(w.health_queries or 0)+1
                 local terminal={type=spec.child_type or 'Shadowsocks',extra={[cfg.health_url]={alive=spec.child_healthy~=false,history={{delay=spec.child_delay or 1}}}}}
@@ -316,15 +321,20 @@ local function run(spec)
             if spec.child and w.child_started_at then w.child_exit=code; error(CHILD_EXIT,0) end
             error(spec.name..': launcher unexpectedly exited with '..tostring(code),0)
         end}
-    local modules={nixio=n,['nixio.fs']=fs,['luci.jsonc']=json,['luci.util']=util,['luci.sys']=sys}
+    local modules={uci={cursor=function() return {get=function(_,config,section,key)
+        assert(config=='openclash','linked UCI reads only OpenClash')
+        if section=='@overwrite[0]' then return nil end
+        return ({enable='1',http_port=tostring(cfg.backend_port),cn_port=tostring(cfg.api_port),dashboard_password='fake-test-only'})[key]
+    end} end},nixio=n,['nixio.fs']=fs,['luci.jsonc']=json,['luci.util']=util,['luci.sys']=sys}
     environment.require=function(name)
         if modules[name] then return modules[name] end
-        assert(name=='protocol' or name=='lifecycle' or name=='dns' or name=='startup_owner' or name=='core_api' or name=='node_status','unmocked module: '..name)
+        assert(name=='protocol' or name=='lifecycle' or name=='dns' or name=='startup_owner' or name=='core_api' or name=='node_status' or name=='openclash','unmocked module: '..name)
         modules[name]=load_sandboxed(source..name..'.lua',environment)(); return modules[name]
     end
     load_sandboxed(source..'ondemand.lua',environment)()
     w.listener=listener
-    equal(w.stops[1],0,spec.name..': listener initially stops core')
+    if spec.linked then equal(#w.stops,0,spec.name..': linked mode never stops a service')
+    else equal(w.stops[1],0,spec.name..': listener initially stops core') end
     return w
 end
 
@@ -510,5 +520,46 @@ equal(fixed.child_exit,0,'exact fixed actual node passes readiness')
 local latest_failed=run{name='zero latest delay is not ready',child=true,child_delay=0,timeout=1,until_time=5,
     clients={{at=0,data=external()}}}
 equal(latest_failed.child_exit,1,'zero latest delay fails closed')
+
+local linked=run{name='linked external sessions idle and reactivate',linked=true,until_time=35,
+    jobs={{delay=0.5},{delay=0.5}},clients={{at=0,data=external()},{at=2,data=local_request},{at=20,data=external()}}}
+equal(linked.fork_attempts,2,'linked mode checks readiness again after idle')
+equal(linked.clients[1].sent,response,'linked external request forwarded')
+equal(linked.clients[2].sent,response,'linked LAN traffic remains direct')
+equal(linked.clients[3].sent,response,'linked next activation forwards')
+equal(linked.starts,nil,'linked parent never starts a service')
+check(linked.core_running,'external core remains running after idle')
+check(linked.statuses[#linked.statuses].core_managed==false,'status explicitly marks external ownership')
+check(linked.statuses[#linked.statuses].core_running,'idle status does not claim external core stopped')
+local linked_child=run{name='linked child with arbitrary groups and DIRECT rules',linked=true,child=true,until_time=10,
+    child_proxies={GLOBAL={type='Selector',now='DIRECT',all={'DIRECT'}},DIRECT={type='Direct'}},
+    clients={{at=0,data=external()}}}
+equal(linked_child.child_exit,0,'linked readiness does not invent a PORTAL group or health requirement')
+equal(linked_child.starts,nil,'linked child never starts external core')
+check(linked_child.node_snapshot.core_mode=='openclash' and linked_child.node_snapshot.current==nil,'linked cache never claims an actual node')
+equal(linked_child.node_snapshot.groups[1].selected,'DIRECT','linked group status honestly retains DIRECT')
+for _,runtime in ipairs({{port=9999,mode='rule'}, {port=18680,mode='unknown'},
+    {port=18680,mode='rule',authentication={'DO-NOT-COPY:SECRET'}}}) do
+    local bad=run{name='linked runtime mismatch/auth fails closed',linked=true,child=true,timeout=1,until_time=5,
+        runtime=runtime,clients={{at=0,data=external()}}}
+    equal(bad.child_exit,1,'unsupported linked runtime cannot release a request')
+    equal(bad.starts,nil,'failed linked readiness never starts a service')
+end
+local linked_cache_failure=run{name='linked cache failure never blocks endpoint',linked=true,child=true,fail_cache=true,
+    until_time=10,clients={{at=0,data=external()}}}
+equal(linked_cache_failure.child_exit,0,'optional cache write failure is not linked readiness failure')
+equal(linked_cache_failure.starts,nil,'linked cache failure never starts external core')
+local linked_timeout=run{name='linked timeout leaves external core alone',linked=true,timeout=2,until_time=20,
+    jobs={{delay=100}},clients={{at=0,data=external()},{at=1,data=local_request}}}
+check(linked_timeout.clients[1].sent:find('503 Service Unavailable',1,true),'linked timeout returns bounded 503')
+equal(linked_timeout.clients[2].sent,response,'linked failure does not block LAN')
+check(linked_timeout.core_running,'linked timeout/idle never stops external core')
+local linked_fake=run{name='linked public fake-IP DNS remains a hostname',linked=true,until_time=15,jobs={{delay=0.5}},dns={'198.18.0.7'},
+    clients={{at=0,data='GET http://public.example/ HTTP/1.1\r\nHost: public.example\r\n\r\n'},
+        {at=1,data='GET http://198.18.0.7/ HTTP/1.1\r\n\r\n'},
+        {at=2,data='GET http://printer.lan/ HTTP/1.1\r\n\r\n'}}}
+equal(linked_fake.clients[1].sent,response,'public fake-IP name is sent to OpenClash')
+check(linked_fake.connections[1].ip=='127.0.0.1','synthetic IP is never dialed')
+for _,i in ipairs({2,3}) do check(linked_fake.clients[i].sent:find('403 Forbidden',1,true),'fake literal/local name stays forbidden') end
 
 print('Passed '..assertions..' listener assertions across '..scenarios..' mocked scenarios')

@@ -1,4 +1,4 @@
-# PS Portal On-Demand
+# StarPass router / PS Portal On-Demand
 
 [![CI](https://github.com/LONG10222/psportal-on-demand/actions/workflows/check.yml/badge.svg)](https://github.com/LONG10222/psportal-on-demand/actions/workflows/check.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
@@ -16,11 +16,21 @@ An on-demand proxy for PlayStation Portal on OpenWrt / iStoreOS. Starts Mihomo f
 
 ## Desktop and mobile development builds
 
-The original router implementation below is unchanged. For Linux, Windows and macOS, use the [desktop app](../portable/docs/desktop.md); the optional shared native engine and mobile hosts are documented in [native/README.md](../native/README.md). Do not run the router install script on a desktop.
+The router retains standalone mode and adds explicit read-only OpenClash linking. For Linux, Windows and macOS, use the [desktop app](../portable/docs/desktop.md); the optional shared native engine and mobile hosts are documented in [native/README.md](../native/README.md). Do not run the router install script on a desktop.
 
-The default desktop engine launches a separate Mihomo. Experimental embedded mode uses the same UI and a restricted shared Go/Mihomo engine. Android hosts that engine in a foreground service; iOS supports foreground hosting only. See [current validation and platform gates](../docs/portable-status.zh-CN.md). Native engine code is GPL-3.0; the original router/wrapper remains MIT. Complete corresponding source must accompany native binaries.
+The default desktop engine launches a separate Mihomo. Experimental embedded mode uses the same UI and a restricted shared Go/Mihomo engine. Android hosts that engine in a foreground service; iOS defaults to foreground hosting; its iOS 26+ time-limited background experiment still needs actual OS authorization and physical-device acceptance. See [current validation and platform gates](../docs/portable-status.zh-CN.md). Native engine code is GPL-3.0; the original router/wrapper remains MIT. Complete corresponding source must accompany native binaries.
 
-## Quick start
+## Link an existing OpenClash installation
+
+Use the exact draft-PR commit or its `starpass-router-source-…` Actions artifact. The older main archive does not contain this change. Run `sh install.sh --openclash`, then `portalproxy setup` and select `openclash`. No second core or subscription is copied. Existing installations keep their settings until you explicitly choose and apply the mode.
+
+Start/configure OpenClash in its own interface first. StarPass reads effective UCI HTTP/mixed/controller ports and uses only literal loopback GET requests. It validates the authenticated runtime port and proxy-auth loopback exemption. Node/group snapshots are optional, sanitized and observational. StarPass never starts/stops/reloads OpenClash, selects its nodes, updates its subscriptions or changes DNS/firewall/routes. Idle closes only StarPass sessions.
+
+OpenClash controls final DNS/rules, including DIRECT; source-IP rules see the router rather than the original client. This cannot inherit standalone backend rebinding protections. Default fake-IP DNS answers are forwarded by their original public hostname, never dialed; forbidden literals and local-name answers stay rejected. HTTP/CONNECT is TCP only, not arbitrary game UDP. Controller availability is not proof of Internet or game success.
+
+The package is a reproducible, core-free source installer with SHA256SUMS, not an IPK/APK or iStore release. Mocks and staging tests do not establish real-router compatibility. See [the complete linked-mode guide](openclash-linked.zh-CN.md).
+
+## Standalone quick start
 
 ### 1. Requirements
 

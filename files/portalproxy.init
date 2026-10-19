@@ -12,7 +12,7 @@ start_service() {
     procd_open_instance main
     procd_set_param command /usr/bin/lua /usr/libexec/portalproxy/ondemand.lua /etc/portalproxy/policy.json
     procd_set_param user root
-    [ "$(uci -q get portalproxy.main.routing_mark)" = 6666 ] && procd_set_param group nogroup
+    [ "$(uci -q get portalproxy.main.core_mode)" != openclash ] && [ "$(uci -q get portalproxy.main.routing_mark)" = 6666 ] && procd_set_param group nogroup
     procd_set_param respawn 3600 5 0
     procd_set_param term_timeout 2
     procd_set_param stdout 1

@@ -11,6 +11,7 @@ DummyValue, Value, ListValue, Button, Table = 'dummy', 'value', 'list', 'button'
 local scenario
 local function field(self, kind, name, title, description)
     local f = {kind=kind, option=name, title=title, description=description, choices={}}
+    function f:depends(key, value) self.dependency={key,value} end
     function f:value(key, label) self.choices[#self.choices+1] = {key, label} end
     self.fields[name] = f
     return f
@@ -62,6 +63,10 @@ local function load(overrides)
         equal(path, '/usr/libexec/portalproxy/config.lua')
         return function() return {validate=function(config)
             scenario.validated = config
+            if scenario.real_validation then
+                package.path='src/?.lua;'..package.path
+                return assert(real_loadfile('src/config.lua'))().validate(config)
+            end
             assert(config.selection_mode=='auto' or config.selection_mode=='preferred' or config.selection_mode=='fixed')
             assert(config.subscription_url:match('^https://'))
             assert(config.selection_mode=='auto' or config.preferred_node~='')
@@ -139,6 +144,28 @@ f=load({snapshot={updated_at=123.5}}); equal(f.fields._updated.value,'No cached 
 f=load({params={result='updated'}})
 equal(#scenario.commands,0); assert(f.message:find('Subscription cache updated',1,true))
 assert(f.message:find('change live routes',1,true))
+
+f=load({options={core_mode='openclash',selection_mode='auto',preferred_node='',subscription_url=''},
+    snapshot={core_mode='openclash',updated_at=os.time(),ready=true,route_policy='rule',groups={{name='GLOBAL',type='Selector',selected='DIRECT'}},nodes={}}})
+equal(#scenario.commands,0); equal(scenario.commit,0)
+equal(f.fields.subscription_url:cfgvalue(),''); equal(f.fields.subscription_url.dependency[2],'standalone'); equal(f.fields.preferred_node.dependency[2],'standalone'); equal(f.fields._current,nil)
+equal(f.fields._update,nil); equal(f.fields._routing.value,'rule')
+assert(f.fields._status.value:find('Internet and node health unknown',1,true))
+assert(f.fields._openclash.value:find('OpenClash',1,true))
+post('_update'); f:handle(FORM_VALID,{})
+equal(#scenario.commands,0); equal(scenario.commit,0)
+assert(scenario.redirect:find('result=update_failed',1,true))
+f=load({options={core_mode='openclash'},snapshot={updated_at=os.time(),ready=true,current={name='old'}}})
+assert(f.fields._status.value:find('stale cache',1,true))
+equal(f.fields._current,nil)
+f=load(); post('_save'); f:handle(FORM_VALID,{core_mode='openclash'})
+equal(scenario.writes.core_mode,'openclash'); equal(scenario.writes.preferred_node,'JP exact')
+equal(scenario.writes.subscription_url,nil); equal(#scenario.commands,0)
+
+f=load({real_validation=true,options={core_mode='openclash',listen_ip='192.168.50.2',client_ip='192.168.50.30',local_dns='192.168.50.1'}})
+post('_save'); f:handle(FORM_VALID,{core_mode='standalone',selection_mode='auto',subscription_url='https://fixture.example/profile'})
+equal(scenario.commit,1); equal(scenario.writes.core_mode,'standalone')
+equal(scenario.writes.subscription_url,'https://fixture.example/profile'); equal(#scenario.commands,0)
 
 loadfile, io.open = real_loadfile, real_open
 assert(loadfile('luci/controller/portalproxy.lua')) -- syntax only; no live controller
