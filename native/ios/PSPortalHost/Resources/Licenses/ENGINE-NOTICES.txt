@@ -7400,6 +7400,42 @@ Public License instead of this License.  But first, please read
 
 
 
+===== github.com/metacubex/mihomo v1.19.32 / NOTICE-PSPORTAL-PATCH.md =====
+# PSPortal local Mihomo derivative
+
+This directory contains the complete Go module source distribution of
+Mihomo v1.19.32, commit 88dcbf7f1614a67c3b36b848ee3592dfa92ada36,
+with its original GPLv3 LICENSE, notices, source, tests, and documentation assets.
+
+PSPortal modifications, 2026-10-19:
+
+1. Make log/log.go's shared logging level atomic so configuration updates do not
+   race concurrent logging, including adapter finalizers. Default level, public
+   API and filtering semantics are retained.
+2. Add opt-in tunnel ingress suspension, rejection and joining, including queued
+   UDP jobs and their sender/reader descendants, before an embedder replaces
+   process-global configuration. After lifecycle opt-in, deprecated unversioned
+   TCPIn/UDPIn submissions are rejected. Serialize packet sender admission and
+   closure so shutdown cannot strand a late packet.
+3. Move queue Pop/Last locks before their slice-length reads. This removes a race
+   with Put/Pop and prevents indexing an emptied slice after competing Pop calls.
+4. Synchronize manual Selector choices with concurrent status, dialing and
+   nested automatic-group health checks. Set/ForceSet writes and all selection
+   reads share a mutex; no lock is retained while an adapter dials.
+
+Focused regression tests accompany each patch. No race detection or logging is
+suppressed. Exact production changes are limited to log/log.go,
+common/queue/queue.go, tunnel/tunnel.go and tunnel/connection.go, plus the new
+tunnel/ingress.go lifecycle API and adapter/outboundgroup/selector.go.
+
+The original project is https://github.com/MetaCubeX/mihomo. This is a local
+derivative, not an upstream release. Exact upstream module checksums, source
+inventory, four modification patches and verification instructions are in
+PSPORTAL-PATCHES/. The original documentation logos are retained only for complete
+corresponding source and are not used as PSPortal app branding.
+
+
+
 ===== github.com/metacubex/mihomo v1.19.32 / transport/kcptun/LICENSE.md =====
 The MIT License (MIT)
 
@@ -8026,6 +8062,37 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+
+
+===== github.com/metacubex/nistec v0.0.4 / LICENSE =====
+Copyright 2009 The Go Authors.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google LLC nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 
@@ -13937,7 +14004,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 
-===== github.com/stretchr/objx v0.1.0 / LICENSE =====
+===== github.com/stretchr/objx v0.5.2 / LICENSE =====
 The MIT License
 
 Copyright (c) 2014 Stretchr, Inc.
@@ -14215,7 +14282,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 
-===== github.com/vishvananda/netlink v1.1.0 / LICENSE =====
+===== github.com/vishvananda/netlink v1.3.1 / LICENSE =====
 
                                  Apache License
                            Version 2.0, January 2004
@@ -16625,7 +16692,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 
-===== gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405 / LICENSE =====
+===== gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 / LICENSE =====
 Gocheck - A rich testing framework for Go
  
 Copyright (c) 2010-2013 Gustavo Niemeyer <gustavo@niemeyer.net>

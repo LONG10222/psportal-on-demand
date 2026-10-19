@@ -9,7 +9,7 @@ final class ProxyModel: ObservableObject {
     enum State: String { case stopped = "Stopped", starting = "Starting", running = "Listening", stopping = "Stopping" }
     @Published var settings = ProxySettings()
     @Published private(set) var state = State.stopped
-    @Published private(set) var message = "Enter your LAN settings, then tap Start."
+    @Published private(set) var message = "Paste a subscription link to start sharing."
     @Published private(set) var activeConnections = 0
     @Published private(set) var activeDevices = 0
     @Published private(set) var devices: [ConnectedDevice] = []
@@ -40,7 +40,7 @@ final class ProxyModel: ObservableObject {
     var localizedMessage: String {
         guard language == "zh" else { return message }
         return [
-            "Enter your LAN settings, then tap Start.": "粘贴订阅后，点击一键准备并启动。",
+            "Paste a subscription link to start sharing.": "粘贴订阅链接，准备共享。",
             "Enter this iPhone or iPad's current private Wi-Fi IPv4 address. Wildcard and loopback addresses are not allowed.": "请使用本机当前的 Wi-Fi 私网 IPv4 地址。",
             "Use a port from 1024 to 65535, other than the reserved compatibility ports 10082 and 10090.": "请使用 1024 至 65535 的端口，并避开保留端口 10082 和 10090。",
             "Enter one or more unique private IPv4 client addresses, separated by commas or new lines.": "请填写不重复的设备私网 IPv4 地址，用逗号或换行分隔。",
