@@ -180,7 +180,7 @@ def parse_status(line: str) -> dict | None:
     from .runtime import MAX_STATUS_BYTES
     def string(value, limit, empty=True):
         return (isinstance(value, str) and (empty or bool(value))
-                and len(value.encode('utf-8')) <= limit and not any(ord(c) < 32 for c in value))
+                and len(value.encode('utf-8')) <= limit and not any(ord(c) < 32 or ord(c) == 127 for c in value))
     def integer(value, maximum=86400):
         return type(value) is int and 0 <= value <= maximum
     try:
@@ -240,7 +240,9 @@ def parse_status(line: str) -> dict | None:
             delay = node.get('delay_ms')
             if delay is not None and (type(delay) not in (int, float) or not math.isfinite(delay) or not 0 <= delay <= 86400000):
                 return None
-            clean_nodes.append({key: node[key] for key in ('name','healthy','delay_ms') if key in node})
+            if 'type' in node and not string(node['type'], 64):
+                return None
+            clean_nodes.append({key: node[key] for key in ('name','healthy','delay_ms','type') if key in node})
         groups = value.get('groups', [])
         if not isinstance(groups, list) or len(groups) > 1000:
             return None
@@ -260,12 +262,38 @@ def parse_status(line: str) -> dict | None:
                     return None
                 item['members'] = list(group['members'])
             clean_groups.append(item)
+        policies = None
+        if 'node_policies' in value:
+            from .nodes import validate_policies
+            policies = validate_policies(value['node_policies'])
+        clients = []
+        if 'clients' in value:
+            if not isinstance(value['clients'], list) or len(value['clients']) > 256:
+                return None
+            seen = set()
+            for client in value['clients']:
+                if not isinstance(client, dict):
+                    return None
+                ip = client.get('ip')
+                if not isinstance(ip, str) or str(ipaddress.IPv4Address(ip)) != ip or ip in seen:
+                    return None
+                seen.add(ip)
+                if not integer(client.get('active')) or not integer(client.get('requests'), 2**53 - 1):
+                    return None
+                stamp = client.get('last_seen')
+                if type(stamp) not in (int, float) or not math.isfinite(stamp) or stamp < 0:
+                    return None
+                clients.append({key: client[key] for key in ('ip', 'active', 'requests', 'last_seen')})
         allowed = {'event','state','core_state','running','engine','engine_version','listen_host','listen_port',
                    'address','connected_clients','active_connections','client_ips','selection_mode',
                    'switch_threshold_ms','selection_group','selected_node','error','node_management','preparing',
                    'busy','last_command_id','command_error','probe_complete','probe_tested','probe_total'}
         result = {key: item for key, item in value.items() if key in allowed}
         result.update(nodes=clean_nodes, groups=clean_groups)
+        if policies is not None:
+            result['node_policies'] = policies
+        if 'clients' in value:
+            result['clients'] = clients
         return result
     except (TypeError, ValueError, UnicodeError, OverflowError, RecursionError):
         return None

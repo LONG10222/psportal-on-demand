@@ -158,7 +158,7 @@ def _linux_physical(name: str, sysfs_root: Path) -> bool:
         return False
     try:
         entry = sysfs_root / name
-        devices = sysfs_root.parents[1] / 'devices'
+        devices = (sysfs_root.parents[1] / 'devices').resolve(strict=True)
         device = (entry / 'device').resolve(strict=True)
         resolved = entry.resolve(strict=True)
         def scalar(filename):

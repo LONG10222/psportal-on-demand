@@ -17,6 +17,18 @@ var current *engine.Engine
 // SubscriptionInfo returns only bounded accounting values provided by the server.
 func SubscriptionInfo(url string) string { return engine.SubscriptionInfo(url) }
 
+// NodeCommand never holds the lifecycle mutex across download or probing, so
+// Stop can cancel in-flight work when the app leaves the foreground.
+func NodeCommand(command string) string {
+	mu.Lock()
+	target := current
+	mu.Unlock()
+	if target == nil {
+		return `{"ok":false,"code":"stopped"}`
+	}
+	return target.NodeCommand(command)
+}
+
 // Start validates configuration and starts the LAN listener. Subscription loading
 // and encrypted outbound adapters wake only when an external request arrives.
 func Start(configJSON string) error {

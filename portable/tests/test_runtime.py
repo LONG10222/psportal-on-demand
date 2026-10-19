@@ -118,6 +118,21 @@ class RuntimeSchemaTests(unittest.TestCase):
         backend.send_command(process, 'select', selection_mode='fastest', request_id=3, selection_group='Proxy')
         self.assertEqual(json.loads(process.stdin.getvalue())['request_id'], 3)
 
+    def test_merged_history_and_policies_are_bounded_and_redacted(self):
+        record = dict(self.sample(), clients=[{'ip': '192.168.1.3', 'active': 2, 'requests': 4, 'last_seen': 10.0, 'secret': 'drop'}],
+                      node_policies={'Proxy': {'mode': 'manual', 'name': 'Tokyo'}})
+        record['nodes'][0]['type'] = 'Shadowsocks'
+        parsed = backend.parse_status(json.dumps(record))
+        self.assertEqual(parsed['node_policies']['Proxy']['name'], 'Tokyo')
+        self.assertEqual(parsed['nodes'][0]['type'], 'Shadowsocks')
+        self.assertNotIn('secret', parsed['clients'][0])
+        record['clients'][0]['active'] = True
+        self.assertIsNone(backend.parse_status(json.dumps(record)))
+        from portalproxy.runtime import validate_legacy_command
+        for name in ('bad\nname', 'bad\x7fname'):
+            with self.assertRaises(ValueError):
+                validate_legacy_command({'action': 'select', 'id': 1, 'group': 'Proxy', 'name': name})
+
     def test_render_has_complete_owned_selector_and_legacy_policy(self):
         result = render(dict(DEFAULTS, preferred_node='Tokyo', selection_mode='fixed'), 'secret')
         selector, legacy = result['proxy-groups']
@@ -245,6 +260,106 @@ class OwnedSelectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any('/delay?' in path for path, _, _ in self.calls))
         self.assertFalse(any(path.startswith('/configs') for path, _, _ in self.calls))
 
+    async def test_group_policies_and_protocols_share_one_runtime(self):
+        self.cfg['profile_file'] = '/fixture.yaml'
+        self.core.profile_groups = {'Work / Proxy', 'Nested'}
+        self.selected['Nested'] = 'Tokyo'
+        await self.core.nodes.command('nodes')
+        state = await self.core.nodes.command('select', 'Work / Proxy', 'Hong Kong')
+        self.assertEqual(state['current'], 'Hong Kong')
+        self.assertEqual(state['rows'][0]['type'], 'Shadowsocks')
+        self.assertEqual(self.core.status()['node_policies']['Work / Proxy'], {'mode': 'manual', 'name': 'Hong Kong'})
+        await self.core.select_node('fastest', selection_group='Nested')
+        self.assertEqual(self.core.nodes.policies['Nested'], {'mode': 'latency'})
+        self.assertEqual(self.core.nodes.policies['Work / Proxy']['name'], 'Hong Kong')
+        await self.core.nodes.restore()
+        self.assertEqual(self.selected['Work / Proxy'], 'Hong Kong')
+
+    async def test_background_other_group_preserves_display_and_manual_policy(self):
+        self.cfg['profile_file'] = '/fixture.yaml'
+        self.core.profile_groups = {'Work / Proxy', 'Other'}
+        self.inventory['Other'] = {'type': 'Fallback', 'all': ['Tokyo', 'Hong Kong'], 'now': 'Tokyo'}
+        self.selected['Other'] = 'Tokyo'
+        await self.core.select_node('fastest', selection_group='Other')
+        await self.core.select_node('fixed', 'Hong Kong', selection_group='Work / Proxy')
+        self.core.state = 'running'
+        self.core.process = SimpleNamespace(returncode=0)
+        self.core.nodes.last_test['Other'] = 0
+        await self.core.nodes.tick()
+        self.assertEqual(self.core.selection_group, 'Work / Proxy')
+        self.assertEqual(self.core.selection_mode, 'fixed')
+        self.assertEqual(self.core.config['preferred_node'], 'Hong Kong')
+        self.assertEqual(self.core.selected, 'Hong Kong')
+        self.assertEqual(self.core.nodes.policies['Other'], {'mode': 'latency'})
+        self.core.process = None
+        self.core.state = 'stopped'
+        calls = len(self.calls)
+        await self.core.nodes.tick()
+        self.assertEqual(len(self.calls), calls)
+
+    async def test_fallback_fixed_override_is_verified_and_restored(self):
+        self.cfg['profile_file'] = '/fixture.yaml'
+        self.core.profile_groups = {'Work / Proxy'}
+        self.inventory['Work / Proxy']['type'] = 'Fallback'
+        original = self.core._request
+        def request(path, method='GET', payload=None, timeout=2):
+            result = original(path, method, payload, timeout)
+            if path == '/proxies/Work%20%2F%20Proxy' and method == 'GET':
+                return {'now': 'Tokyo', 'fixed': self.selected['Work / Proxy']}
+            return result
+        self.core._request = request
+        await self.core.select_node('fixed', 'Hong Kong', selection_group='Work / Proxy')
+        self.assertEqual(self.selected['Work / Proxy'], 'Hong Kong')
+        # The desired fixed override and effective healthy route are distinct.
+        self.assertEqual(self.core.selected, 'Tokyo')
+        self.assertEqual(self.core.nodes.policies['Work / Proxy']['name'], 'Hong Kong')
+        await self.core.nodes.restore()
+        self.assertEqual(self.selected['Work / Proxy'], 'Hong Kong')
+
+    async def test_failed_fallback_change_restores_unfixed_original_policy(self):
+        self.cfg['profile_file'] = '/fixture.yaml'
+        self.core.profile_groups = {'Work / Proxy'}
+        self.inventory['Work / Proxy']['type'] = 'Fallback'
+        original = self.core._request
+        fixed, verification_failed, deleted = '', False, False
+        def request(path, method='GET', payload=None, timeout=2):
+            nonlocal fixed, verification_failed, deleted
+            if path == '/proxies/Work%20%2F%20Proxy':
+                if method == 'PUT':
+                    fixed = payload['name']
+                    return {}
+                if method == 'DELETE':
+                    fixed, deleted = '', True
+                    return {}
+                if fixed == 'Hong Kong' and not verification_failed:
+                    verification_failed = True
+                    raise OSError('fixture verification failure')
+                return {'now': fixed or 'Tokyo', 'fixed': fixed}
+            return original(path, method, payload, timeout)
+        self.core._request = request
+        with self.assertRaises(CoreError):
+            await self.core.select_node('fixed', 'Hong Kong', selection_group='Work / Proxy')
+        self.assertTrue(deleted)
+        self.assertEqual(fixed, '')
+        self.assertEqual(self.core.nodes.policies, {})
+
+    async def test_legacy_and_structured_commands_share_busy_gate(self):
+        gate = asyncio.Event()
+        async def prepare(*args):
+            await gate.wait()
+        self.core.prepare = prepare
+        proxy = ProxyServer(dict(listen_host='127.0.0.1', listen_port=10081, allowed_clients=['127.0.0.1']), self.core)
+        control = RuntimeControl(proxy, self.core, emit=lambda *args, **kwargs: None)
+        control.accept('{"command":"prepare","request_id":1}')
+        pending = control.task
+        with patch('portalproxy.runtime.emit') as emit:
+            control.accept('{"action":"select","id":2,"group":"PORTAL","name":"Tokyo"}')
+            self.assertEqual(emit.call_args.args[0]['kind'], 'control_error')
+            self.assertEqual(emit.call_args.args[0]['id'], 2)
+            self.assertFalse(any(method == 'PUT' for _, method, _ in self.calls))
+        gate.set()
+        await pending
+
     async def test_missing_fixed_node_does_not_change_selection(self):
         await self.core.select_node('fixed', 'Tokyo')
         with self.assertRaises(CoreError): await self.core.select_node('fixed', 'missing')
@@ -255,7 +370,7 @@ class OwnedSelectionTests(unittest.IsolatedAsyncioTestCase):
         self.cfg['profile_file'] = '/not-read-in-fixture.yaml'
         self.core.profile_groups = {'Work / Proxy', 'Nested'}
         await self.core.prepare()
-        self.assertEqual([g['name'] for g in self.core.groups], ['Work / Proxy'])
+        self.assertEqual([g['name'] for g in self.core.groups], ['Work / Proxy', 'Nested'])
         self.assertEqual(self.core.nodes, [])
         self.assertFalse(any(method == 'PUT' for _, method, _ in self.calls))
         with self.assertRaises(CoreError): await self.core.select_node('fixed', 'Tokyo', selection_group='GLOBAL')

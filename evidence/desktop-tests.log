@@ -32,6 +32,32 @@ test_reviewed_notice_set_has_complete_exact_hashes (test_cpython_notices.CPython
 test_windows_requires_matching_components_and_installed_license (test_cpython_notices.CPythonNoticeTests.test_windows_requires_matching_components_and_installed_license) ... ok
 test_windows_runtime_hash_is_bound_to_installer_and_classified_separately (test_cpython_notices.CPythonNoticeTests.test_windows_runtime_hash_is_bound_to_installer_and_classified_separately) ... ok
 test_wrong_python_or_platform_never_creates_destination (test_cpython_notices.CPythonNoticeTests.test_wrong_python_or_platform_never_creates_destination) ... ok
+test_active_accounting_only_no_controller_or_cache_writes (test_cross_platform_discovery.AccountingPathTests.test_active_accounting_only_no_controller_or_cache_writes) ... ok
+test_standard_paths_only (test_cross_platform_discovery.AccountingPathTests.test_standard_paths_only) ... ok
+test_bad_json_is_bounded_and_generic (test_cross_platform_discovery.BoundedDiscoveryTests.test_bad_json_is_bounded_and_generic) ... ok
+test_macos_command_path_is_preserved (test_cross_platform_discovery.BoundedDiscoveryTests.test_macos_command_path_is_preserved) ... ok
+test_missing_command_failed_command_and_bad_encoding_are_actionable (test_cross_platform_discovery.BoundedDiscoveryTests.test_missing_command_failed_command_and_bad_encoding_are_actionable) ... ok
+test_canonical_and_symlinked_sysfs_roots_identify_the_same_hardware (test_cross_platform_discovery.LinuxLANTests.test_canonical_and_symlinked_sysfs_roots_identify_the_same_hardware) ... ok
+test_default_route_selection_and_ambiguity (test_cross_platform_discovery.LinuxLANTests.test_default_route_selection_and_ambiguity) ... ok
+test_discovery_only_uses_fixed_ip_json_commands (test_cross_platform_discovery.LinuxLANTests.test_discovery_only_uses_fixed_ip_json_commands) ... ok
+test_down_loopback_bridge_unknown_and_virtual_rejected (test_cross_platform_discovery.LinuxLANTests.test_down_loopback_bridge_unknown_and_virtual_rejected) ... ok
+test_malformed_ipv4_prefix_and_lifetime (test_cross_platform_discovery.LinuxLANTests.test_malformed_ipv4_prefix_and_lifetime) ... ok
+test_multiple_addresses_need_verified_preferred_source (test_cross_platform_discovery.LinuxLANTests.test_multiple_addresses_need_verified_preferred_source) ... ok
+test_no_route_multipath_split_vpn_and_bad_route_fail_closed (test_cross_platform_discovery.LinuxLANTests.test_no_route_multipath_split_vpn_and_bad_route_fail_closed) ... ok
+test_policy_routed_vpn_and_unknown_rules_fail_closed (test_cross_platform_discovery.LinuxLANTests.test_policy_routed_vpn_and_unknown_rules_fail_closed) ... ok
+test_sysfs_verified_interface_actual_small_subnet (test_cross_platform_discovery.LinuxLANTests.test_sysfs_verified_interface_actual_small_subnet) ... ok
+test_environment_is_explicit_and_conflicts_credentials_cgi_reject (test_cross_platform_discovery.ProxyDiscoveryTests.test_environment_is_explicit_and_conflicts_credentials_cgi_reject) ... ok
+test_gnome_only_manual_uncredentialed_http_fixed_queries (test_cross_platform_discovery.ProxyDiscoveryTests.test_gnome_only_manual_uncredentialed_http_fixed_queries) ... ok
+test_http_literal_loopback_only_without_credentials_or_shell_syntax (test_cross_platform_discovery.ProxyDiscoveryTests.test_http_literal_loopback_only_without_credentials_or_shell_syntax) ... ok
+test_missing_proxy_command_returns_none (test_cross_platform_discovery.ProxyDiscoveryTests.test_missing_proxy_command_returns_none) ... ok
+test_windows_registry_only_manual_hkcu_and_read_access (test_cross_platform_discovery.ProxyDiscoveryTests.test_windows_registry_only_manual_hkcu_and_read_access) ... ok
+test_invalid_address_prefix_and_gateway_fail_closed (test_cross_platform_discovery.WindowsLANTests.test_invalid_address_prefix_and_gateway_fail_closed) ... ok
+test_localized_name_real_prefix_exact_allowlist (test_cross_platform_discovery.WindowsLANTests.test_localized_name_real_prefix_exact_allowlist) ... ok
+test_non_physical_down_unknown_and_virtual_fail_closed (test_cross_platform_discovery.WindowsLANTests.test_non_physical_down_unknown_and_virtual_fail_closed) ... ok
+test_preferred_non_skipped_address_and_known_route_required (test_cross_platform_discovery.WindowsLANTests.test_preferred_non_skipped_address_and_known_route_required) ... ok
+test_split_vpn_default_is_not_treated_as_physical_default (test_cross_platform_discovery.WindowsLANTests.test_split_vpn_default_is_not_treated_as_physical_default) ... ok
+test_static_read_only_powershell_command (test_cross_platform_discovery.WindowsLANTests.test_static_read_only_powershell_command) ... ok
+test_unique_default_route_uses_route_plus_interface_metric (test_cross_platform_discovery.WindowsLANTests.test_unique_default_route_uses_route_plus_interface_metric) ... ok
 test_output_queue_is_bounded (test_desktop.BackendProcessTests.test_output_queue_is_bounded) ... ok
 test_oversize_record_is_dropped_as_a_whole (test_desktop.BackendProcessTests.test_oversize_record_is_dropped_as_a_whole) ... ok
 test_owned_child_stops_on_eof_and_can_restart (test_desktop.BackendProcessTests.test_owned_child_stops_on_eof_and_can_restart) ... ok
@@ -104,7 +130,7 @@ test_diagnostics_are_not_interpreted_as_format_templates (test_language_switch.L
 test_preferences_are_independent_of_proxy_config_and_private (test_language_switch.LanguagePreferencesTests.test_preferences_are_independent_of_proxy_config_and_private) ... ok
 test_difference_diagnostics_are_bounded_without_ignoring_bytes (test_macho_origin_proof.MachOOriginProofTests.test_difference_diagnostics_are_bounded_without_ignoring_bytes) ... ok
 test_other_platforms_never_claim_a_transformation_proof (test_macho_origin_proof.MachOOriginProofTests.test_other_platforms_never_claim_a_transformation_proof) ... skipped 'non-macOS fail-closed check'
-test_real_scratch_normalization_matches_and_detects_modified_code (test_macho_origin_proof.MachOOriginProofTests.test_real_scratch_normalization_matches_and_detects_modified_code) ... 4762 INFO: TclTkInfo: initializing cached Tcl/Tk info...
+test_real_scratch_normalization_matches_and_detects_modified_code (test_macho_origin_proof.MachOOriginProofTests.test_real_scratch_normalization_matches_and_detects_modified_code) ... 4749 INFO: TclTkInfo: initializing cached Tcl/Tk info...
 ok
 test_rpath_matches_pinned_pyinstaller_directory_depth (test_macho_origin_proof.MachOOriginProofTests.test_rpath_matches_pinned_pyinstaller_directory_depth) ... ok
 test_changed_bytes_modes_links_and_extra_files_are_rejected (test_macos_archive.MacOSArchiveIntegrityTests.test_changed_bytes_modes_links_and_extra_files_are_rejected) ... ok
@@ -151,14 +177,14 @@ test_source_environment_is_unchanged (test_process_env.EnvironmentTests.test_sou
 test_launch_uses_array_and_sanitized_environment (test_process_env.LaunchTests.test_launch_uses_array_and_sanitized_environment) ... ok
 test_windows_frozen_clears_then_restores_dll_directory (test_process_env.WindowsLaunchContractTests.test_windows_frozen_clears_then_restores_dll_directory) ... ok
 test_windows_frozen_restores_after_spawn_error (test_process_env.WindowsLaunchContractTests.test_windows_frozen_restores_after_spawn_error) ... ok
-test_real_complete_profile_uses_its_own_group_and_rule_then_releases_core (test_profiles.CompleteProfileTransportTests.test_real_complete_profile_uses_its_own_group_and_rule_then_releases_core) ... 7737 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60487)>,)> is serving
-7738 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60490)>,)> is serving
+test_real_complete_profile_uses_its_own_group_and_rule_then_releases_core (test_profiles.CompleteProfileTransportTests.test_real_complete_profile_uses_its_own_group_and_rule_then_releases_core) ... 7647 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54801)>,)> is serving
+7648 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 54804)>,)> is serving
 Core: starting
-7750 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=26642 running>
-7819 INFO: <_UnixSubprocessTransport pid=26642 running> exited with return code 0
-7826 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=26643 running>
+7661 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=38244 running>
+7730 INFO: <_UnixSubprocessTransport pid=38244 running> exited with return code 0
+7737 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=38245 running>
 Core: running
-9743 INFO: <_UnixSubprocessTransport pid=26643 running> exited with return code 0
+9656 INFO: <_UnixSubprocessTransport pid=38245 running> exited with return code 0
 Core: stopped
 ok
 test_complete_profile_ignores_stale_provider_fields (test_profiles.ProfileImportTests.test_complete_profile_ignores_stale_provider_fields) ... ok
@@ -166,6 +192,7 @@ test_complete_profile_preserves_groups_rules_node_options_and_source (test_profi
 test_connection_exports_contain_no_subscription_or_node_credentials (test_profiles.ProfileImportTests.test_connection_exports_contain_no_subscription_or_node_credentials) ... ok
 test_host_config_accepts_full_profile_without_subscription_and_rejects_embedded (test_profiles.ProfileImportTests.test_host_config_accepts_full_profile_without_subscription_and_rejects_embedded) ... ok
 test_host_overlay_accepts_common_profile_without_changing_source_or_resolver (test_profiles.ProfileImportTests.test_host_overlay_accepts_common_profile_without_changing_source_or_resolver) ... ok
+test_json_surrogate_pairs_roundtrip_without_changing_the_source (test_profiles.ProfileImportTests.test_json_surrogate_pairs_roundtrip_without_changing_the_source) ... ok
 test_malformed_duplicate_recursive_and_unsafe_tags_are_rejected_without_secret_echo (test_profiles.ProfileImportTests.test_malformed_duplicate_recursive_and_unsafe_tags_are_rejected_without_secret_echo) ... ok
 test_provider_cannot_traverse_outside_selected_profile_directory (test_profiles.ProfileImportTests.test_provider_cannot_traverse_outside_selected_profile_directory) ... ok
 test_provider_file_is_snapshotted_and_relative_path_keeps_semantics (test_profiles.ProfileImportTests.test_provider_file_is_snapshotted_and_relative_path_keeps_semantics) ... ok
@@ -178,67 +205,107 @@ test_rejects_ambiguous_authorities_and_unsupported_targets (test_proxy.ParserTes
 test_rejects_smuggling_and_malformed_headers (test_proxy.ParserTests.test_rejects_smuggling_and_malformed_headers) ... ok
 test_removes_proxy_credentials_and_connection_listed_fields (test_proxy.ParserTests.test_removes_proxy_credentials_and_connection_listed_fields) ... ok
 test_rewrites_origin_and_absolute_form (test_proxy.ParserTests.test_rewrites_origin_and_absolute_form) ... ok
-test_bind_conflict_is_reported (test_proxy.ProxyNetworkTests.test_bind_conflict_is_reported) ... 9786 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60499)>,)> is serving
+test_bind_conflict_is_reported (test_proxy.ProxyNetworkTests.test_bind_conflict_is_reported) ... 9730 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54811)>,)> is serving
 ok
-test_chunked_body_normalization_and_trailer_removal (test_proxy.ProxyNetworkTests.test_chunked_body_normalization_and_trailer_removal) ... 9787 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60500)>,)> is serving
-9787 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60501)>,)> is serving
+test_chunked_body_normalization_and_trailer_removal (test_proxy.ProxyNetworkTests.test_chunked_body_normalization_and_trailer_removal) ... 9731 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54812)>,)> is serving
+9732 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 54813)>,)> is serving
 ok
-test_denied_client_and_connection_limit (test_proxy.ProxyNetworkTests.test_denied_client_and_connection_limit) ... 9793 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60504)>,)> is serving
-9795 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60506)>,)> is serving
+test_denied_client_and_connection_limit (test_proxy.ProxyNetworkTests.test_denied_client_and_connection_limit) ... 9738 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54816)>,)> is serving
+9740 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 54818)>,)> is serving
 ok
-test_direct_connect_uses_only_injected_numeric_destination (test_proxy.ProxyNetworkTests.test_direct_connect_uses_only_injected_numeric_destination) ... 9798 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60509)>,)> is serving
-9799 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60510)>,)> is serving
+test_direct_connect_uses_only_injected_numeric_destination (test_proxy.ProxyNetworkTests.test_direct_connect_uses_only_injected_numeric_destination) ... 9744 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54821)>,)> is serving
+9744 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 54822)>,)> is serving
 ok
-test_dns_denial_and_errors_do_not_wake_core (test_proxy.ProxyNetworkTests.test_dns_denial_and_errors_do_not_wake_core) ... 9803 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60513)>,)> is serving
+test_dns_denial_and_errors_do_not_wake_core (test_proxy.ProxyNetworkTests.test_dns_denial_and_errors_do_not_wake_core) ... 9749 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54825)>,)> is serving
 ok
-test_expect_continue_and_malformed_body (test_proxy.ProxyNetworkTests.test_expect_continue_and_malformed_body) ... 9807 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60516)>,)> is serving
-9807 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60517)>,)> is serving
+test_expect_continue_and_malformed_body (test_proxy.ProxyNetworkTests.test_expect_continue_and_malformed_body) ... 9754 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54828)>,)> is serving
+9754 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 54829)>,)> is serving
 ok
-test_external_connect_tunnel_and_half_close (test_proxy.ProxyNetworkTests.test_external_connect_tunnel_and_half_close) ... 9812 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60520)>,)> is serving
-9812 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60521)>,)> is serving
+test_external_connect_tunnel_and_half_close (test_proxy.ProxyNetworkTests.test_external_connect_tunnel_and_half_close) ... 9759 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54832)>,)> is serving
+9759 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 54833)>,)> is serving
 ok
-test_external_http_streams_body_and_releases_core (test_proxy.ProxyNetworkTests.test_external_http_streams_body_and_releases_core) ... 9817 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60524)>,)> is serving
-9817 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60525)>,)> is serving
+test_external_http_streams_body_and_releases_core (test_proxy.ProxyNetworkTests.test_external_http_streams_body_and_releases_core) ... 9764 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54836)>,)> is serving
+9764 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 54837)>,)> is serving
 ok
-test_failed_backend_connect_releases_core (test_proxy.ProxyNetworkTests.test_failed_backend_connect_releases_core) ... 9821 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60528)>,)> is serving
-9821 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60529)>,)> is serving
+test_failed_backend_connect_releases_core (test_proxy.ProxyNetworkTests.test_failed_backend_connect_releases_core) ... 9768 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54840)>,)> is serving
+9769 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 54841)>,)> is serving
 ok
-test_headers_timeout_does_not_start_core (test_proxy.ProxyNetworkTests.test_headers_timeout_does_not_start_core) ... 9825 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60532)>,)> is serving
+test_headers_timeout_does_not_start_core (test_proxy.ProxyNetworkTests.test_headers_timeout_does_not_start_core) ... 9772 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54844)>,)> is serving
 ok
-test_lan_route_is_numeric_origin_form_without_core (test_proxy.ProxyNetworkTests.test_lan_route_is_numeric_origin_form_without_core) ... 9878 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60534)>,)> is serving
-9879 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60535)>,)> is serving
+test_lan_route_is_numeric_origin_form_without_core (test_proxy.ProxyNetworkTests.test_lan_route_is_numeric_origin_form_without_core) ... 9827 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54846)>,)> is serving
+9827 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 54847)>,)> is serving
 ok
-test_loopback_metadata_and_localhost_rejected_before_core (test_proxy.ProxyNetworkTests.test_loopback_metadata_and_localhost_rejected_before_core) ... 9883 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60538)>,)> is serving
+test_loopback_metadata_and_localhost_rejected_before_core (test_proxy.ProxyNetworkTests.test_loopback_metadata_and_localhost_rejected_before_core) ... 9832 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54850)>,)> is serving
 ok
-test_malformed_chunk_releases_core_without_forwarding_extra_request (test_proxy.ProxyNetworkTests.test_malformed_chunk_releases_core_without_forwarding_extra_request) ... 9901 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60551)>,)> is serving
-9902 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60552)>,)> is serving
+test_malformed_chunk_releases_core_without_forwarding_extra_request (test_proxy.ProxyNetworkTests.test_malformed_chunk_releases_core_without_forwarding_extra_request) ... 9852 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54863)>,)> is serving
+9852 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 54864)>,)> is serving
 ok
-test_mixed_denied_dns_cannot_start_backend (test_proxy.ProxyNetworkTests.test_mixed_denied_dns_cannot_start_backend) ... 9906 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60555)>,)> is serving
+test_mixed_denied_dns_cannot_start_backend (test_proxy.ProxyNetworkTests.test_mixed_denied_dns_cannot_start_backend) ... 9856 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54867)>,)> is serving
 ok
-test_pipelined_second_request_is_not_forwarded (test_proxy.ProxyNetworkTests.test_pipelined_second_request_is_not_forwarded) ... 9908 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60557)>,)> is serving
-9908 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60558)>,)> is serving
+test_pipelined_second_request_is_not_forwarded (test_proxy.ProxyNetworkTests.test_pipelined_second_request_is_not_forwarded) ... 9858 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54869)>,)> is serving
+9858 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 54870)>,)> is serving
 ok
-test_shutdown_cancels_tunnels_and_releases_core (test_proxy.ProxyNetworkTests.test_shutdown_cancels_tunnels_and_releases_core) ... 9964 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60561)>,)> is serving
-9964 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60562)>,)> is serving
+test_shutdown_cancels_tunnels_and_releases_core (test_proxy.ProxyNetworkTests.test_shutdown_cancels_tunnels_and_releases_core) ... 9915 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54873)>,)> is serving
+9915 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 54874)>,)> is serving
 ok
-test_startup_failure_has_no_leaked_reference (test_proxy.ProxyNetworkTests.test_startup_failure_has_no_leaked_reference) ... 10973 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60566)>,)> is serving
+test_startup_failure_has_no_leaked_reference (test_proxy.ProxyNetworkTests.test_startup_failure_has_no_leaked_reference) ... 10925 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54877)>,)> is serving
 ok
-test_truncated_content_length_fails_and_releases_core (test_proxy.ProxyNetworkTests.test_truncated_content_length_fails_and_releases_core) ... 10981 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60568)>,)> is serving
-10982 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60569)>,)> is serving
+test_truncated_content_length_fails_and_releases_core (test_proxy.ProxyNetworkTests.test_truncated_content_length_fails_and_releases_core) ... 10931 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54879)>,)> is serving
+10932 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 54880)>,)> is serving
 ok
+test_all_sources_notices_and_recipe_are_retained_exactly (test_pyyaml_runtime.YamlPackagingTests.test_all_sources_notices_and_recipe_are_retained_exactly) ... ok
+test_final_zip_and_tar_bind_all_sources_notices_and_scope (test_pyyaml_runtime.YamlPackagingTests.test_final_zip_and_tar_bind_all_sources_notices_and_scope) ... ok
+test_frozen_python_mapping_requires_every_reviewed_module_and_exact_origin (test_pyyaml_runtime.YamlPackagingTests.test_frozen_python_mapping_requires_every_reviewed_module_and_exact_origin) ... ok
+test_linux_extension_is_separately_owned_and_changed_or_unknown_elf_fails (test_pyyaml_runtime.YamlPackagingTests.test_linux_extension_is_separately_owned_and_changed_or_unknown_elf_fails) ... ok
+test_missing_debian_owner_or_license_stays_fail_closed (test_pyyaml_runtime.YamlPackagingTests.test_missing_debian_owner_or_license_stays_fail_closed) ... ok
+test_missing_or_modified_source_license_recipe_and_manifest_fail (test_pyyaml_runtime.YamlPackagingTests.test_missing_or_modified_source_license_recipe_and_manifest_fail) ... ok
+test_retained_scope_must_match_actual_inventory (test_pyyaml_runtime.YamlPackagingTests.test_retained_scope_must_match_actual_inventory) ... ok
+test_source_fetch_rejects_wrong_hash_and_unapproved_redirect (test_pyyaml_runtime.YamlPackagingTests.test_source_fetch_rejects_wrong_hash_and_unapproved_redirect) ... ok
+test_source_fetch_reuses_exact_cache_and_never_overwrites_modified_file (test_pyyaml_runtime.YamlPackagingTests.test_source_fetch_reuses_exact_cache_and_never_overwrites_modified_file) ... ok
 test_only_physical_private_interface_and_current_subnet_are_selected (test_quick_setup.NetworkSetupTests.test_only_physical_private_interface_and_current_subnet_are_selected) ... ok
 test_port_is_kept_until_occupied_and_alternative_is_available (test_quick_setup.NetworkSetupTests.test_port_is_kept_until_occupied_and_alternative_is_available) ... ok
 test_one_click_imports_configures_starts_and_shows_wifi_guide (test_quick_setup.QuickSetupWindowTests.test_one_click_imports_configures_starts_and_shows_wifi_guide) ... ok
-test_real_core_http_connect_fixed_selection_and_idle (test_real_core.RealCoreTests.test_real_core_http_connect_fixed_selection_and_idle) ... 11434 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 60579)>,)> is serving
-11435 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 60582)>,)> is serving
+test_real_core_http_connect_fixed_selection_and_idle (test_real_core.RealCoreTests.test_real_core_http_connect_fixed_selection_and_idle) ... 11401 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54887)>,)> is serving
+11402 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 54890)>,)> is serving
 Core: starting
-11446 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=26646 running>
-11459 INFO: <_UnixSubprocessTransport pid=26646 running> exited with return code 0
-11467 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=26647 running>
+11412 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=38249 running>
+11421 INFO: <_UnixSubprocessTransport pid=38249 running> exited with return code 0
+11427 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=38250 running>
 Core: running
-14446 INFO: <_UnixSubprocessTransport pid=26647 running> exited with return code 0
+14414 INFO: <_UnixSubprocessTransport pid=38250 running> exited with return code 0
 Core: stopped
 ok
+test_unique_live_ips_recent_clients_and_denied_connections (test_runtime_controls.DeviceCountsTests.test_unique_live_ips_recent_clients_and_denied_connections) ... 14500 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54905)>,)> is serving
+14501 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 54906)>,)> is serving
+ok
+test_linked_client_receives_no_node_controller_calls (test_runtime_controls.LinkedModeTests.test_linked_client_receives_no_node_controller_calls) ... ok
+test_rejects_unbounded_or_invalid_policies (test_runtime_controls.PolicyValidationTests.test_rejects_unbounded_or_invalid_policies) ... ok
+test_manual_switch_probes_auto_failure_retention_idle_restore_and_no_clash (test_runtime_controls.RealNodeControlTests.test_manual_switch_probes_auto_failure_retention_idle_restore_and_no_clash) ... 14560 INFO: <Server sockets=(<asyncio.TransportSocket fd=8, family=2, type=1, proto=6, laddr=('127.0.0.1', 54914)>,)> is serving
+14560 INFO: <Server sockets=(<asyncio.TransportSocket fd=9, family=2, type=1, proto=6, laddr=('127.0.0.1', 54915)>,)> is serving
+Core: starting
+14581 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=38251 running>
+14590 INFO: <_UnixSubprocessTransport pid=38251 running> exited with return code 0
+14597 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=38252 running>
+Core: running
+15096 INFO: <_UnixSubprocessTransport pid=38252 running> exited with return code 0
+Core: stopped
+Core: starting
+15115 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=38253 running>
+15130 INFO: <_UnixSubprocessTransport pid=38253 running> exited with return code 0
+15145 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=38254 running>
+Core: running
+15282 INFO: <_UnixSubprocessTransport pid=38254 running> exited with return code 0
+Core: stopped
+ok
+test_provider_retains_regional_default_and_supports_stable_manual_selection (test_runtime_controls.RealNodeControlTests.test_provider_retains_regional_default_and_supports_stable_manual_selection) ... Core: starting
+15298 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=38255 running>
+15308 INFO: <_UnixSubprocessTransport pid=38255 running> exited with return code 0
+15315 INFO: execute program '/Users/liyinglong/Documents/Codex/2026-10-18/on-demand-apple/work/desktop-cores/mihomo': <_UnixSubprocessTransport pid=38256 running>
+Core: running
+15426 INFO: <_UnixSubprocessTransport pid=38256 running> exited with return code 0
+Core: stopped
+ok
+test_live_device_counts_node_switch_and_language_through_owned_child (test_runtime_controls.RuntimeWindowTests.test_live_device_counts_node_switch_and_language_through_owned_child) ... ok
 test_api_set_loader_proof_overrides_unrelated_static_path (test_runtime_inventory.RuntimeInventoryTests.test_api_set_loader_proof_overrides_unrelated_static_path) ... ok
 test_api_set_proof_never_loads_arbitrary_names_or_paths (test_runtime_inventory.RuntimeInventoryTests.test_api_set_proof_never_loads_arbitrary_names_or_paths) ... ok
 test_component_labels_are_only_path_hints (test_runtime_inventory.RuntimeInventoryTests.test_component_labels_are_only_path_hints) ... ok
@@ -254,6 +321,9 @@ test_windows_api_set_has_exact_system_host_evidence (test_runtime_inventory.Runt
 test_invalid_values_are_ignored_and_overuse_clamps_to_zero (test_subscription_info.SubscriptionAccountingTests.test_invalid_values_are_ignored_and_overuse_clamps_to_zero) ... ok
 test_remaining_and_expiry_are_derived_only_from_real_header_values (test_subscription_info.SubscriptionAccountingTests.test_remaining_and_expiry_are_derived_only_from_real_header_values) ... ok
 test_unknown_fields_are_not_zero_or_unlimited (test_subscription_info.SubscriptionAccountingTests.test_unknown_fields_are_not_zero_or_unlimited) ... ok
+test_empty_mac_store_loads_only_the_existing_os_ca_file (test_tls.VerifiedContextTests.test_empty_mac_store_loads_only_the_existing_os_ca_file) ... ok
+test_loaded_roots_overrides_other_platforms_and_absent_file_are_preserved (test_tls.VerifiedContextTests.test_loaded_roots_overrides_other_platforms_and_absent_file_are_preserved) ... ok
+test_real_context_has_roots_and_keeps_both_verification_checks (test_tls.VerifiedContextTests.test_real_context_has_roots_and_keeps_both_verification_checks) ... ok
 test_case_insensitive_environment_and_duplicate_prefix (test_windows_build_environment.WindowsBuildEnvironmentTests.test_case_insensitive_environment_and_duplicate_prefix) ... ok
 test_missing_or_relative_required_paths_fail_closed (test_windows_build_environment.WindowsBuildEnvironmentTests.test_missing_or_relative_required_paths_fail_closed) ... ok
 test_only_selected_python_and_windows_paths_reach_child (test_windows_build_environment.WindowsBuildEnvironmentTests.test_only_selected_python_and_windows_paths_reach_child) ... ok
@@ -265,6 +335,6 @@ test_unknown_origin_and_unresolved_inventory_fail_closed (test_windows_release_g
 test_windows_path_scope_is_case_insensitive_but_bounded (test_windows_release_gate.WindowsReleaseGateTests.test_windows_path_scope_is_case_insensitive_but_bounded) ... ok
 
 ----------------------------------------------------------------------
-Ran 202 tests in 14.478s
+Ran 247 tests in 17.996s
 
 OK (skipped=9)

@@ -1,6 +1,7 @@
 """Portable command-line service; does not alter OS networking or autostart."""
 import argparse
 import asyncio
+import json
 import signal
 import sys
 import threading
@@ -50,6 +51,12 @@ async def serve(config, desktop_child=False):
             async def publish_status():
                 while True:
                     control.publish()
+                    from .runtime import emit
+                    snapshot = proxy.snapshot()
+                    snapshot['core'] = getattr(core, 'state', 'existing')
+                    emit(snapshot)
+                    if hasattr(core, 'nodes') and core.state == 'running' and core.owned_inventory:
+                        emit(core.nodes.snapshot(core.owned_inventory))
                     await asyncio.sleep(1)
             publisher = asyncio.create_task(publish_status())
         print(f"Proxy ready at {config['listen_host']}:{config['listen_port']}; core starts on demand", flush=True)

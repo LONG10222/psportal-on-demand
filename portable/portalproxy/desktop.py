@@ -20,7 +20,7 @@ import time
 from urllib.parse import parse_qsl, unquote, urlsplit
 
 from . import config, backend as engine_backend
-from .runtime import MAX_STATUS_BYTES
+from .runtime import MAX_STATUS_BYTES, MAX_EVENT, PREFIX
 
 MAX_CONFIG_BYTES = 1024 * 1024
 MAX_LOG_LINES = 500
@@ -120,6 +120,8 @@ class BackendProcess:
     def __init__(self):
         self.process: subprocess.Popen | None = None
         self.events: queue.Queue[str] = queue.Queue(maxsize=500)
+        self.updates = queue.Queue(maxsize=100)
+        self._write_lock = threading.Lock()
         self.secrets: tuple[str, ...] = ()
         self.stopping_since: float | None = None
         self._signaled = False
@@ -172,6 +174,9 @@ class BackendProcess:
             self.process = process
         self.launch = launch
         self.stopping_since = None
+        while not self.updates.empty():
+            try: self.updates.get_nowait()
+            except queue.Empty: break
         self._signaled = False
         self.log(('Experimental embedded engine' if launch.embedded else 'External-Mihomo listener')
                  + ' process started. Waiting for listener readiness.')
@@ -201,6 +206,19 @@ class BackendProcess:
                         while line and not line.endswith('\n'):
                             line = process.stdout.readline(MAX_STATUS_BYTES + 1)
                         log('[Oversized diagnostic omitted]')
+                        continue
+                    if line.startswith(PREFIX):
+                        # Both protocols are emitted only by our owned child. A
+                        # restart must never receive the previous child's data.
+                        if len(line.encode('utf-8')) <= MAX_EVENT:
+                            try:
+                                event = json.loads(line[len(PREFIX):])
+                                with self._state_lock:
+                                    if (self.process is process and isinstance(event, dict)
+                                            and event.get('kind') in ('statistics', 'nodes', 'control_error')):
+                                        self.updates.put_nowait(event)
+                            except (ValueError, queue.Full):
+                                pass
                         continue
                     if values is not None:
                         status = engine_backend.parse_status(line.rstrip())
@@ -235,13 +253,23 @@ class BackendProcess:
         with self._state_lock:
             return self.runtime
 
-    def command(self, command, **values):
+    def command(self, command, action=None, **values):
         with self._state_lock:
             process = self.process
             if (process is None or process.poll() is not None
                     or self.stopping_since is not None):
                 raise RuntimeError('The listener is not available')
-            engine_backend.send_command(process, command, **values)
+            with self._write_lock:
+                if action is None:
+                    engine_backend.send_command(process, command, **values)
+                else:
+                    line = json.dumps(dict(id=command, action=action, **values), ensure_ascii=False) + '\n'
+                    if len(line.encode('utf-8')) > 8192:
+                        raise ValueError('Node command is too large')
+                    if process.stdin is None:
+                        raise RuntimeError('The listener control channel is closed')
+                    process.stdin.write(line)
+                    process.stdin.flush()
 
     def stop(self) -> None:
         process = self.process
@@ -267,6 +295,13 @@ class BackendProcess:
                     self.process = None
                     self.ready = False
                     self.runtime = None
+                    # Records queued before EOF belong to the exited owner.
+                    # Its reader cannot enqueue again after this locked detach.
+                    while True:
+                        try:
+                            self.updates.get_nowait()
+                        except queue.Empty:
+                            break
             if self.launch is not None:
                 self.launch.cleanup()
             return result
@@ -302,6 +337,10 @@ class DesktopApp:
         self.importing = False
         self.quick_start_pending = False
         self.import_events = queue.Queue()
+        self.command_id = 0
+        self.pending_command = None
+        self.statistics = None
+        self.node_state = None
         self._import_generation = 0
         self._import_lock = threading.Lock()
         self._active_import = None
@@ -337,6 +376,15 @@ class DesktopApp:
         self.view.refresh()
 
     def node_command(self, command):
+        """One control surface for current and compatibility child protocols."""
+        protocol = getattr(self, '_node_protocol', None)
+        legacy = command in ('nodes', 'latency') or (command in ('select', 'test') and (
+            protocol == 'legacy' or protocol is None and getattr(self, 'node_state', None) is not None))
+        if legacy:
+            return self._legacy_node_command(command)
+        return self.send_runtime_command(command)
+
+    def send_runtime_command(self, command):
         """Only explicit actions can wake/test/switch a managed subscription."""
         from tkinter import messagebox
         snapshot = self.backend.snapshot()
@@ -371,23 +419,41 @@ class DesktopApp:
             values.update(selection_mode='fastest', preferred_node='', switch_threshold_ms=threshold)
         elif command not in ('prepare', 'test'):
             raise ValueError('unsupported node command')
-        self._node_request += 1
-        request_id = self._node_request
+        self._node_request = max(self._node_request, getattr(self, 'command_id', 0)) + 1
+        self.command_id = request_id = self._node_request
         try:
             self.backend.command(command, request_id=request_id, **values)
         except (OSError, RuntimeError, ValueError):
             self.backend.log(self._t('The node command could not be sent. Check the listener status.'))
             return
         self._pending_node_request = (self.backend.process, request_id)
+        self._node_protocol = 'runtime'
+        self.view.node_message = ''
+        self.pending_command = request_id
         self.view.refresh()
+
+    def _save_node_policies(self, policies):
+        if not isinstance(policies, dict) or not hasattr(self, 'path'):
+            return
+        from .nodes import validate_policies
+        try:
+            policies = validate_policies(policies)
+            self.raw['node_policies'] = policies
+            save_config(self.path, self.raw)
+        except (OSError, ValueError):
+            self.view.node_message = 'Selection applied; preference could not be saved.'
 
     def _poll_runtime(self):
         snapshot = self.backend.snapshot()
         pending = self._pending_node_request
-        if pending and (self.backend.process is not pending[0]
-                        or (snapshot and snapshot.get('last_command_id') == pending[1]
-                            and not snapshot.get('busy'))):
+        completed = bool(pending and snapshot and self.backend.process is pending[0]
+                         and snapshot.get('last_command_id') == pending[1]
+                         and not snapshot.get('busy'))
+        if pending and (self.backend.process is not pending[0] or completed):
             self._pending_node_request = None
+            self.pending_command = None
+            if completed and not snapshot.get('command_error'):
+                self._save_node_policies(snapshot.get('node_policies'))
         if snapshot:
             key = (self.backend.process, snapshot.get('last_command_id'))
             if snapshot.get('command_error') and key != self._reported_command:
@@ -515,6 +581,8 @@ class DesktopApp:
                 self.vars['profile_file'].set('')
                 self.vars['subscription_file'].set(str(path.absolute()))
             self.view.preview = info
+            if str(path.absolute()) != (self.raw.get('profile_file') or self.raw.get('subscription_file')):
+                self.raw.pop('node_policies', None)
             self.raw.pop('existing_proxy_port', None)
             try:
                 metadata = path.with_suffix(path.suffix + '.info.json')
@@ -703,6 +771,7 @@ class DesktopApp:
             self._set_status('Stopped with error')
             messagebox.showerror(self._t('Cannot inspect provider'), self._t(error), parent=self.root)
         else:
+            self._set_status('Stopped')
             if self._use_imported_file(path) and pending and self._configure_lan():
                 self.start()
                 if self.view.navigation_generation == active[3]:
@@ -760,6 +829,8 @@ class DesktopApp:
             elif key == 'allowed_clients':
                 value = [part.strip() for part in value.split(',') if part.strip()]
             values[key] = value
+        if values.get('engine_mode') == 'external' and not values.get('existing_proxy_port'):
+            values['live_node_controls'] = True
         return values
 
     def save(self) -> bool:
@@ -800,6 +871,10 @@ class DesktopApp:
             return
         if not self.save():
             return
+        self.statistics = None
+        self.node_state = None
+        self.pending_command = None
+        self.view.node_message = ''
         try:
             self.backend.start(self.path, self.raw)
         except (OSError, RuntimeError, ValueError):
@@ -825,8 +900,59 @@ class DesktopApp:
         self.stop_button.configure(state='disabled')
         self._set_status('Stopping…')
 
+    def _legacy_node_command(self, action):
+        snapshot = self.backend.snapshot() or {}
+        if (self.closing or self.importing or self.pending_command is not None
+                or self._pending_node_request is not None or self.backend.stopping_since is not None
+                or snapshot.get('busy')):
+            return
+        if self.raw.get('existing_proxy_port'):
+            self.view.node_message = 'Node controls are managed by the existing Clash client.'
+            self.view.refresh()
+            return
+        group = self.view.group_var.get()
+        selected = self.view.live_node_table.selection()
+        name = self.view.live_node_table.item(selected[0], 'values')[0] if selected else None
+        if action == 'select' and not name:
+            self.view.node_message = 'Choose a node, then click Switch node.'
+            self.view.refresh()
+            return
+        self.command_id = max(self.command_id, self._node_request) + 1
+        self._node_request = self.command_id
+        try:
+            self.backend.command(self.command_id, action, group=group, name=name)
+            self.pending_command = self.command_id
+            self._node_protocol = 'legacy'
+            self._pending_node_request = (self.backend.process, self.command_id)
+            self.view.node_message = 'Testing latency…' if action in ('test', 'latency') else 'Updating nodes…'
+        except (OSError, ValueError, RuntimeError):
+            self.view.node_message = 'Start the listener first.'
+        self.view.refresh()
+
+    def _poll_updates(self):
+        for _ in range(100):
+            try: event = self.backend.updates.get_nowait()
+            except queue.Empty: break
+            if event['kind'] == 'statistics':
+                self.statistics = event
+            elif event['kind'] == 'nodes':
+                self.node_state = event
+                if self.pending_command is None and getattr(self, '_node_protocol', None) == 'legacy' and event.get('message'):
+                    self.view.node_message = event['message']
+                if event.get('id') == self.pending_command and self.pending_command is not None:
+                    self.pending_command = None
+                    self._pending_node_request = None
+                    self.view.node_message = event.get('message', '')
+                    self._save_node_policies(event.get('policies'))
+            elif event['kind'] == 'control_error' and event.get('id') == self.pending_command:
+                self.pending_command = None
+                self._pending_node_request = None
+                self.view.node_message = event['message']
+        self.view.refresh()
+
     def poll(self):
         self._poll_import()
+        self._poll_updates()
         self._poll_runtime()
         for _ in range(100):
             try:
@@ -851,6 +977,9 @@ class DesktopApp:
             result = self.backend.poll()
             if result is not None:
                 self._set_status('Stopped' if result == 0 else 'Stopped with error')
+                self.statistics = None
+                self.node_state = None
+                self.pending_command = None
                 self._poll_runtime()
                 self.backend.log('Listener exited.' if result == 0 else f'Listener exited with code {result}.')
                 self.running_controls(False)

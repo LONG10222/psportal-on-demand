@@ -26,6 +26,23 @@ def read_profile(path: Path) -> dict:
         if not raw or len(raw) > MAX_BYTES:
             raise ProfileError('Profile must contain 1 byte to 10 MiB')
         raw = raw.decode('utf-8-sig')
+        if raw.lstrip().startswith('{'):
+            def unique_pairs(pairs):
+                result = {}
+                for key, value in pairs:
+                    if key in result:
+                        raise ProfileError('Profile has duplicate or non-string keys')
+                    result[key] = value
+                return result
+            try:
+                decoded = json.loads(raw, object_pairs_hook=unique_pairs)
+            except json.JSONDecodeError:
+                pass  # YAML flow mappings need not be JSON.
+            else:
+                _bounded_json_tree(decoded)
+                # Convert valid JSON surrogate pairs to actual Unicode before
+                # handing it to YAML, whose escape grammar rejects surrogates.
+                raw = json.dumps(decoded, ensure_ascii=False, allow_nan=False)
         depth = aliases = events = 0
         for event in yaml.parse(raw):
             events += 1

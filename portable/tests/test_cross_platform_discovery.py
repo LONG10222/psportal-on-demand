@@ -133,6 +133,13 @@ class LinuxLANTests(unittest.TestCase):
         addresses[0]['addr_info'][0].update(local='192.168.5.2', prefixlen=30)
         self.assertEqual(self.parse(addresses, routes)['clients'], ['192.168.5.1'])
 
+    def test_canonical_and_symlinked_sysfs_roots_identify_the_same_hardware(self):
+        alias = Path(self.temp.name) / 'sys-alias'
+        alias.symlink_to(self.sys, target_is_directory=True)
+        addresses, routes = linux_data()
+        result = setup.parse_linux_interfaces(json.dumps(addresses), json.dumps(routes), alias / 'class/net')
+        self.assertEqual(result, self.parse(addresses, routes))
+
     def test_down_loopback_bridge_unknown_and_virtual_rejected(self):
         for change in ({'operstate': 'DOWN'}, {'operstate': 'UNKNOWN'}, {'master': 'br0'},
                        {'link_type': 'loopback'}, {'flags': ['UP', 'LOWER_UP', 'POINTOPOINT']},
@@ -279,7 +286,9 @@ class ProxyDiscoveryTests(unittest.TestCase):
                  ({'http_proxy': 'http://name:password@localhost:7897'}, None),
                  ({'HTTP_PROXY': 'localhost:7897', 'REQUEST_METHOD': 'GET'}, None)]
         for env, expected in cases:
-            with patch.dict(os.environ, env, clear=True), patch.object(existing_proxy.sys, 'platform', 'linux'), \
+            # A Linux environment is case-sensitive even when this fixture runs
+            # on Windows, whose real os.environ folds these two keys together.
+            with patch.object(existing_proxy.os, 'environ', dict(env)), patch.object(existing_proxy.sys, 'platform', 'linux'), \
                  patch.object(existing_proxy.subprocess, 'run') as run, self.subTest(env=env):
                 info = existing_proxy.detect_system_proxy()
                 self.assertEqual(info['port'] if info else None, expected); run.assert_not_called()

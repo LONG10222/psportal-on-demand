@@ -2,6 +2,9 @@
 """Controlled subprocess fixture, NOT Mihomo; no Internet or subscriptions."""
 import http.server
 import json
+import os
+import re
+import time
 import socketserver
 import sys
 import threading
@@ -55,6 +58,21 @@ def main():
     socketserver.ThreadingTCPServer.allow_reuse_address = True
     backend = socketserver.ThreadingTCPServer(('127.0.0.1', cfg['port']), Backend)
     threading.Thread(target=backend.serve_forever, daemon=True).start()
+    def mark_ready():
+        if '-post-up' not in sys.argv:
+            return
+        command = sys.argv[sys.argv.index('-post-up') + 1]
+        match = re.fullmatch(r'echo ([0-9a-f]{64})>psportal-ready', command)
+        if not match:
+            raise ValueError('Unsupported fixture startup hook')
+        mode = os.environ.get('PSPORTAL_FIXTURE_READY_MODE', '')
+        if mode == 'missing':
+            return
+        time.sleep(float(os.environ.get('PSPORTAL_FIXTURE_READY_DELAY', '0')))
+        # Simulate Windows CRLF without invoking a shell in this test fixture.
+        nonce = '0' * 64 if mode == 'stale' else match.group(1)
+        Path('psportal-ready').write_bytes(nonce.encode('ascii') + b'\r\n')
+    threading.Thread(target=mark_ready, daemon=True).start()
     api.serve_forever()
 
 

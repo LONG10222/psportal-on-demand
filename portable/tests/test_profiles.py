@@ -48,6 +48,14 @@ class ProfileImportTests(unittest.TestCase):
         self.assertEqual(data['proxies'][0]['port'], 443)
         self.assertEqual(data['proxies'][0]['name'], 'node')
 
+    def test_json_surrogate_pairs_roundtrip_without_changing_the_source(self):
+        self.data['proxies'][0]['name'] = '🇯🇵 Tokyo'
+        raw = json.dumps(self.data)
+        self.assertIn('\\ud83c', raw)
+        self.source.write_text(raw)
+        self.assertEqual(profiles.read_profile(self.source)['proxies'][0]['name'], '🇯🇵 Tokyo')
+        self.assertEqual(self.source.read_text(), raw)
+
     def test_malformed_duplicate_recursive_and_unsafe_tags_are_rejected_without_secret_echo(self):
         for raw in ('proxies: []\nproxies: []', 'x: &x [*x]', '!!python/object/apply:os.system [echo secret-marker]',
                     'password: [secret-marker', 'proxies: {}', 'rules: {}', 'date: 2026-10-18'):

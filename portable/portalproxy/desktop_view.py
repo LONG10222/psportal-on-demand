@@ -5,7 +5,7 @@ from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 from . import i18n
 
-PAGES = ('Overview', 'Profiles', 'Proxies', 'Rules', 'LAN sharing', 'Settings', 'Logs')
+PAGES = ('Overview', 'Profiles', 'Proxies', 'Rules', 'LAN sharing', 'Settings', 'Logs', 'Devices')
 SUBTITLES = dict(zip(PAGES, (
     'A clear view of the listener, engine and device connection.',
     'Import a provider or keep using your HTTPS subscription.',
@@ -14,6 +14,7 @@ SUBTITLES = dict(zip(PAGES, (
     'Give another device an address it can connect to.',
     'Keep the complete external core and the experimental embedded option.',
     'Original diagnostics, with sensitive values redacted.',
+    'Devices using this proxy, grouped by source IP.',
 )))
 
 
@@ -25,6 +26,16 @@ def probe_note(runtime, language):
         return i18n.text('Partial latency check: {tested}/{total} nodes tested; automatic selection uses available measurements.',
                          language, tested=tested, total=total)
     return ''
+
+
+def saved_preference_note(runtime, language):
+    """A group's saved preference is distinct from its effective healthy node."""
+    policy = runtime.get('node_policies', {}).get(runtime.get('selection_group'), {})
+    preferred = policy.get('name')
+    if policy.get('mode') != 'manual' or not preferred or preferred == runtime.get('selected_node'):
+        return ''
+    return (i18n.text('Saved manual preference: {node}', language, node=preferred) + '\n' +
+            i18n.text("The original group's health rules still apply; its current node can differ from the saved preference.", language))
 
 
 class DesktopView:
@@ -43,6 +54,9 @@ class DesktopView:
         self.runtime = None
         self._node_rows_rendered = None
         self.subscription_info = None
+        self.node_message = ''
+        self._nodes_rendered = None
+        self._clients_rendered = None
         self.advanced = False
         self.advanced_sections = []
         self.setup_network = ''
@@ -126,15 +140,19 @@ class DesktopView:
         ttk.Label(profile, textvariable=self.preview_var, style='Portal.CardNote.TLabel', wraplength=680).grid(row=10, column=0, columnspan=3, sticky='w')
 
         proxy_content = self.scroll_page(self.frames['Proxies'], 'Proxies')
-        proxies = self.selection_card = self.card(proxy_content, 'Selection policy')
+        proxies = self.selection_card = self.card(proxy_content, 'Selection policy', row=1)
+        self.advanced_sections.append(proxies)
         self.fields(proxies, ('selection_mode', 'preferred_node', 'switch_threshold_ms'))
         self.label(proxies, 'HK → JP → other regions. Prefer keeps fallback; fixed never switches silently.',
                    wraplength=680, style='Portal.CardNote.TLabel').grid(row=5, column=0, columnspan=3, sticky='w', pady=16)
         self.label(proxies, 'Full profile uses its original groups and rules; provider selection fields do not override them.',
                    wraplength=680, style='Portal.CardNote.TLabel').grid(row=6, column=0, columnspan=3, sticky='w')
 
-        inventory = self.card(proxy_content, 'Node inventory', row=1, padding=(24, 16))
-        self.node_table = self.table(inventory, ('Name', 'Protocol', 'Latency', 'Health'), height=5)
+        inventory = self.card(proxy_content, 'Live proxy nodes', row=0, padding=(24, 16))
+        self.node_table = self.live_node_table = self.table(inventory, ('Name', 'Protocol', 'Latency', 'Health', 'Selected'), height=5)
+        self.node_table.column('Name', width=220)
+        for column in ('Protocol', 'Latency', 'Health', 'Selected'):
+            self.node_table.column(column, width=95, minwidth=65)
         self.node_note_var = tk.StringVar()
         ttk.Label(inventory, textvariable=self.node_note_var, wraplength=680,
                   style='Portal.CardNote.TLabel').grid(row=2, column=0, columnspan=3, sticky='w', pady=(12, 0))
@@ -145,7 +163,7 @@ class DesktopView:
         self.node_controls.grid(row=4, column=0, columnspan=3, sticky='ew', pady=(12, 0))
         self.group_label = self.label(self.node_controls, 'Profile group', style='Portal.CardNote.TLabel')
         self.group_label.grid(row=0, column=0, sticky='w', pady=(0, 12))
-        self.selection_group_var = tk.StringVar()
+        self.selection_group_var = self.group_var = tk.StringVar()
         self.group_combo = ttk.Combobox(self.node_controls, textvariable=self.selection_group_var,
                                         values=(), state='readonly', width=30)
         self.group_combo.grid(row=0, column=1, columnspan=2, sticky='ew', pady=(0, 12))
@@ -166,7 +184,10 @@ class DesktopView:
                    style='Portal.CardNote.TLabel', wraplength=680).grid(row=3, column=0, columnspan=3, sticky='w', pady=(12, 0))
         self.label(self.node_controls, 'Live changes apply to this run. Loading or testing nodes makes network requests.',
                    style='Portal.CardNote.TLabel', wraplength=680).grid(row=4, column=0, columnspan=3, sticky='w', pady=(8, 0))
+        self.node_buttons = [self.prepare_nodes_button, self.test_nodes_button,
+                             self.select_node_button, self.fastest_button]
         self.node_table.bind('<<TreeviewSelect>>', lambda _: self._node_controls())
+        self.node_table.bind('<Double-1>', lambda _: app.node_command('select'))
         rules = self.card(self.frames['Rules'], 'Imported rules')
         self.rule_table = self.table(rules, ('Imported rules',), height=12)
         self.label(rules, 'Local file preview only. First 500 entries; no latency test or node switch is performed.',
@@ -211,6 +232,14 @@ class DesktopView:
             'dark' if self.theme_combo.current() == 0 else 'light'))
 
         self._overview()
+
+        devices = self.card(self.frames['Devices'], 'Proxy clients')
+        self.client_summary = tk.StringVar()
+        ttk.Label(devices, textvariable=self.client_summary, style='Portal.CardNote.TLabel', wraplength=680).grid(row=1, column=0, columnspan=3, sticky='w')
+        self.client_table = self.table(devices, ('Device IP', 'Connections', 'Requests', 'Last seen'), height=10)
+        self.client_table.master.grid_configure(row=2, pady=14)
+        self.label(devices, 'Active counts mean open proxy connections. Recent devices stay visible for five minutes; this is not a list of all Wi-Fi devices.',
+            style='Portal.CardNote.TLabel', wraplength=680, justify='left').grid(row=3, column=0, columnspan=3, sticky='w')
 
         logs = self.frames['Logs']; logs.rowconfigure(0, weight=1)
         app.log_widget = ScrolledText(logs, height=16, state='disabled', wrap='word',
@@ -419,6 +448,14 @@ class DesktopView:
             self.label(frame, key, style='Portal.CardNote.TLabel').pack(anchor='w')
             var = tk.StringVar(); self.metric_vars[key] = var
             ttk.Label(frame, textvariable=var, style='Portal.Metric.TLabel', wraplength=200).pack(anchor='w', pady=(14, 0))
+        metrics.grid_remove()
+        hero = ttk.Frame(page, padding=18, style='Portal.Card.TFrame')
+        hero.grid(row=1, column=0, sticky='ew')
+        self.hero_var = tk.StringVar()
+        self.hero_note_var = tk.StringVar()
+        ttk.Label(hero, textvariable=self.hero_var, style='Portal.Metric.TLabel', wraplength=690).pack(anchor='w')
+        ttk.Label(hero, textvariable=self.hero_note_var, style='Portal.CardNote.TLabel', wraplength=690,
+                  justify='left').pack(anchor='w', pady=(8, 0))
         panel = self.runtime_panel = ttk.Frame(page, padding=18, style='Portal.Card.TFrame')
         panel.grid(row=2, column=0, sticky='ew', pady=18)
         panel.columnconfigure(0, weight=1)
@@ -446,7 +483,7 @@ class DesktopView:
         self.advanced = bool(enabled)
         for name, button in self.nav.items():
             button.pack_forget()
-            if self.advanced or name in ('Overview', 'LAN sharing') or (name == 'Proxies' and self._direct_subscription()):
+            if self.advanced or name in ('Overview', 'Proxies', 'Devices', 'LAN sharing'):
                 button.pack(fill='x', pady=4, ipady=7, before=self.advanced_button)
         for section in self.advanced_sections:
             section.grid() if self.advanced else section.grid_remove()
@@ -454,7 +491,7 @@ class DesktopView:
             button.pack_forget()
             if self.advanced:
                 button.pack(side='left', padx=(0, 10), before=self.app.stop_button)
-        if not self.advanced and self.page not in ('Overview', 'LAN sharing', 'Proxies'):
+        if not self.advanced and self.page not in ('Overview', 'Proxies', 'Devices', 'LAN sharing'):
             self.show('Overview')
         self.refresh()
 
@@ -487,17 +524,39 @@ class DesktopView:
                 and any(values.get(key) and values[key].get()
                         for key in ('subscription_file', 'subscription_url', 'profile_file')))
 
+    def _node_runtime(self):
+        """Normalize owned-child telemetry into one table presentation."""
+        runtime = dict(self.runtime or {})
+        live = self.app.node_state
+        if not live or not self._direct_subscription():
+            return runtime
+        structured = self.runtime is not None and 'node_management' in self.runtime
+        # An acknowledged legacy command may arrive just ahead of its matching
+        # status record. Only that newer reply can temporarily fill the table;
+        # periodic compatibility records cannot undo prepare/group/fastest.
+        fallback = not structured or (getattr(self.app, '_node_protocol', None) == 'legacy'
+            and type(live.get('id')) is int and live['id'] > runtime.get('last_command_id', 0))
+        if fallback:
+            runtime['node_management'] = True
+            runtime['groups'] = [dict(name=name) for name in live.get('groups', ())]
+            runtime['selection_group'] = live.get('group', '')
+            runtime['selected_node'] = live.get('current', '')
+            runtime['node_policies'] = live.get('policies', {})
+            runtime['nodes'] = [dict(name=row['name'], type=row.get('type', '—'),
+                delay_ms=row.get('delay'), healthy=True if row.get('delay') is not None else None)
+                for row in live.get('rows', ())]
+            policy = live.get('policies', {}).get(live.get('group'), {})
+            runtime['selection_mode'] = {'manual': 'fixed', 'latency': 'fastest'}.get(
+                policy.get('mode'), runtime.get('selection_mode', 'profile'))
+        return runtime
+
     def _node_controls(self):
         if not hasattr(self, 'node_controls'):
             return
-        runtime = self.runtime or {}
+        runtime = self._node_runtime()
         supported = bool(self._direct_subscription() and runtime.get('node_management'))
-        # An upstream client owns its selection. Never offer controls that only
-        # change local labels or pretend to control that client's nodes.
-        if supported:
-            self.node_controls.grid()
-        else:
-            self.node_controls.grid_remove()
+        # The linked client always owns its own node controls.
+        self.node_controls.grid() if supported else self.node_controls.grid_remove()
         active = (supported and self.app.backend.ready
                   and self.app.backend.stopping_since is None
                   and not runtime.get('busy') and not self.app.importing
@@ -512,16 +571,17 @@ class DesktopView:
 
     def _refresh_nodes(self):
         direct = self._direct_subscription()
-        runtime = self.runtime or {}
+        runtime = self._node_runtime()
         linked = bool(self.app.raw.get('existing_proxy_port'))
         full_profile = bool(self.app.vars.get('profile_file') and self.app.vars['profile_file'].get())
-        groups = tuple(group['name'] for group in runtime.get('groups', ())) if full_profile else ()
+        groups = tuple(group['name'] for group in runtime.get('groups', ()))
         self.group_combo.configure(values=groups)
         if self.selection_group_var.get() not in groups:
-            self.selection_group_var.set(groups[0] if len(groups) == 1 else '')
+            current = runtime.get('selection_group', '')
+            self.selection_group_var.set(current if current in groups else groups[0] if len(groups) == 1 else '')
         for widget in (self.group_label, self.group_combo):
-            widget.grid() if full_profile else widget.grid_remove()
-        if linked or full_profile or runtime.get('node_management'):
+            widget.grid() if full_profile or len(groups) > 1 else widget.grid_remove()
+        if linked or full_profile or runtime.get('node_management') or not self.advanced:
             self.selection_card.grid_remove()
         else:
             self.selection_card.grid()
@@ -529,25 +589,24 @@ class DesktopView:
             self.nodes_button.pack(fill='x', pady=(8, 0))
         else:
             self.nodes_button.pack_forget()
-        if not self.advanced:
-            self.nav['Proxies'].pack_forget()
-            if direct:
-                self.nav['Proxies'].pack(fill='x', pady=4, ipady=7, before=self.nav['LAN sharing'])
         preview_rows = (self.preview or {}).get('node_rows', ())
         protocols = dict(preview_rows)
+        live = self.app.node_state or {}
+        protocols.update((row['name'], row.get('type', '—')) for row in live.get('rows', ()))
         scoped = not full_profile or (self.selection_group_var.get()
                                      and runtime.get('selection_group') == self.selection_group_var.get())
         if runtime.get('node_management') and direct:
-            rows = tuple((node['name'], protocols.get(node['name'], '—'),
+            rows = tuple((node['name'], node.get('type', node.get('protocol', protocols.get(node['name'], '—'))),
                           self.tr('{delay} ms', delay=node['delay_ms']) if node.get('delay_ms') is not None else '—',
                           self.tr('Healthy' if node.get('healthy') is True else
-                                  'Unavailable' if node.get('healthy') is False else 'Not tested'))
+                                  'Unavailable' if node.get('healthy') is False else 'Not tested'),
+                          self.tr('Current') if node['name'] == runtime.get('selected_node') else '')
                          for node in (runtime.get('nodes', ()) if scoped else ()))
-            self.node_note_var.set(self.tr('Live measurements from this listener. No latency is shown until a probe reports it.'))
+            note = self.tr('Live measurements from this listener. No latency is shown until a probe reports it.')
         else:
-            rows = tuple((name, protocol, '—', self.tr('Not tested'))
+            rows = tuple((name, protocol, '—', self.tr('Not tested'), '')
                          for name, protocol in preview_rows) if not linked else ()
-            self.node_note_var.set(self.tr('Local file preview only. Start the listener and load live nodes to test or switch.'))
+            note = self.tr('Local file preview only. Start the listener and load live nodes to test or switch.')
         if rows != self._node_rows_rendered:
             selected = self.node_table.selection()
             selected_name = self.node_table.item(selected[0], 'values')[0] if selected else None
@@ -561,7 +620,7 @@ class DesktopView:
                 self.node_table.yview_moveto(scroll[0])
             self._node_rows_rendered = rows
         if linked:
-            description = self.tr('Node selection and latency tests are managed by the existing Clash client.')
+            description = note = self.tr('Node selection and latency tests are managed by the existing Clash client.')
         elif full_profile and not runtime.get('node_management'):
             description = self.tr('Full profile uses its original groups and rules; provider selection fields do not override them.')
         elif runtime.get('node_management'):
@@ -570,7 +629,10 @@ class DesktopView:
             description = (self.tr('Current node: {node} · Mode: {mode}', node=selection, mode=self.tr(mode))
                            if scoped else self.tr('Choose a profile group, then load or test its direct nodes.'))
             if full_profile:
-                description += '\n' + self.tr('Only the chosen selector is managed; original rules and other groups stay unchanged.')
+                description += '\n' + self.tr('Only the chosen group is managed; original rules and other groups stay unchanged.')
+            preference = saved_preference_note(runtime, self.language) if full_profile and scoped else ''
+            if preference:
+                description += '\n' + preference
             if mode == 'fastest' and runtime.get('switch_threshold_ms') is not None:
                 description += '\n' + self.tr('Switch threshold: {threshold} ms', threshold=runtime['switch_threshold_ms'])
             partial = probe_note(runtime, self.language)
@@ -581,11 +643,14 @@ class DesktopView:
             elif runtime.get('command_error'):
                 from .desktop import redact_log
                 description += '\n' + redact_log(runtime['command_error'], self.app.backend.secrets)
+            elif self.node_message:
+                description += '\n' + self.tr(self.node_message)
         elif self.app.backend.process is None:
             description = self.tr('Start the listener to load live nodes.')
         else:
             description = self.tr('Live node controls are unavailable for this engine.' if self.runtime else
                                   'Waiting for a live engine report.')
+        self.node_note_var.set(note)
         self.node_state_var.set(description)
         self._node_controls()
 
@@ -595,8 +660,8 @@ class DesktopView:
         if hasattr(self, 'theme_combo'):
             self.theme_combo.configure(values=(self.tr('Dark'), self.tr('Light')))
             self.theme_combo.current(0 if self.theme == 'dark' else 1)
-        for table, columns in ((self.node_table, ('Name', 'Protocol', 'Latency', 'Health')), (self.rule_table, ('Imported rules',))):
-            for key in columns:
+        for table in (self.node_table, self.rule_table, self.client_table):
+            for key in table['columns']:
                 table.heading(key, text=self.tr(key))
         if self._preview_rendered is not self.preview:
             self.rule_table.delete(*self.rule_table.get_children())
@@ -631,14 +696,11 @@ class DesktopView:
         host = self.app.vars.get('listen_host'); port = self.app.vars.get('listen_port')
         address = f'{host.get()}:{port.get()}' if host and host.get() and port and port.get() else self.tr('Not configured')
         self.address_var.set(address)
+        self._refresh_runtime(address)
         if host and host.get() and port and port.get():
             self.runtime_panel.grid()
         else:
             self.runtime_panel.grid_remove()
-        runtime = self.runtime or {}
-        self.connection_count_var.set(self.tr('Active devices: {devices} · Connections: {connections}',
-            devices=runtime.get('connected_clients', '—'), connections=runtime.get('active_connections', '—')))
-        self.lan_runtime_var.set(self.connection_count_var.get())
         self._refresh_nodes()
         self.guide_var.set(self.tr('Server: {host}\nPort: {port}', host=host.get(), port=port.get())
                            if host and host.get() and port and port.get() else self.tr('Prepare the subscription on Overview first.'))
@@ -649,6 +711,37 @@ class DesktopView:
             self.preview_var.set(message)
         elif hasattr(self, 'preview_var'):
             self.preview_var.set(self.tr('No provider inspected.'))
+
+    def _refresh_runtime(self, address):
+        import datetime
+        app = self.app
+        runtime = self.runtime or {}
+        statistics = app.statistics or {}
+        devices = runtime.get('connected_clients', statistics.get('devices', '—'))
+        active = runtime.get('active_connections', statistics.get('active', '—'))
+        counts = self.tr('Active devices: {devices} · Connections: {connections}',
+                         devices=devices, connections=active)
+        ready = self.status in ('Listening', 'Forwarding')
+        title = ('Devices are using the proxy' if isinstance(devices, int) and devices > 0
+                 else 'Ready · waiting for a device') if ready else self.status
+        self.hero_var.set(self.tr(title))
+        self.hero_note_var.set(self.tr(self.core_state if not app.raw.get('existing_proxy_port')
+                                      else 'Managed by existing client'))
+        self.connection_count_var.set(counts)
+        self.lan_runtime_var.set(counts)
+        self.client_summary.set(counts + ' · ' + self.tr('Errors: {count}', count=statistics.get('errors', 0)))
+        clients = runtime.get('clients', statistics.get('clients', []))
+        client_key = (clients, self.language)
+        if self._clients_rendered != client_key:
+            self.client_table.delete(*self.client_table.get_children())
+            for item in clients:
+                seen = item.get('last_seen')
+                try:
+                    when = datetime.datetime.fromtimestamp(seen).strftime('%H:%M:%S') if seen is not None else '—'
+                except (ValueError, TypeError, OverflowError, OSError):
+                    when = '—'
+                self.client_table.insert('', 'end', values=(item['ip'], item.get('active', 0), item.get('requests', 0), when))
+            self._clients_rendered = client_key
 
     def observe(self, line):
         if line.startswith('Core: '):

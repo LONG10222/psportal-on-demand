@@ -33,34 +33,36 @@ var errNoHealthy = errors.New("no healthy proxy node is available")
 var errFixedMissing = errors.New("fixed node is missing from the subscription")
 
 type node struct {
-	proxy   C.Proxy
-	healthy bool
-	delayMS int64
+	proxy    C.Proxy
+	healthy  bool
+	delayMS  int64
+	protocol string
 }
 type embeddedCore struct {
-	cfg         Config
-	ctx         context.Context
-	cancel      context.CancelFunc
-	mu          sync.Mutex
-	state       string
-	closed      bool
-	nodes       []*node
-	active      int
-	lastUsed    time.Time
-	lastHealth  time.Time
-	selected    string
-	lastError   string
-	loading     chan struct{}
-	loadError   error
-	wg          sync.WaitGroup
-	operationMu sync.Mutex
-	probeMu     sync.Mutex
-	mode        string
-	preferred   string
-	thresholdMS int
-	preparing   bool
-	fastest     fastestSelection
-	loader      func(context.Context, Config) ([]*node, error)
+	cfg           Config
+	ctx           context.Context
+	cancel        context.CancelFunc
+	mu            sync.Mutex
+	state         string
+	closed        bool
+	nodes         []*node
+	active        int
+	lastUsed      time.Time
+	lastHealth    time.Time
+	selected      string
+	lastError     string
+	loading       chan struct{}
+	loadError     error
+	wg            sync.WaitGroup
+	operationMu   sync.Mutex
+	probeMu       sync.Mutex
+	mode          string
+	preferred     string
+	thresholdMS   int
+	preparing     bool
+	fastest       fastestSelection
+	legacyFastest bool // NodeCommand keeps the iOS lowest-latency policy.
+	loader        func(context.Context, Config) ([]*node, error)
 }
 
 func newEmbeddedCore(cfg Config) *embeddedCore {
@@ -186,9 +188,13 @@ func (c *embeddedCore) Status() map[string]any {
 	defer c.mu.Unlock()
 	list := make([]map[string]any, 0, len(c.nodes))
 	for _, n := range c.nodes {
-		list = append(list, map[string]any{"name": n.proxy.Name(), "healthy": n.healthy, "delay_ms": nodeDelay(n)})
+		list = append(list, map[string]any{"name": n.proxy.Name(), "healthy": n.healthy, "delay_ms": nodeDelay(n), "protocol": n.protocol})
 	}
-	return map[string]any{"core_state": c.state, "state": c.state, "active": c.active, "selected_node": c.selected, "nodes": list, "error": c.lastError, "selection_mode": c.mode, "switch_threshold_ms": c.thresholdMS, "preparing": c.preparing, "node_management": true}
+	manual := ""
+	if c.mode == "fixed" {
+		manual = c.preferred
+	}
+	return map[string]any{"manual_node": manual, "auto_fastest": c.mode == "fastest", "core_state": c.state, "state": c.state, "active": c.active, "selected_node": c.selected, "nodes": list, "error": c.lastError, "selection_mode": c.mode, "switch_threshold_ms": c.thresholdMS, "preparing": c.preparing, "node_management": true}
 }
 func (c *embeddedCore) Close() {
 	c.cancel()
@@ -236,7 +242,7 @@ func (c *embeddedCore) maintain() {
 				continue
 			}
 			interval := c.cfg.HealthInterval
-			if c.mode == "fastest" && interval < 30 {
+			if c.mode == "fastest" && !c.legacyFastest && interval < 30 {
 				interval = 30
 			}
 			if len(c.nodes) == 0 || now.Sub(c.lastHealth) < time.Duration(interval)*time.Second {
@@ -488,7 +494,7 @@ func parseNodes(raw []byte) ([]*node, error) {
 		if err != nil {
 			return fail()
 		}
-		nodes = append(nodes, &node{proxy: proxy})
+		nodes = append(nodes, &node{proxy: proxy, protocol: kind})
 	}
 	if len(nodes) == 0 {
 		return nil, errors.New("subscription has no supported proxy nodes")

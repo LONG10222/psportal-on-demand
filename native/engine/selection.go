@@ -89,6 +89,11 @@ func (c *embeddedCore) candidatesLocked() []*node {
 }
 func (c *embeddedCore) chooseLocked(measured bool) {
 	if c.mode == "fastest" {
+		if c.legacyFastest {
+			// The existing iOS command picks the current measured minimum;
+			// threshold-aware callers retain the stable policy below.
+			c.fastest = fastestSelection{}
+		}
 		c.selected = c.fastest.choose(c.nodes, c.thresholdMS, time.Now(), measured)
 	} else if c.mode == "fixed" {
 		c.selected = c.preferred
@@ -249,9 +254,10 @@ func (c *embeddedCore) changeSelection(mode, name string, threshold *int, measur
 			return errNoHealthy
 		}
 	}
-	if c.mode != mode {
+	if c.mode != mode || c.legacyFastest {
 		c.fastest = fastestSelection{}
 	}
+	c.legacyFastest = false
 	c.mode, c.preferred = mode, name
 	if threshold != nil {
 		if c.thresholdMS != *threshold {

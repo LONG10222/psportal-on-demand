@@ -4,6 +4,7 @@ package mobile
 import (
 	"encoding/json"
 	"net"
+	"strings"
 	"testing"
 
 	"github.com/psportal/psportal/native/engine"
@@ -11,6 +12,9 @@ import (
 
 func TestLegacyAndRuntimeStatusCompatibility(t *testing.T) {
 	Stop()
+	if got := NodeCommand(`{"action":"prepare"}`); got != `{"ok":false,"code":"stopped"}` {
+		t.Fatal(got)
+	}
 	defer Stop()
 	listener, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
@@ -36,6 +40,16 @@ func TestLegacyAndRuntimeStatusCompatibility(t *testing.T) {
 	}
 	if legacy["state"] != "stopped" || legacy["service_state"] != "listening" || legacy["running"] != true || legacy["active"] != float64(0) {
 		t.Fatal("legacy iOS contract changed", legacy)
+	}
+	if legacy["manual_node"] != "" || legacy["auto_fastest"] != false {
+		t.Fatal("iOS node controls lost status fields", legacy)
+	}
+	stats, ok := legacy["stats"].(map[string]any)
+	if !ok || stats["active_devices"] != float64(0) || len(stats["devices"].([]any)) != 0 {
+		t.Fatal("iOS device telemetry changed", legacy)
+	}
+	if got := NodeCommand(`{"action":"invalid"}`); !strings.Contains(got, `"code":"invalid"`) {
+		t.Fatal(got)
 	}
 	if runtime["state"] != "listening" || runtime["core_state"] != "stopped" || runtime["node_management"] != true {
 		t.Fatal(runtime)

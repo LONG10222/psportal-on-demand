@@ -87,7 +87,8 @@ def download_subscription(url, destination):
                     except OSError as exc:
                         last = exc
                 raise last or OSError('No subscription address available')
-        connection = PinnedHTTPS(host, port, timeout=5, context=ssl.create_default_context())
+        from .tls import verified_context
+        connection = PinnedHTTPS(host, port, timeout=5, context=verified_context())
         path = parsed.path or '/'
         if parsed.query:
             path += '?' + parsed.query
@@ -161,7 +162,7 @@ class CoreManager:
         self.lock = asyncio.Lock()
         self.closing = False
         self.secret = secrets.token_hex(32)
-        root = Path(config['data_dir'])
+        root = Path(config['data_dir']).expanduser().resolve()
         root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.lock_path = root / 'owner.lock'
         try:
@@ -173,8 +174,12 @@ class CoreManager:
         self.runtime = Path(tempfile.mkdtemp(prefix='session-', dir=root))
         (self.runtime / 'providers').mkdir(mode=0o700)
         self.monitor = None
-        self.nodes = []
+        self.node_rows = []
+        from .nodes import NodeControl
+        self.nodes = NodeControl(self)
         self.node_paths = {}
+        self.owned_inventory = {}
+        self.ambiguous_nodes = set()
         self.groups = []
         self.selection_group = ''
         self.profile_mode = 'profile'
@@ -216,7 +221,8 @@ class CoreManager:
 
     def status(self):
         return {'core_state': self.state, 'selected_node': self.selected,
-                'nodes': [dict(node) for node in self.nodes],
+                'nodes': [dict(node) for node in self.node_rows],
+                'node_policies': dict(self.nodes.policies),
                 'selection_mode': self.selection_mode,
                 'selection_group': self.selection_group,
                 'groups': [{'name': group['name'], 'selected': group['selected'], 'eligible_node_count': len(group['members'])} for group in self.groups],
@@ -228,7 +234,7 @@ class CoreManager:
     @staticmethod
     def _safe_name(name):
         return (isinstance(name, str) and 1 <= len(name.encode('utf-8')) <= 256
-                and not any(ord(c) < 32 for c in name))
+                and not any(ord(c) < 32 or ord(c) == 127 for c in name))
 
     async def _refresh_nodes(self, selection_group=None):
         result = await asyncio.to_thread(self._request, '/proxies')
@@ -262,6 +268,8 @@ class CoreManager:
                 proxies[name] = item
                 paths[name] = '/providers/proxies/' + quote(provider, safe='') + '/' + quote(name, safe='') + '/healthcheck'
         self.node_paths = paths
+        self.owned_inventory = proxies
+        self.ambiguous_nodes = ambiguous
         def eligible(name):
             if not self._safe_name(name) or name in ambiguous or name in ('PORTAL', 'PORTAL-AUTO', 'REJECT', 'DIRECT', 'AUTO'):
                 return False
@@ -280,7 +288,7 @@ class CoreManager:
             for name, item in proxies.items():
                 if (not self._safe_name(name) or name == 'GLOBAL' or not isinstance(item, dict)
                         or (self.profile_groups is not None and name not in self.profile_groups)
-                        or str(item.get('type', '')).lower() not in ('selector', 'select')
+                        or str(item.get('type', '')).lower() not in ('selector', 'select', 'fallback', 'urltest', 'url-test')
                         or not isinstance(item.get('all'), list)):
                     continue
                 members = [member for member in item['all'] if eligible(member)][:1000]
@@ -293,14 +301,18 @@ class CoreManager:
                 if selection_group not in group_names:
                     raise CoreError('Select an owned profile selector group with eligible proxy nodes')
                 if selection_group != self.selection_group:
-                    self.selection_group, self.profile_mode = selection_group, 'profile'
+                    self.selection_group = selection_group
+                    policy = self.nodes.policies.get(selection_group, {})
+                    self.profile_mode = {'manual': 'fixed', 'latency': 'fastest'}.get(policy.get('mode'), 'profile')
+                    if policy.get('mode') == 'manual':
+                        self.config['preferred_node'] = policy['name']
                     from .policy import FastestSelection
-                    self.fastest = FastestSelection()
+                    self.fastest = self.nodes.fastest.setdefault(selection_group, FastestSelection())
             if self.selection_group and self.selection_group not in group_names:
                 self.selection_group, self.profile_mode = '', 'profile'
                 raise CoreError('Selected profile group is no longer available')
             if not self.selection_group:
-                self.nodes, self.selected = [], ''
+                self.node_rows, self.selected = [], ''
                 return
             group_name = self.selection_group
         elif selection_group not in (None, '', 'PORTAL'):
@@ -309,7 +321,7 @@ class CoreManager:
         names = group.get('all', [])
         if not isinstance(names, list):
             raise CoreError('Owned selector group is unavailable')
-        old = {n['name']: n for n in self.nodes}
+        old = {n['name']: n for n in self.node_rows}
         nodes = []
         seen = set()
         for name in names[:1003]:
@@ -323,33 +335,48 @@ class CoreManager:
             alive = item.get('alive', previous.get('healthy'))
             alive = alive if type(alive) is bool else None
             delay = delay if type(delay) in (int, float) and 0 <= delay <= 86400000 and alive is not False else None
-            nodes.append({'name': name, 'healthy': alive, 'delay_ms': delay})
-        self.nodes = nodes[:1000]
+            nodes.append({'name': name, 'healthy': alive, 'delay_ms': delay, 'type': str(item.get('type', ''))[:64]})
+        self.node_rows = nodes[:1000]
         selected = group.get('now', self.selected)
-        self.selector_choice = selected if self._safe_name(selected) else ''
+        choice = group.get('fixed') or selected
+        self.selector_choice = choice if self._safe_name(choice) else ''
         if selected == 'PORTAL-AUTO' and not self.config.get('profile_file'):
             selected = proxies.get('PORTAL-AUTO', {}).get('now', '')
-        self.selected = selected if selected in {n['name'] for n in self.nodes} else ''
+        self.selected = selected if selected in {n['name'] for n in self.node_rows} else ''
 
-    def _record_selection(self, name):
+    def _record_selection(self, name, actual=None):
+        actual = name if actual is None else actual
+        group = self.selection_group if self.config.get('profile_file') else 'PORTAL'
+        if group in self.owned_inventory:
+            self.owned_inventory[group]['now'] = actual
+            if 'fixed' in self.owned_inventory[group]:
+                self.owned_inventory[group]['fixed'] = name
         self.selector_choice = name
-        self.selected = name if name in {n['name'] for n in self.nodes} else ''
+        self.selected = actual if actual in {n['name'] for n in self.node_rows} else ''
         for item in self.groups:
             if item['name'] == self.selection_group:
-                item['selected'] = name
+                item['selected'] = actual
 
-    async def _restore_choice(self, name):
+    async def _restore_choice(self, name, clear_override=False):
         group = self.selection_group if self.config.get('profile_file') else 'PORTAL'
         if not group or not self._safe_name(name):
             self._record_selection('')
             return False
         path = '/proxies/' + quote(group, safe='')
         try:
-            await asyncio.to_thread(self._request, path, 'PUT', {'name': name})
+            if clear_override:
+                await asyncio.to_thread(self._request, path, 'DELETE')
+            else:
+                await asyncio.to_thread(self._request, path, 'PUT', {'name': name})
             actual = await asyncio.to_thread(self._request, path)
-            if actual.get('now') != name:
+            if clear_override:
+                if actual.get('fixed') != '':
+                    raise CoreError('Previous group policy could not be restored')
+            elif actual.get('fixed', actual.get('now')) != name and actual.get('now') != name:
                 raise CoreError('Previous node selection could not be restored')
-            self._record_selection(name)
+            self._record_selection(name, actual.get('now', name))
+            if clear_override and group in self.owned_inventory:
+                self.owned_inventory[group]['fixed'] = ''
             return True
         except (OSError, ValueError, CoreError):
             self._record_selection('')
@@ -364,27 +391,28 @@ class CoreManager:
             raise CoreError('Node is not an eligible member of the selected profile group')
         path = '/proxies/' + quote(group, safe='')
         previous = await asyncio.to_thread(self._request, path)
-        previous = previous.get('now')
+        clear_override = 'fixed' in previous and not previous['fixed']
+        previous = previous.get('fixed') or previous.get('now')
         if not self._safe_name(previous):
             raise CoreError('Current node selection could not be verified')
         try:
             await asyncio.to_thread(self._request, path, 'PUT', {'name': name})
             verified = await asyncio.to_thread(self._request, path)
-            if verified.get('now') != name:
+            if verified.get('fixed', verified.get('now')) != name and verified.get('now') != name:
                 raise CoreError('Node selection could not be verified')
         except asyncio.CancelledError:
             self._record_selection('')
             raise
         except (OSError, ValueError, CoreError):
-            restored = await self._restore_choice(previous)
+            restored = await self._restore_choice(previous, clear_override=clear_override)
             raise CoreError('Node selection failed; previous choice restored' if restored else
                             'Node selection is unverified; refresh live nodes before retrying') from None
-        self._record_selection(name)
+        self._record_selection(name, verified.get('now', name))
 
     async def _apply_policy(self, *, measured=False, stable_round=True, candidates=None):
         mode = self.selection_mode
         preferred = self.config['preferred_node']
-        names = {n['name'] for n in self.nodes}
+        names = {n['name'] for n in self.node_rows}
         if mode == 'profile':
             return  # Preserve the complete profile's own graph until explicitly selected.
         if mode == 'fixed':
@@ -394,7 +422,7 @@ class CoreManager:
         elif mode == 'fastest':
             if measured:
                 old_fastest = copy.deepcopy(self.fastest)
-                chosen = self.fastest.choose(self.nodes if candidates is None else candidates, self.config.get('switch_threshold_ms', 50), measured=stable_round)
+                chosen = self.fastest.choose(self.node_rows if candidates is None else candidates, self.config.get('switch_threshold_ms', 50), measured=stable_round)
                 try:
                     if chosen or not self.config.get('profile_file'):
                         await self._put_selection(chosen or 'REJECT')
@@ -403,7 +431,7 @@ class CoreManager:
                     raise
                 if not chosen:
                     raise CoreError('No healthy proxy node is available')
-        elif mode == 'prefer' and any(n['name'] == preferred and n.get('healthy') is True for n in self.nodes):
+        elif mode == 'prefer' and any(n['name'] == preferred and n.get('healthy') is True for n in self.node_rows):
             await self._put_selection(preferred)
         else:
             await self._put_selection('PORTAL-AUTO')
@@ -425,7 +453,7 @@ class CoreManager:
         budget = self.config['wakeup_timeout'] if budget is None else budget
         if self.state == 'starting' and self.startup_deadline is not None:
             budget = max(.001, min(budget, self.startup_deadline - time.monotonic() - .25))
-        tasks = [asyncio.create_task(probe(node)) for node in self.nodes]
+        tasks = [asyncio.create_task(probe(node)) for node in self.node_rows]
         if not tasks:
             self.probe_complete, self.probe_tested, self.probe_total = True, 0, 0
             await self._apply_policy(measured=True)
@@ -447,7 +475,7 @@ class CoreManager:
         # A deadline may still yield useful healthy measurements. Keep a known
         # incumbent, but only fresh completed nodes can challenge/fail over.
         completed = {node['name'] for node, _, _ in results}
-        candidates = [node for node in self.nodes if node['name'] in completed or node['name'] == self.fastest.current]
+        candidates = [node for node in self.node_rows if node['name'] in completed or node['name'] == self.fastest.current]
         await self._apply_policy(measured=True, stable_round=not pending, candidates=candidates)
 
     async def _select(self):
@@ -471,7 +499,7 @@ class CoreManager:
             try:
                 async with self.lock:
                     await self._refresh_nodes(selection_group)
-                    if self.nodes and (already_running or self.selection_mode != 'fastest' or previous_group != self.selection_group):
+                    if self.node_rows and (already_running or self.selection_mode != 'fastest' or previous_group != self.selection_group):
                         await self._probe_nodes()
                     self.last_error = ''
             finally:
@@ -490,10 +518,13 @@ class CoreManager:
             raise CoreError('Owned profile groups support explicit manual or fastest selection')
         if mode not in ('auto', 'prefer', 'fixed', 'fastest'):
             raise CoreError('Unsupported selection mode')
-        if not isinstance(name, str) or len(name.encode('utf-8')) > 256 or any(ord(c) < 32 for c in name):
+        if not isinstance(name, str) or len(name.encode('utf-8')) > 256 or any(ord(c) < 32 or ord(c) == 127 for c in name):
             raise CoreError('Invalid node name')
         if switch_threshold_ms is not None and (type(switch_threshold_ms) is not int or not 0 <= switch_threshold_ms <= 60000):
             raise CoreError('Invalid switching threshold')
+        target_group = selection_group or self.selection_group or 'PORTAL'
+        if mode in ('fixed', 'fastest') and target_group not in self.nodes.policies and len(self.nodes.policies) >= 32:
+            raise CoreError('At most 32 group policies can be saved')
         await self.acquire()
         try:
             async with self.lock:
@@ -507,7 +538,7 @@ class CoreManager:
                     previous_choice = self.selector_choice
                     if self.config.get('profile_file') and not self.selection_group:
                         raise CoreError('Choose a profile selector group first')
-                    if mode in ('fixed', 'prefer') and name not in {n['name'] for n in self.nodes}:
+                    if mode in ('fixed', 'prefer') and name not in {n['name'] for n in self.node_rows}:
                         raise CoreError('Selected node is missing from the subscription')
                     if self.config.get('profile_file'):
                         self.profile_mode = mode
@@ -515,12 +546,18 @@ class CoreManager:
                     if switch_threshold_ms is not None:
                         self.config['switch_threshold_ms'] = switch_threshold_ms
                     if mode == 'fastest':
-                        if old[2] != 'fastest' or old[0] != self.selection_group:
+                        target_group = self.selection_group if self.config.get('profile_file') else 'PORTAL'
+                        if self.nodes.policies.get(target_group, {}).get('mode') != 'latency':
                             from .policy import FastestSelection
                             self.fastest = FastestSelection()
                         await self._probe_nodes()
                     else:
                         await self._apply_policy()
+                    target_group = self.selection_group if self.config.get('profile_file') else 'PORTAL'
+                    self.nodes.save_policy(target_group, mode, name)
+                    self.nodes.fastest[target_group] = self.fastest
+                    if mode == 'fastest':
+                        self.nodes.last_test[target_group] = time.monotonic()
                     self.last_error = ''
                 except BaseException as exc:
                     # Restore the exact previously verified member of the target
@@ -600,11 +637,16 @@ class CoreManager:
                 except Exception:
                     pass
                 raise
+            if not self.config.get('profile_file'):
+                from .profiles import read_profile
+                provider_path = self.runtime / 'providers/subscription.yaml'
+                canonical = read_profile(provider_path)
+                atomic_private(provider_path, json.dumps(canonical, ensure_ascii=False).encode())
             rendered = generated if self.config.get('profile_file') else render(self.config, self.secret)
             if self.config.get('profile_file'):
-                self.profile_groups = {group.get('name') for group in rendered.get('proxy-groups', []) if group.get('type') == 'select'}
+                self.profile_groups = {group.get('name') for group in rendered.get('proxy-groups', []) if group.get('type') in ('select', 'fallback', 'url-test')}
             atomic_private(self.runtime / 'config.json', json.dumps(rendered, ensure_ascii=False).encode('utf-8'))
-            args = (self.config['core_path'], '-d', str(self.runtime), '-f', str(self.runtime / 'config.json'))
+            args = (str(Path(self.config['core_path']).expanduser().resolve()), '-d', str(self.runtime), '-f', str(self.runtime / 'config.json'))
             check = await launch_external(*args, '-t')
             try:
                 result = await asyncio.wait_for(check.wait(), timeout=self.config['wakeup_timeout'])
@@ -614,17 +656,34 @@ class CoreManager:
                     await check.wait()
             if result:
                 raise CoreError('Mihomo rejected the generated configuration or subscription')
-            self.process = await launch_external(*args)
+            # Mihomo opens its controller/listener before tunnel.OnRunning.
+            # Its official post-up hook runs only after ApplyConfig completes.
+            # No user text or paths enter this fixed shell command: private cwd,
+            # constant filename and a fresh hexadecimal nonce are the entire input.
+            ready_path = self.runtime / 'psportal-ready'
+            ready_path.unlink(missing_ok=True)
+            ready_nonce = secrets.token_hex(32).encode('ascii')
+            self.process = await launch_external(*args, '-post-up',
+                'echo ' + ready_nonce.decode('ascii') + '>psportal-ready', cwd=self.runtime)
             deadline = time.monotonic() + self.config['wakeup_timeout']
             while time.monotonic() < deadline:
                 if self.process.returncode is not None:
-                    raise CoreError('Mihomo exited during startup')
+                    raise CoreError('Mihomo exited during startup; use a core with -post-up readiness support (tested with v1.19.32)')
                 try:
+                    try:
+                        with ready_path.open('rb') as ready:
+                            marker = ready.read(81)
+                    except FileNotFoundError:
+                        marker = b''
+                    if len(marker) > 80 or marker.strip() != ready_nonce:
+                        await asyncio.sleep(0.05)
+                        continue
                     await asyncio.to_thread(self._request, '/version')
                     reader, writer = await asyncio.wait_for(asyncio.open_connection('127.0.0.1', self.config['backend_port']), timeout=1)
                     writer.close()
                     await writer.wait_closed()
                     await self._select()
+                    await self.nodes.restore()
                     self.state = 'running'
                     self.startup_deadline = None
                     print('Core: running', flush=True)
@@ -684,13 +743,15 @@ class CoreManager:
                         continue
                     try:
                         await self._refresh_nodes()
-                        if self.node_management and self.selection_mode == 'fastest' and time.monotonic() - self.last_health >= max(30, self.config['health_interval']):
+                        if self.node_management and self.selection_mode == 'fastest' and not self.nodes.policies and time.monotonic() - self.last_health >= max(30, self.config['health_interval']):
                             await self._probe_nodes()
                             self.last_error = ''
                         elif self.node_management and self.selection_mode == 'prefer':
                             await self._apply_policy()
                     except (OSError, ValueError, CoreError, TimeoutError):
                         self.last_error = 'Node status or health check failed'
+                if self.state == 'running':
+                    await self.nodes.tick()
         except asyncio.CancelledError:
             pass
 

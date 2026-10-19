@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 import ipaddress
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -210,6 +211,18 @@ class ProxyServer:
         self.last_error = ""
         self.stats = {"accepted": 0, "denied_clients": 0, "local_requests": 0,
                       "external_requests": 0, "errors": 0, "active": 0, "waking": 0, "forwarding": 0}
+        self.clients = {}
+
+    def snapshot(self):
+        """Only clients that actually reached this listener, never a Wi-Fi scan."""
+        now = time.time()
+        self.clients = {ip: row for ip, row in self.clients.items()
+                        if row['active'] or now - row['last_seen'] <= 300}
+        rows = [dict(ip=ip, **row) for ip, row in self.clients.items()]
+        rows.sort(key=lambda row: (-bool(row['active']), -row['last_seen'], row['ip']))
+        return dict(kind='statistics', **self.stats,
+                    devices=sum(row['active'] > 0 for row in rows), clients=rows[:256],
+                    truncated=len(rows) > 256)
 
     @property
     def bound_addresses(self) -> list[tuple]:
@@ -235,7 +248,8 @@ class ProxyServer:
                     listen_port=self.config['listen_port'],
                     address=f"{self.config['listen_host']}:{self.config['listen_port']}",
                     connected_clients=len(self._clients), active_connections=self.stats['active'],
-                    client_ips=sorted(self._clients), stats=dict(self.stats), error=error)
+                    client_ips=sorted(self._clients), clients=self.snapshot()['clients'],
+                    stats=dict(self.stats), error=error)
 
     async def start(self) -> None:
         if self._server is not None:
@@ -367,6 +381,7 @@ class ProxyServer:
         upstream_writer = None
         acquired = False
         counted = False
+        client = None
         forwarding = False
         peer_ip = None
         state = {"responded": False}
@@ -386,6 +401,11 @@ class ProxyServer:
             counted = True
             self.stats["active"] += 1
             self.stats["accepted"] += 1
+            client = self.clients.setdefault(str(ipaddress.ip_address(peer[0])),
+                dict(active=0, requests=0, last_seen=0))
+            client['active'] += 1
+            client['requests'] += 1
+            client['last_seen'] = time.time()
             peer_ip = str(ipaddress.ip_address(peer[0]))
             self._clients[peer_ip] = self._clients.get(peer_ip, 0) + 1
             request = parse_request(await self._header(reader))
@@ -466,6 +486,8 @@ class ProxyServer:
                     self.stats["forwarding"] -= 1
                 if counted:
                     self.stats["active"] -= 1
+                    client['active'] -= 1
+                    client['last_seen'] = time.time()
                     self._clients[peer_ip] -= 1
                     if self._clients[peer_ip] == 0:
                         del self._clients[peer_ip]

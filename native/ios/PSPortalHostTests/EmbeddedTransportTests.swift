@@ -69,6 +69,12 @@ final class EmbeddedTransportTests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.02)
         }
         XCTAssertTrue(accepted, "Real listener never accepted the test connection")
+        let liveStats = try status(engine)["stats"] as? [String: Any]
+        XCTAssertEqual(liveStats?["active_devices"] as? Int, 1)
+        let devices = liveStats?["devices"] as? [[String: Any]]
+        XCTAssertEqual(devices?.first?["ip"] as? String, "127.0.0.1")
+        // Exercise the newly generated ABI without fetching any subscription.
+        XCTAssertTrue(engine.nodeCommand("{\"action\":\"invalid\"}").contains("invalid"))
         engine.stop()
         XCTAssertTrue(waiting.isClosedByPeer(), "Stop must close the owned socket, not merely time it out")
         XCTAssertEqual(try status(engine)["running"] as? Bool, false)
@@ -93,6 +99,7 @@ final class EmbeddedTransportTests: XCTestCase {
         XCTAssertTrue(try client.readToEOF().hasPrefix("HTTP/1.1 403"))
         let stats = try status(engine)["stats"] as? [String: Any]
         XCTAssertEqual(stats?["denied_clients"] as? Int, 1)
+        XCTAssertEqual(stats?["active_devices"] as? Int, 0)
         XCTAssertEqual(stats?["accepted"] as? Int ?? 0, 0)
     }
 
