@@ -180,3 +180,114 @@ func TestMaximumNodePoolStatusFitsOneMiB(t *testing.T) {
 		t.Fatal("invalid UTF-8 node name accepted")
 	}
 }
+
+// A successful receive shutdown need not cancel an already-issued async read
+// on every platform. Model that behavior independently of the host OS.
+type pendingReadShutdownConn struct {
+	net.Conn
+	reading chan struct{}
+	once    sync.Once
+}
+
+func (c *pendingReadShutdownConn) Read(data []byte) (int, error) {
+	c.once.Do(func() { close(c.reading) })
+	return c.Conn.Read(data)
+}
+func (c *pendingReadShutdownConn) CloseRead() error { return nil }
+
+func TestUpstreamEOFInterruptsPendingUploadRead(t *testing.T) {
+	clientSide, clientPeer := net.Pipe()
+	defer clientSide.Close()
+	defer clientPeer.Close()
+	underlying := &pendingReadShutdownConn{Conn: clientSide, reading: make(chan struct{})}
+	client := &timedConn{Conn: underlying, timeout: time.Minute}
+	upstream, upstreamPeer := net.Pipe()
+	defer upstream.Close()
+	defer upstreamPeer.Close()
+	done := make(chan error, 1)
+	go func() {
+		done <- duplex(client, upstream, func() error {
+			_, err := client.Read(make([]byte, 1))
+			return err
+		}, func() error {
+			<-underlying.reading
+			return nil // Upstream EOF while upload read is still pending.
+		})
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("upstream EOF left upload read blocked on its idle timeout")
+	}
+	// Stopping upload must preserve writes for a final error response.
+	written := make(chan error, 1)
+	go func() { _, err := client.Write([]byte("ok")); written <- err }()
+	if err := clientPeer.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	response := make([]byte, 2)
+	if _, err := io.ReadFull(clientPeer, response); err != nil || string(response) != "ok" {
+		t.Fatal(string(response), err)
+	}
+	if err := <-written; err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Delay an in-flight Read's deadline update until after CloseRead has returned.
+// Without sticky read cancellation it can revive the socket's idle timeout.
+type delayedReadDeadlineConn struct {
+	*pendingReadShutdownConn
+	setting      chan struct{}
+	resume       chan struct{}
+	deadlineOnce sync.Once
+}
+
+func (c *delayedReadDeadlineConn) SetReadDeadline(deadline time.Time) error {
+	if deadline.After(time.Now()) {
+		c.deadlineOnce.Do(func() {
+			close(c.setting)
+			<-c.resume
+		})
+	}
+	return c.Conn.SetReadDeadline(deadline)
+}
+
+func TestReadCannotRestoreDeadlineAfterCloseRead(t *testing.T) {
+	local, peer := net.Pipe()
+	defer local.Close()
+	defer peer.Close()
+	underlying := &delayedReadDeadlineConn{
+		pendingReadShutdownConn: &pendingReadShutdownConn{Conn: local, reading: make(chan struct{})},
+		setting:                 make(chan struct{}), resume: make(chan struct{}),
+	}
+	var resumeOnce sync.Once
+	resume := func() { resumeOnce.Do(func() { close(underlying.resume) }) }
+	defer resume()
+	client := &timedConn{Conn: underlying, timeout: time.Minute}
+	done := make(chan error, 1)
+	go func() { _, err := client.Read(make([]byte, 1)); done <- err }()
+	select {
+	case <-underlying.setting:
+	case <-time.After(time.Second):
+		t.Fatal("read did not begin its deadline refresh")
+	}
+	if err := client.CloseRead(); err != nil {
+		t.Fatal(err)
+	}
+	resume()
+	select {
+	case err := <-done:
+		if !errors.Is(err, net.ErrClosed) {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("read restored its idle timeout after CloseRead")
+	}
+	if _, err := client.Read(make([]byte, 1)); !errors.Is(err, net.ErrClosed) {
+		t.Fatal(err)
+	}
+}
