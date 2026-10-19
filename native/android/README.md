@@ -1,9 +1,21 @@
-# PSPortal Android host
+# 星渡 StarPass · Android host
 
 Android v4 (`0.4.0-dev`, code 4) embeds pinned Mihomo in one application through
 `androidcore` / `androidmobile`. No external Clash, Python, root, shell subprocess
 or downloaded executable is needed. The Chinese-first simple UI retains language,
 theme and subscription-usage choices.
+
+## Product modes
+
+- **Game**: LAN sharing on, phone VPN off. HTTP/HTTPS CONNECT TCP for devices
+  that use a manual proxy; not arbitrary UDP game acceleration
+- **Mixed**: LAN sharing plus phone-app VPN, after Android system consent
+- **Clash**: phone-app VPN only with LAN off; embedded Mihomo, no second Clash app
+
+These are next-session input presets, separate from rule/global/direct routing.
+They do not start anything, erase a typed subscription or persist phone-VPN
+opt-in for a future process. Change them only while stopped. Existing explicit
+input switches remain available; both off disables Start.
 
 ## Choose the session
 
@@ -33,6 +45,20 @@ and [BACKGROUND.md](BACKGROUND.md) for Doze/manufacturer limitations.
 Foreground notification permission is requested from the visible Activity. The
 app refuses to serve without a visible notification. There is no boot receiver,
 Android always-on/lockdown support, battery-exemption prompt or wake-lock promise.
+
+## Policy groups and live status
+
+Load live nodes explicitly; use Test latency for measurements. Full inline
+profiles expose actual manual `select` groups and their bounded members. Only
+an existing member may be chosen; `url-test`, `fallback` and `load-balance`
+groups keep their own algorithms. Group selection requires no active connection
+and phone VPN off. It survives idle engine reload within this session, but Stop
+clears it. Old dialogs/results cannot act on a restarted session.
+
+Unavailable/unmeasured latency is shown as unavailable, including Mihomo's
+65535-ms sentinel. Accounting shows the time usable response-header fields were
+received and remains a server snapshot, not live traffic. Rotation can discard
+this Activity-local accounting view; it is not persisted as account data.
 
 ## Private data
 

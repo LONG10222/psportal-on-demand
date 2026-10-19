@@ -3,7 +3,8 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
-from . import i18n
+from . import i18n, product_modes
+from .branding import BRAND_NAME, apply_window_icon, load_avatar
 
 PAGES = ('Overview', 'Profiles', 'Proxies', 'Rules', 'LAN sharing', 'Settings', 'Logs', 'Devices')
 SUBTITLES = dict(zip(PAGES, (
@@ -64,7 +65,8 @@ class DesktopView:
         self.frames = {}
         self.scroll_canvases = []
         self._styles()
-        root.title('PS Portal On-Demand')
+        root.title(BRAND_NAME)
+        apply_window_icon(root)
         root.geometry('1120x800')
         root.minsize(1040, 740)
         root.configure(background=self.palette['page'])
@@ -73,12 +75,16 @@ class DesktopView:
         root.rowconfigure(0, weight=1)
         sidebar = ttk.Frame(root, style='Portal.Side.TFrame', padding=(24, 30))
         sidebar.grid(row=0, column=0, sticky='nsew')
-        ttk.Label(sidebar, text='ONDEMAND', style='Portal.Brand.TLabel').pack(anchor='w')
-        self.label(sidebar, 'On-demand LAN proxy', style='Portal.SideNote.TLabel').pack(anchor='w', pady=(5, 35))
+        self.brand_avatar = load_avatar(root, size=64)
+        if self.brand_avatar is not None:
+            ttk.Label(sidebar, image=self.brand_avatar, style='Portal.SideNote.TLabel').pack(anchor='w', pady=(0, 10))
+        ttk.Label(sidebar, text='StarPass', style='Portal.Brand.TLabel').pack(anchor='w')
+        self.label(sidebar, 'StarPass · games and everyday browsing', style='Portal.SideNote.TLabel',
+                   wraplength=170).pack(anchor='w', pady=(5, 20))
         self.label(sidebar, 'Workspace', style='Portal.SideNote.TLabel').pack(anchor='w', pady=(0, 10))
         for name in PAGES:
             button = self.button(sidebar, name, command=lambda p=name: self.show(p), style='Portal.Nav.TButton')
-            button.pack(fill='x', pady=4, ipady=7)
+            button.pack(fill='x', pady=3, ipady=2)
             self.nav[name] = button
         self.advanced_var = tk.StringVar()
         self.advanced_button = ttk.Button(sidebar, textvariable=self.advanced_var,
@@ -197,8 +203,9 @@ class DesktopView:
         self.guide_var = tk.StringVar()
         ttk.Label(guide, textvariable=self.guide_var, style='Portal.CardTitle.TLabel', wraplength=680,
                   justify='left').grid(row=1, column=0, columnspan=3, sticky='w', pady=(0, 16))
-        self.label(guide, 'Join the same Wi-Fi. In the device Wi-Fi settings choose HTTP Proxy → Manual, enter the server and port above, and leave authentication off.',
-                   wraplength=680, style='Portal.CardNote.TLabel', justify='left').grid(row=2, column=0, columnspan=3, sticky='w')
+        self.guide_instructions_var = tk.StringVar()
+        ttk.Label(guide, textvariable=self.guide_instructions_var,
+                  wraplength=680, style='Portal.CardNote.TLabel', justify='left').grid(row=2, column=0, columnspan=3, sticky='w')
         actions = ttk.Frame(guide, style='Portal.Card.TFrame')
         actions.grid(row=3, column=0, columnspan=3, sticky='w', pady=(18, 0))
         self.button(actions, 'Copy address', command=app.copy_address).pack(side='left')
@@ -292,7 +299,7 @@ class DesktopView:
         style.configure('Portal.Metric.TLabel', background=c['card'], foreground=c['text'], font=('Helvetica Neue', 19, 'bold'))
         style.configure('Portal.Status.TLabel', background=c['page'], foreground=c['accent'])
         for name, bg, fg in (('Nav', 'side', 'note'), ('Selected', 'selected', 'text')):
-            style.configure('Portal.' + name + '.TButton', background=c[bg], foreground=c[fg], borderwidth=0, anchor='w', padding=(14, 10))
+            style.configure('Portal.' + name + '.TButton', background=c[bg], foreground=c[fg], borderwidth=0, anchor='w', padding=(14, 6))
             style.map('Portal.' + name + '.TButton', background=[('active', c['hover'])])
         style.configure('TButton', background=c['button'], foreground=c['text'], borderwidth=0, padding=(12, 9))
         style.map('TButton', background=[('active', c['hover'])], foreground=[('disabled', c['note'])])
@@ -416,24 +423,37 @@ class DesktopView:
                     self.app.engine_inputs[key].append(browse)
 
     def _overview(self):
-        page = self.frames['Overview']
+        page = self.scroll_page(self.frames['Overview'], 'Overview')
         quick = self.card(page, 'Paste your subscription to get started.')
+        product = ttk.Frame(quick, style='Portal.Card.TFrame')
+        product.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(0, 10))
+        self.label(product, 'Product mode').pack(side='left', padx=(0, 12))
+        variable = self.app.vars['product_mode'] = tk.StringVar(value='game')
+        variable.trace_add('write', self.app._changed)
+        self.product_mode_combo = ttk.Combobox(product, state='readonly', width=22)
+        self.product_mode_combo.pack(side='left')
+        self.product_mode_combo.bind('<<ComboboxSelected>>', self._product_mode_selected)
+        self.app.inputs.append((self.product_mode_combo, 'readonly'))
+        self.product_mode_note = tk.StringVar()
+        ttk.Label(quick, textvariable=self.product_mode_note, wraplength=680,
+                  style='Portal.CardNote.TLabel', justify='left').grid(
+                      row=2, column=0, columnspan=3, sticky='w', pady=(0, 16))
         entry = ttk.Entry(quick, textvariable=self.app.vars['subscription_url'], show='•')
-        entry.grid(row=1, column=0, columnspan=2, sticky='ew', padx=(0, 12))
+        entry.grid(row=3, column=0, columnspan=2, sticky='ew', padx=(0, 12))
         quick.columnconfigure(0, weight=1)
         self.app.inputs.append((entry, 'normal'))
         self.quick_button = self.button(quick, 'Prepare & start', command=self.app.quick_start, style='Portal.Accent.TButton')
-        self.quick_button.grid(row=1, column=2, sticky='e')
+        self.quick_button.grid(row=3, column=2, sticky='e')
         self.quick_note_var = tk.StringVar()
         ttk.Label(quick, textvariable=self.quick_note_var, style='Portal.CardNote.TLabel', wraplength=680,
-                  justify='left').grid(row=2, column=0, columnspan=3, sticky='w', pady=(12, 0))
+                  justify='left').grid(row=4, column=0, columnspan=3, sticky='w', pady=(12, 0))
         self.subscription_var = tk.StringVar()
         ttk.Label(quick, textvariable=self.subscription_var, style='Portal.Card.TLabel', wraplength=680,
-                  justify='left').grid(row=3, column=0, columnspan=3, sticky='w', pady=(14, 0))
+                  justify='left').grid(row=5, column=0, columnspan=3, sticky='w', pady=(14, 0))
         self.quota_bar = ttk.Progressbar(quick, style='Portal.Horizontal.TProgressbar', maximum=100)
-        self.quota_bar.grid(row=4, column=0, columnspan=3, sticky='ew', pady=(10, 0))
+        self.quota_bar.grid(row=6, column=0, columnspan=3, sticky='ew', pady=(10, 0))
         link = ttk.Frame(quick, style='Portal.Card.TFrame')
-        link.grid(row=5, column=0, columnspan=3, sticky='ew', pady=(16, 0))
+        link.grid(row=7, column=0, columnspan=3, sticky='ew', pady=(16, 0))
         self.link_button = self.button(link, 'Share existing Clash / system proxy', command=self.app.use_existing_proxy)
         self.link_button.pack(side='left')
         self.link_var = tk.StringVar()
@@ -479,12 +499,17 @@ class DesktopView:
         panel.grid_remove()
         note.grid_remove()
 
+    def _product_mode_selected(self, _=None):
+        index = self.product_mode_combo.current()
+        if 0 <= index < len(product_modes.MODES):
+            self.app.set_product_mode(product_modes.MODES[index])
+
     def set_advanced(self, enabled):
         self.advanced = bool(enabled)
         for name, button in self.nav.items():
             button.pack_forget()
             if self.advanced or name in ('Overview', 'Proxies', 'Devices', 'LAN sharing'):
-                button.pack(fill='x', pady=4, ipady=7, before=self.advanced_button)
+                button.pack(fill='x', pady=3, ipady=2, before=self.advanced_button)
         for section in self.advanced_sections:
             section.grid() if self.advanced else section.grid_remove()
         for button in (self.app.save_button, self.app.start_button):
@@ -669,6 +694,11 @@ class DesktopView:
                 for rule in self.preview.get('rule_rows', ()):
                     self.rule_table.insert('', 'end', values=(rule,))
             self._preview_rendered = self.preview
+        product_mode = self.app.product_mode()
+        self.product_mode_combo.configure(values=tuple(self.tr(product_modes.LABELS[mode]) for mode in product_modes.MODES))
+        if product_mode in product_modes.MODES:
+            self.product_mode_combo.current(product_modes.MODES.index(product_mode))
+            self.product_mode_note.set(self.tr(product_modes.NOTES[product_mode]))
         self.advanced_var.set(self.tr('Simple view' if self.advanced else 'Advanced settings…'))
         self.stop_var.set(self.tr('Cancel preparation' if self.app.importing else 'Stop'))
         from .subscription_info import display, usage_percent
@@ -681,8 +711,15 @@ class DesktopView:
             self.quota_bar.grid()
         existing = self.app.existing_proxy
         self.link_var.set(self.tr('Detected local HTTP proxy: {host}:{port}', **existing) if existing else self.tr('No local HTTP system proxy detected.'))
-        self.quick_note_var.set(self.tr('Detect the LAN address and keep port 10081 when available. Devices on the current local subnet will be allowed to connect.') +
-            ('\n' + self.tr('Current local subnet: {subnet}', subnet=self.setup_network) if self.setup_network else ''))
+        self.quick_note_var.set(self.tr('Configure apps manually with the local address below. System proxy and VPN settings stay unchanged.'
+            if product_mode == 'clash' else 'Detect the current LAN for quick setup. Manual device lists are kept; automatic lists follow the subnet. Advanced Start keeps your manual address.') +
+            ('\n' + self.tr('Current local subnet: {subnet}', subnet=self.setup_network) if self.setup_network and product_mode != 'clash' else ''))
+        origin = self.app.raw.get('source_provenance')
+        source = next((self.app.vars[key].get().strip() for key in ('profile_file', 'subscription_file')
+                       if self.app.vars.get(key) and self.app.vars[key].get().strip()), '')
+        if isinstance(origin, dict) and origin.get('kind') == 'local' and origin.get('path') == source:
+            self.quick_note_var.set(self.quick_note_var.get() + '\n' + self.tr(
+                'Using your selected local file. Import subscription explicitly to replace this override.'))
         self.title.set(self.tr(self.page))
         self.subtitle.set(self.tr(SUBTITLES[self.page]))
         self.app.status_var.set(self.tr(self.status))
@@ -694,16 +731,19 @@ class DesktopView:
             self.metric_vars['Current engine'].set(self.tr('Existing proxy'))
             self.metric_vars['Upstream core'].set(self.tr('Managed by existing client'))
         host = self.app.vars.get('listen_host'); port = self.app.vars.get('listen_port')
-        address = f'{host.get()}:{port.get()}' if host and host.get() and port and port.get() else self.tr('Not configured')
+        effective_host = '127.0.0.1' if product_mode == 'clash' else host.get() if host else ''
+        address = f'{effective_host}:{port.get()}' if effective_host and port and port.get() else self.tr('Not configured')
         self.address_var.set(address)
         self._refresh_runtime(address)
-        if host and host.get() and port and port.get():
+        if effective_host and port and port.get():
             self.runtime_panel.grid()
         else:
             self.runtime_panel.grid_remove()
         self._refresh_nodes()
-        self.guide_var.set(self.tr('Server: {host}\nPort: {port}', host=host.get(), port=port.get())
-                           if host and host.get() and port and port.get() else self.tr('Prepare the subscription on Overview first.'))
+        self.guide_var.set(self.tr('Server: {host}\nPort: {port}', host=effective_host, port=port.get())
+                           if effective_host and port and port.get() else self.tr('Prepare the subscription on Overview first.'))
+        self.guide_instructions_var.set(self.tr('Configure apps manually with the local address below. System proxy and VPN settings stay unchanged.'
+            if product_mode == 'clash' else 'Join the same Wi-Fi. In the device Wi-Fi settings choose HTTP Proxy → Manual, enter the server and port above, and leave authentication off.'))
         if self.preview:
             message = self.tr('Provider nodes: {nodes} · groups: {groups} · rules: {rules}', **{k: self.preview[k] for k in ('nodes', 'groups', 'rules')})
             if self.preview['kind'] == 'profile':

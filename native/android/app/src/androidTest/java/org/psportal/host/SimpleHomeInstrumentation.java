@@ -14,6 +14,8 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Switch;
 import android.widget.Spinner;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -46,6 +48,7 @@ public final class SimpleHomeInstrumentation extends Instrumentation {
                     require(before.phase == SessionController.Phase.STOPPED, "Dummy-only test requires a stopped session");
                     List<View> views = new ArrayList<>(); walk(current.getWindow().getDecorView(), views);
                     EditText secret = null; Switch appearance = null, background = null, lan = null, phoneApps = null; Spinner routing = null; Button languageButton = null;
+                    RadioGroup productModes = null; RadioButton game = null, mixed = null, clash = null;
                     for (View view : views) {
                         if (view instanceof EditText && (((EditText)view).getInputType() & InputType.TYPE_MASK_VARIATION) == InputType.TYPE_TEXT_VARIATION_PASSWORD) secret = (EditText)view;
                         if (view instanceof Switch && "appearance".equals(view.getTag())) appearance = (Switch)view;
@@ -53,9 +56,14 @@ public final class SimpleHomeInstrumentation extends Instrumentation {
                         if (view instanceof Switch && "lan_enabled".equals(view.getTag())) lan = (Switch)view;
                         if (view instanceof Switch && "phone_apps".equals(view.getTag())) phoneApps = (Switch)view;
                         if (view instanceof Spinner && "routing_mode".equals(view.getTag())) routing = (Spinner)view;
+                        if (view instanceof RadioGroup && "product_modes".equals(view.getTag())) productModes = (RadioGroup)view;
+                        if (view instanceof RadioButton && "product_mode_game".equals(view.getTag())) game = (RadioButton)view;
+                        if (view instanceof RadioButton && "product_mode_mixed".equals(view.getTag())) mixed = (RadioButton)view;
+                        if (view instanceof RadioButton && "product_mode_clash".equals(view.getTag())) clash = (RadioButton)view;
                         if (view instanceof Button && (((Button)view).getText().toString().equals("English") || ((Button)view).getText().toString().equals("中文"))) languageButton = (Button)view;
                     }
                     require(secret != null && appearance != null && background != null && lan != null && phoneApps != null && routing != null && languageButton != null, "Simple-home controls present");
+                    require(productModes != null && productModes.getChildCount() == 3 && game != null && mixed != null && clash != null, "Three product modes present");
                     require(!phoneApps.isChecked(), "Phone-app VPN defaults off on a fresh stopped session");
                     require(lan.isChecked() == lanEnabled, "Independent LAN preference restored");
                     Button startButton = null;
@@ -78,6 +86,16 @@ public final class SimpleHomeInstrumentation extends Instrumentation {
                     require(secret.getTransformationMethod() instanceof PasswordTransformationMethod, "Password transformation retained after singleLine");
                     String dummy = "https://example.invalid/DUMMY-NOT-A-SECRET";
                     secret.setText(dummy);
+                    game.performClick();
+                    require(lan.isChecked() && !phoneApps.isChecked() && game.isChecked(), "Game selects only LAN sharing");
+                    mixed.performClick();
+                    require(lan.isChecked() && phoneApps.isChecked() && mixed.isChecked(), "Mixed selects both inputs without starting them");
+                    clash.performClick();
+                    require(!lan.isChecked() && phoneApps.isChecked() && clash.isChecked(), "Clash selects phone only");
+                    require(secret.getText().toString().equals(dummy) && routing.getSelectedItemPosition() == 1, "Product changes preserve subscription and separate routing selection");
+                    phoneApps.setChecked(false);
+                    require(productModes.getCheckedRadioButtonId() == -1 && !startButton.isEnabled(), "Both inputs off clears product selection and disables Start");
+                    lan.setChecked(lanEnabled);
                     CharSequence masked = secret.getTransformationMethod().getTransformation(secret.getText(), secret);
                     require(masked.length() == dummy.length() && !masked.toString().equals(dummy), "Dummy subscription actually masked");
                     require(session.snapshot() == before, "Opening and option changes never start service or request VPN");
@@ -90,7 +108,7 @@ public final class SimpleHomeInstrumentation extends Instrumentation {
                 } catch (Throwable error) { failure[0] = error; }
             });
             if (failure[0] != null) throw new AssertionError(failure[0]);
-            result.putString("stream", "PASS: actual password transformation, privacy flags, independent routing/LAN/phone/background controls and hot language/theme preservation; no service started\n");
+            result.putString("stream", "PASS: actual password transformation, privacy flags, three non-starting product modes, independent routing/LAN/phone/background controls and hot language/theme preservation; no service started\n");
         } catch (Throwable failure) {
             result.putString("stream", "FAIL: " + failure.getClass().getSimpleName() + " (dummy-only UI regression)\n");
             resultCode = Activity.RESULT_CANCELED;

@@ -173,3 +173,44 @@ assert 'UDP unsupported by the selected node is blocked, without direct fallback
 assert 'ICMP (ping) is unsupported' in activity
 assert 'including in Direct mode. Turn it off to restore normal networking.' in activity
 assert 'Phone routing currently supports TCP and DNS only' not in activity
+
+# Full profiles keep their native group algorithms. Choices are fetched only
+# for a selected manual group, rather than copying every membership into status.
+assert 'session.groupChoices(sessionId, groupName' in activity
+assert 'session.selectGroup(sessionId, groupName, names.get(index))' in activity
+assert 'session.control(sessionId, action, mode, name, improvement)' in activity
+assert 'sessionId != session.sessionId()' in activity
+assert 'uiGeneration != nodeUiGeneration' in activity
+assert 'visible = false;\n        nodeUiGeneration++;\n        dismissNodeDialog();' in activity, 'A pending group result must not reopen after leaving and returning'
+assert 'nodeDialog != null && !canSelectInSession(nodeDialogSession)' in activity
+assert 'RuntimeNodePresentation.selectableGroup(selectable, count(group, "choice_count"))' in activity
+assert 'Math.min(groups.length(), 257)' in activity and 'choices.length() > 1256' in activity
+assert 'boolean nodeEditable = snapshot.phase == SessionController.Phase.RUNNING && !session.commandPending()' in activity, 'Loading/testing must remain available for full profiles'
+assert 'chooseGroup.setEnabled(canSelectRoute && nativeState.optBoolean("group_management", false))' in activity
+assert 'Load live nodes' in activity and 'Load & test nodes' not in activity, 'Loading is not a completed latency test'
+assert 'RuntimeNodePresentation.latency(delay, healthy, english)' in activity
+assert 'Selected route / group: ' in activity, 'Automatic group name must not be mislabeled as a leaf node'
+assert 'subscriptionInfo.updatedAt' in activity and 'System.currentTimeMillis() / 1000' in activity
+assert 'main.postDelayed(this, 2000)' in activity and 'main.removeCallbacks(networkTick)' in activity
+assert 'session and reset after Stop' in activity
+assert 'Androidmobile.groupChoices(group)' in native_source and 'Androidmobile.selectGroup(group, choice)' in native_source
+print('PASS: bounded session-fenced manual groups, honest latency/accounting and visible network refresh guards')
+
+product_mode = (src/'ProductMode.java').read_text()
+assert 'GAME(true, false), MIXED(true, true), CLASH(false, true)' in product_mode
+assert 'return null;' in product_mode, 'Both inputs off must not silently enable another mode'
+assert 'TCP only' in product_mode and 'not guaranteed' in product_mode
+assert 'Start requires Android VPN consent' in product_mode
+assert '星渡 StarPass' in activity
+assert 'ProductMode.fromInputs(lanSharing.isChecked(), phoneApps.isChecked())' in activity
+assert 'if (!canChangeProductMode()) { syncProductMode(); return; }' in activity
+assert 'if (mode == null) productModes.clearCheck();' in activity
+assert 'configurationViews.add(choice)' in activity, 'Disable each radio button during pending or active sessions'
+assert 'pendingConfig != null || preparing || launchRequested || addressChoiceOpen || vpnConsentPending' in activity
+preset_handler = activity.split('productModes.setOnCheckedChangeListener(', 1)[1].split('text(subscriptionCard,', 1)[0]
+assert 'lanSharing.setChecked(mode.lanEnabled); phoneApps.setChecked(mode.phoneVpn);' in preset_handler
+assert 'vpnConsentGranted = false' in preset_handler
+assert 'subscription.setText' not in preset_handler and 'routing.setSelection' not in preset_handler
+assert 'startService(' not in preset_handler and 'startForegroundService(' not in preset_handler and 'VpnService.prepare(' not in preset_handler
+assert '.putBoolean("phone_vpn"' not in activity and '.putString("product_mode"' not in activity
+print('PASS: StarPass game/mixed/Clash input presets, separate routing, consent and startup boundaries')

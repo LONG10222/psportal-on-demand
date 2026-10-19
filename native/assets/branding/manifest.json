@@ -1,0 +1,185 @@
+{
+  "brand": "星渡 StarPass",
+  "source": "assets/branding/starpass-original.png",
+  "source_sha256": "cded3888e0a9538615cf9b0841147400f214b7480ac992ef002b729c0006bfab",
+  "source_size": [
+    1254,
+    1254
+  ],
+  "source_mode": "RGB",
+  "recipe": "Pillow 12.3.0 LANCZOS resize; RGB PNG compress_level=9, optimize=False; Android 72/108dp black safe-zone padding; PNG-frame ICO/ICNS",
+  "outputs": {
+    "android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml": {
+      "sha256": "6bebd1fc5183ed51875f882a15552581a6f4fea74bbb01dd76d01e076b2be263",
+      "bytes": 270
+    },
+    "android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml": {
+      "sha256": "6bebd1fc5183ed51875f882a15552581a6f4fea74bbb01dd76d01e076b2be263",
+      "bytes": 270
+    },
+    "android/app/src/main/res/mipmap-hdpi/ic_launcher.png": {
+      "sha256": "5a344ea8cdc9a49a7484e2307c70ce2946ab7ce9bc5075ce1bf0bba391792034",
+      "bytes": 2115
+    },
+    "android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png": {
+      "sha256": "9ffecb0edb0f7f83caa4d62b51b096c56eba3db71505f1e92a83ddea87d2db9b",
+      "bytes": 3530
+    },
+    "android/app/src/main/res/mipmap-mdpi/ic_launcher.png": {
+      "sha256": "7e778ccb90ded0291fd7f53092ca08e663fbc2fd76e4d2c5682a31d8bfc0b1f6",
+      "bytes": 1316
+    },
+    "android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png": {
+      "sha256": "5f37be83efaa44eaf9febeb09ba9494ec4670fcfa8ac187fee662316b89d8669",
+      "bytes": 2195
+    },
+    "android/app/src/main/res/mipmap-xhdpi/ic_launcher.png": {
+      "sha256": "4572dbf6f9f05e1f1affa9a7cb80449903c456f189068d0f599cf031247e6630",
+      "bytes": 2911
+    },
+    "android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png": {
+      "sha256": "12331386268d99b3a46ac4d80e90f83d324e2f682d70b9ab2348f65ca3f8f3e7",
+      "bytes": 5104
+    },
+    "android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png": {
+      "sha256": "dd71b5e17ba84fc554891e30b0a172e404c396ae58cd75926f85e5dcfc70c031",
+      "bytes": 4815
+    },
+    "android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png": {
+      "sha256": "4e27ff6714e9f1ec220d7ec9fefe25669a6a89d9123404fcb4371392ff7d8baa",
+      "bytes": 9407
+    },
+    "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png": {
+      "sha256": "244d88a6d5d2ebf1ee8e3700733e0fcb1980af94e32edc26c58b7af57f49e17c",
+      "bytes": 7367
+    },
+    "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png": {
+      "sha256": "9c111ce8a4a6c479110ef907042ad9a290c8b7098c0eeb42d8f6d331099483f7",
+      "bytes": 18020
+    },
+    "android/app/src/main/res/values/branding.xml": {
+      "sha256": "51dfa47a1c7ff012ceb85dfc0043e303d3abbb4d922e99e5a8da82bfe73590ec",
+      "bytes": 117
+    },
+    "assets/branding/desktop/starpass-1024.png": {
+      "sha256": "fdd87a8052568f5954104603ffb76abf9fe165bfc937298ceb5a834b3f4ad290",
+      "bytes": 269161
+    },
+    "assets/branding/desktop/starpass-128.png": {
+      "sha256": "31af41978495c238af26165865f25c8af848c0721e12fd05ca25c8ce8dcf2b2b",
+      "bytes": 4133
+    },
+    "assets/branding/desktop/starpass-16.png": {
+      "sha256": "f9a6b85111f9ca0c9ac4e7b8a4e2be94ca493769debbe71276b240f6daa358ab",
+      "bytes": 391
+    },
+    "assets/branding/desktop/starpass-24.png": {
+      "sha256": "14ca2a0494c2eae7f8c2da1c1908c01d3419c6f01a539ab39ebaec2ca1eb78c1",
+      "bytes": 605
+    },
+    "assets/branding/desktop/starpass-256.png": {
+      "sha256": "3169e5ca942695e5798977429d1bcf3e96479930fab7630ef0f5c4a0f9e22514",
+      "bytes": 13192
+    },
+    "assets/branding/desktop/starpass-32.png": {
+      "sha256": "e49400d091235c58e8c5e02b6ba3077b507183377a08f501d0c37e2573708138",
+      "bytes": 817
+    },
+    "assets/branding/desktop/starpass-48.png": {
+      "sha256": "7e778ccb90ded0291fd7f53092ca08e663fbc2fd76e4d2c5682a31d8bfc0b1f6",
+      "bytes": 1316
+    },
+    "assets/branding/desktop/starpass-512.png": {
+      "sha256": "e78697df621fba5fc120690d9d4c4ad0f12699ca3dbd12455cf227d1a03c1aea",
+      "bytes": 64425
+    },
+    "assets/branding/desktop/starpass-64.png": {
+      "sha256": "70d4b5d2d09cc867ef010ba39ed3cb7e12f5efde57000bfc6f487ab8622058a1",
+      "bytes": 1810
+    },
+    "assets/branding/desktop/starpass.icns": {
+      "sha256": "8d2c4b562ea7ff0525ca057625b088c546fd935161badf37c03788b4b4eaa2c7",
+      "bytes": 434269
+    },
+    "assets/branding/desktop/starpass.ico": {
+      "sha256": "43f5d9eac2f155e020b3edc64e4478c0020a45461a1e6b8cc0a88b83847eefde",
+      "bytes": 22382
+    },
+    "ios/PSPortalHost/Assets.xcassets/AppIcon.appiconset/Contents.json": {
+      "sha256": "7b1e06108f847e1d137ae7b64d5eee46fadced42c86ee52d9bd31669757e9e4b",
+      "bytes": 2206
+    },
+    "ios/PSPortalHost/Assets.xcassets/AppIcon.appiconset/starpass-1024.png": {
+      "sha256": "fdd87a8052568f5954104603ffb76abf9fe165bfc937298ceb5a834b3f4ad290",
+      "bytes": 269161
+    },
+    "ios/PSPortalHost/Assets.xcassets/AppIcon.appiconset/starpass-120.png": {
+      "sha256": "b39c7d1c2bbff5f2bb7b4624cf1820d2f5baa67d882acea859d14cb3b53771e2",
+      "bytes": 3839
+    },
+    "ios/PSPortalHost/Assets.xcassets/AppIcon.appiconset/starpass-152.png": {
+      "sha256": "58027b8b259b7c6b66cccbf4311ab23f43040053709072eb8b47a7c2687696a7",
+      "bytes": 5307
+    },
+    "ios/PSPortalHost/Assets.xcassets/AppIcon.appiconset/starpass-167.png": {
+      "sha256": "4310f5bc6f7983450de5f5e5111d830c77c79a88da1ea9f2bb14053bad15acf4",
+      "bytes": 5889
+    },
+    "ios/PSPortalHost/Assets.xcassets/AppIcon.appiconset/starpass-180.png": {
+      "sha256": "4c27663c9bb64e4d82dd22e8bf08a4129838f7a6a7ac3c57e0750634b01ff3db",
+      "bytes": 6728
+    },
+    "ios/PSPortalHost/Assets.xcassets/AppIcon.appiconset/starpass-20.png": {
+      "sha256": "8e0fde534f92cc906598f46f114c22c07044f2ccd9eafac363a9b2176b7f161b",
+      "bytes": 513
+    },
+    "ios/PSPortalHost/Assets.xcassets/AppIcon.appiconset/starpass-29.png": {
+      "sha256": "d1f5f5f6a5925f005cf96423a6b1b09423f1bb39e8c683b8e9be22b05e57589a",
+      "bytes": 762
+    },
+    "ios/PSPortalHost/Assets.xcassets/AppIcon.appiconset/starpass-40.png": {
+      "sha256": "cd9dd64c6d50a437163c6002690209cf2d76dd6ff37a10aa323a4e6c7d5da778",
+      "bytes": 1061
+    },
+    "ios/PSPortalHost/Assets.xcassets/AppIcon.appiconset/starpass-58.png": {
+      "sha256": "0176dd9f120d27e960324eba981a495bf17c054720f6d02f16c567d3f6583a54",
+      "bytes": 1627
+    },
+    "ios/PSPortalHost/Assets.xcassets/AppIcon.appiconset/starpass-60.png": {
+      "sha256": "b355901aa0f91464b3d4847574f1dffb7a1b908bdba13b2f192ea88a821ff628",
+      "bytes": 1637
+    },
+    "ios/PSPortalHost/Assets.xcassets/AppIcon.appiconset/starpass-76.png": {
+      "sha256": "f52df640cdf7f80962c75d8e1922163e531df0b14853f38af1168508b6594dd6",
+      "bytes": 2157
+    },
+    "ios/PSPortalHost/Assets.xcassets/AppIcon.appiconset/starpass-80.png": {
+      "sha256": "3c4b6a64671dd9a35803be8252fc3854188f3de1ef5bb85058b3ca4d9aa58ad1",
+      "bytes": 2377
+    },
+    "ios/PSPortalHost/Assets.xcassets/AppIcon.appiconset/starpass-87.png": {
+      "sha256": "3d5b19101340a97d17a208b7106ef1db700e11e50bffb849c1cc96bd7907af40",
+      "bytes": 2589
+    },
+    "ios/PSPortalHost/Assets.xcassets/Contents.json": {
+      "sha256": "f5fb0e1f3a8142892ed092efb5955c1c2cc537003a89ad7bbdb9dade7fe8985f",
+      "bytes": 60
+    },
+    "ios/PSPortalHost/Assets.xcassets/StarPassMark.imageset/Contents.json": {
+      "sha256": "426ec30f8c64e0ecd91c46b3f776562dc49249383b08d4693b975524a6818c29",
+      "bytes": 374
+    },
+    "ios/PSPortalHost/Assets.xcassets/StarPassMark.imageset/starpass-128.png": {
+      "sha256": "31af41978495c238af26165865f25c8af848c0721e12fd05ca25c8ce8dcf2b2b",
+      "bytes": 4133
+    },
+    "ios/PSPortalHost/Assets.xcassets/StarPassMark.imageset/starpass-192.png": {
+      "sha256": "244d88a6d5d2ebf1ee8e3700733e0fcb1980af94e32edc26c58b7af57f49e17c",
+      "bytes": 7367
+    },
+    "ios/PSPortalHost/Assets.xcassets/StarPassMark.imageset/starpass-64.png": {
+      "sha256": "70d4b5d2d09cc867ef010ba39ed3cb7e12f5efde57000bfc6f487ab8622058a1",
+      "bytes": 1810
+    }
+  }
+}

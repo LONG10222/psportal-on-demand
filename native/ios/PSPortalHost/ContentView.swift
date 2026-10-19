@@ -31,7 +31,9 @@ struct ContentView: View {
         ZStack {
             VStack(spacing: 0) {
                 HStack {
-                    Text("OnDemand").font(.title2.bold())
+                    Image("StarPassMark").resizable().scaledToFit().frame(width: 34, height: 34)
+                        .clipShape(RoundedRectangle(cornerRadius: 8)).accessibilityHidden(true)
+                    Text(t("星渡 StarPass", "StarPass")).font(.title2.bold()).lineLimit(1).minimumScaleFactor(0.75)
                     Spacer()
                     Picker(t("语言", "Language"), selection: $model.language) {
                         Text("中文").tag("zh")
@@ -40,6 +42,12 @@ struct ContentView: View {
                 }.padding()
                 TabView {
                 Form {
+                    Section {
+                        Label(t("游戏 / 局域网共享", "Game / LAN sharing"), systemImage: "gamecontroller")
+                            .font(.headline).accessibilityIdentifier("availableProductMode")
+                        Text(t("本版本仅提供前台 HTTP/CONNECT TCP 共享。设备需保持解锁；UDP 游戏流量、整机 VPN 与完整 Clash 分组 / 规则模式尚不可用。", "This version provides foreground HTTP/CONNECT TCP sharing. Keep the device unlocked. UDP game traffic, device-wide VPN, and full Clash groups/rules modes are unavailable."))
+                            .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("productModeScope")
+                    } header: { Text(t("当前可用模式", "Available mode")) }
                     Section {
                         HStack(spacing: 12) {
                             Image(systemName: model.state == .running ? "wifi.circle.fill" : "power.circle")
@@ -151,7 +159,7 @@ struct ContentView: View {
                 Color(.systemBackground).ignoresSafeArea()
                 VStack(spacing: 12) {
                     Image(systemName: "lock.fill").font(.largeTitle)
-                    Text("OnDemand").font(.title2)
+                    Text("星渡 StarPass").font(.title2)
                     Text(t("配置已隐藏", "Configuration hidden")).foregroundStyle(.secondary)
                 }
             }

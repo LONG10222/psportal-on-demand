@@ -91,6 +91,8 @@ def validate(raw, path):
             raise ValueError('listen_host must be an RFC1918 address, or 127.0.0.1 with only the localhost client')
         if not isinstance(clients, list) or not clients or not all(lan(x) for x in clients):
             raise ValueError('allowed_clients must contain specific RFC1918 IPv4 addresses')
+    from .product_modes import validate_effective
+    validate_effective(cfg)
     if profile:
         # Provider-only selection settings do not override a complete profile.
         cfg['selection_mode'], cfg['preferred_node'] = 'auto', ''

@@ -32,6 +32,7 @@ python3 tests/test_apk_manifest.py
 python3 "$NATIVE/scripts/verify_mihomo_patch.py"
 (cd "$NATIVE" && go test -race github.com/metacubex/mihomo/log github.com/metacubex/mihomo/tunnel)
 (cd "$NATIVE/third_party/mihomo" && go test -race ./common/queue)
+(cd "$NATIVE" && go test -race -count=10 -tags=no_easytier,no_zerotier,no_tailscale -run '^TestSelectorSelection' github.com/metacubex/mihomo/adapter/outboundgroup)
 (cd "$NATIVE" && go test -race -tags=no_easytier,no_zerotier,no_tailscale,with_gvisor ./androidcore ./androidmobile)
 (cd "$NATIVE/scripts" && python3 -m unittest test_licenses test_source_release test_mihomo_patch)
 (cd "$NATIVE" && ./scripts/mobile.sh tools && ./scripts/mobile.sh android)

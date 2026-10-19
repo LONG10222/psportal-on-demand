@@ -12,6 +12,11 @@
   "upstream_source_bytes": 4899564,
   "modified_files": [
     {
+      "path": "adapter/outboundgroup/selector.go",
+      "upstream_sha256": "db50ca838305e1fef4cad4b1d2a070b7043af6a61ef1192bf5516cb9553b6019",
+      "local_sha256": "efc1589123f8324f966a63f6c72626e5cfe77291e932c92ffe131a0e21225b63"
+    },
+    {
       "path": "common/queue/queue.go",
       "upstream_sha256": "dce56d5c8e57c4a5df35c2960ced52ee19b4441864e9908692c3321be84e71de",
       "local_sha256": "78bfa8cb6c73f2b6cf6e1c6df107c25a6d9b8eb4557953bf1dec42d15214ef5a"
@@ -35,7 +40,11 @@
   "added_files": [
     {
       "path": "NOTICE-PSPORTAL-PATCH.md",
-      "sha256": "4b8c31955ad1998b7a8d4ccf9a0ea64457aef0d2c3f8117ea17fd659132ec0ea"
+      "sha256": "c07e1245167ca9c64a86e7449c831f815bfa7020f7714040842cae5ee97927c1"
+    },
+    {
+      "path": "adapter/outboundgroup/selector_concurrency_test.go",
+      "sha256": "25b569a246a11c7996ecc9736d131bb8a074c40d14ee2f1fd0dcfd82206d0ab7"
     },
     {
       "path": "common/queue/queue_concurrency_test.go",
@@ -72,14 +81,16 @@
   "omitted_upstream_files": [],
   "metadata_sha256": {
     "UPSTREAM-FILES.sha256": "48cc1a00b933c6237bf2dea6c7f664017ae5ff59e3f28b0a9b5d5b6092f0db3f",
-    "README.md": "d4274d82aabac92020ed5480ddfa66d032e75b300ad17168fdd9846403beb381",
+    "README.md": "680f1d93b978feeb06e1854919accd92a704d6551f3835c8de9c2033852fca9e",
     "0001-atomic-log-level.patch": "24fc4ee29b7661f84320044fe7f72239d2c92a172cf76d777bd516c6cd3be1d9",
     "0002-ingress-quiescence.patch": "9e2b61461c72818a45b9eb8a60ba7d31b897b4afa2120ce96e89edb74ad5616c",
-    "0003-queue-synchronization.patch": "fa8482e116aa266ba4a4bac656bb03b720f69e8cdb0b16a1e938ef35f7a6b1d7"
+    "0003-queue-synchronization.patch": "fa8482e116aa266ba4a4bac656bb03b720f69e8cdb0b16a1e938ef35f7a6b1d7",
+    "0004-selector-synchronization.patch": "4518e6adff3624198691347670ea10f466080c2499f2e2e036971fa79d962cce"
   },
   "patches": [
     "0001-atomic-log-level.patch",
     "0002-ingress-quiescence.patch",
-    "0003-queue-synchronization.patch"
+    "0003-queue-synchronization.patch",
+    "0004-selector-synchronization.patch"
   ]
 }

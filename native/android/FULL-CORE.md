@@ -19,6 +19,14 @@ A subscription is untrusted configuration, not permission to modify the device. 
 
 A node-list subscription has no user rule set. Generated groups/rules and node-selection behavior are identified separately from full profile-owned groups. The old adapter-specific two-round fastest hysteresis is not automatically claimed for Mihomo URLTest groups.
 
+Manual profile selection is bounded to actual `select` groups and explicit
+members from the sanitized inline configuration. Group inventory omits member
+lists; one bounded list is requested when the user opens it. Native selection
+rechecks membership, session lifetime, active work and phone-VPN state. The
+choice is session-local and reapplied only after membership validation on idle
+reload; Stop discards it. Selector reads/writes are synchronized against nested
+background health checks in the recorded 0004 source patch.
+
 Full-core routing modes are not a claim of every upstream Mihomo feature, every rule/provider format or every Android packet type. In particular, unsupported UDP must never silently fall back to DIRECT when proxy routing was requested. Final supported protocol boundaries and tests are recorded with the release's validation results.
 
 ## Pinned source and local correction

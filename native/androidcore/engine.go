@@ -47,6 +47,7 @@ type Engine struct {
 	loadError        error
 	wg               sync.WaitGroup
 	loader           func(context.Context, string) ([]byte, error)
+	groupSelections  map[string]string // Session-local; retained across idle unload, never persisted.
 }
 
 func New(cfg Config) (*Engine, error) {
@@ -109,6 +110,7 @@ func (e *Engine) Stop() {
 	e.unloadLocked()
 	e.source = nil
 	e.profile = profile{}
+	e.groupSelections = nil
 	e.state = "stopped"
 	e.mu.Unlock()
 	retireSocketPolicy(e)
@@ -199,6 +201,16 @@ func (e *Engine) load(done chan struct{}) {
 		err = ctx.Err()
 	}
 	if err == nil && !e.closed {
+		// Reapply only choices made in this exact session and still present in the
+		// sanitized inline group. No choice can escape its original membership.
+		for _, group := range p.raw.ProxyGroup {
+			name, _ := group["name"].(string)
+			if choice, ok := e.groupSelections[name]; ok && group["type"] == "select" {
+				if containsGroupChoice(group, choice) {
+					group["default-selected"] = choice
+				}
+			}
+		}
 		var parsed *MC.Config
 		parsed, err = MC.ParseRawConfig(p.raw)
 		if err == nil {
@@ -466,6 +478,7 @@ func (e *Engine) Status() string {
 		}
 	}
 	groups := []map[string]any{}
+	groupManagement := false
 	if e.current != nil {
 		for _, g := range e.profile.raw.ProxyGroup {
 			name, _ := g["name"].(string)
@@ -477,10 +490,14 @@ func (e *Engine) Status() string {
 			if current, ok := originalAdapter(p).(interface{ Now() string }); ok {
 				selected = current.Now()
 			}
-			groups = append(groups, map[string]any{"name": name, "type": p.Type().String(), "selected": selected})
+			_, isSelector := originalAdapter(p).(*outboundgroup.Selector)
+			selectable := !e.profile.generated && isSelector && g["type"] == "select"
+			groupManagement = groupManagement || selectable
+			groups = append(groups, map[string]any{"name": name, "type": p.Type().String(), "selected": selected, "selectable": selectable, "choice_count": len(groupChoices(g))})
 		}
 	}
 	status["policy_groups"] = groups
+	status["group_management"] = groupManagement
 	status["selected_group"] = "GLOBAL"
 	if e.profile.generated {
 		status["selected_group"] = generatedGroup

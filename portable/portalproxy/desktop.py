@@ -5,6 +5,7 @@ Importing this module does not require a display or start network activity.
 from __future__ import annotations
 
 import argparse
+import copy
 import atexit
 import json
 import os
@@ -19,15 +20,15 @@ import threading
 import time
 from urllib.parse import parse_qsl, unquote, urlsplit
 
-from . import config, backend as engine_backend
+from . import config, backend as engine_backend, product_modes
 from .runtime import MAX_STATUS_BYTES, MAX_EVENT, PREFIX
 
 MAX_CONFIG_BYTES = 1024 * 1024
 MAX_LOG_LINES = 500
 FIELDS = (
-    ('listen_host', 'Listener IPv4 (LAN for Portal)'),
-    ('listen_port', 'Portal proxy port'),
-    ('allowed_clients', 'Portal IPv4 addresses (comma-separated)'),
+    ('listen_host', 'LAN listener IPv4 (saved for Game / Mixed)'),
+    ('listen_port', 'HTTP proxy port'),
+    ('allowed_clients', 'Allowed device IPv4 addresses (comma-separated)'),
     ('engine_mode', 'Engine (embedded is experimental)'),
     ('core_path', 'Mihomo executable'),
     ('native_path', 'Embedded engine executable'),
@@ -81,6 +82,20 @@ def save_config(path: Path, values: dict) -> None:
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def reusable_source(values: dict, source: str, url: str) -> bool:
+    """A saved URL is editable configuration, never proof of an accepted import."""
+    if not source:
+        return False
+    origin = values.get('source_provenance')
+    if origin is None:
+        # With no URL, a legacy local file is the sole explicit source.
+        return not url
+    if not isinstance(origin, dict) or origin.get('path') != source:
+        return False
+    return (origin.get('kind') == 'local'
+            or origin.get('kind') == 'subscription' and origin.get('url') == url)
 
 
 def secret_values(values: dict) -> tuple[str, ...]:
@@ -347,6 +362,7 @@ class DesktopApp:
         self._node_request = 0
         self._pending_node_request = None
         self._reported_command = None
+        self._quick_rollback = None
         self.inputs = []
         self.engine_inputs = {}
         self.profile_selection_inputs = []
@@ -362,6 +378,9 @@ class DesktopApp:
         if not self.loading:
             if _ and 'subscription_url' in self.vars and str(self.vars['subscription_url']) == _[0]:
                 self.view.subscription_info = None
+            if _ and any(key in self.vars and str(self.vars[key]) == _[0]
+                         for key in ('listen_host', 'allowed_clients')):
+                self._lan_automatic = False
             self.dirty = True
             self.engine_controls()
             self.view.refresh()
@@ -480,6 +499,17 @@ class DesktopApp:
         except (OSError, ValueError):
             self.backend.log('Appearance preference could not be saved.')
 
+    def set_product_mode(self, mode):
+        if (mode not in product_modes.MODES or self.closing or self.importing
+                or self.backend.process is not None):
+            self.view.refresh()
+            return
+        self.vars['product_mode'].set(mode)
+
+    def product_mode(self):
+        variable = getattr(self, 'vars', {}).get('product_mode')
+        return variable.get() if variable else product_modes.infer_mode(getattr(self, 'raw', {}))
+
     def engine_controls(self):
         running = (self.backend.process is not None and self.backend.process.poll() is None) or self.importing
         mode = self.vars['engine_mode'].get() if 'engine_mode' in self.vars else 'external'
@@ -502,12 +532,15 @@ class DesktopApp:
         self.view.subscription_info = None
         try:
             self.raw = read_config(self.path) if self.path.exists() else {}
+            product_modes.infer_mode(self.raw)
         except (OSError, UnicodeError, ValueError):
             messagebox.showerror(self._t('Cannot open configuration'), self._t('The file could not be read as a JSON configuration. Choose a different file.'), parent=self.root)
             self.raw = {}
         defaults = dict(config.DEFAULTS, listen_host='', allowed_clients=[], core_path='', subscription_url='',
                         native_path=str(config.bundled_native_path() or ''))
         defaults.update(self.raw)
+        defaults.update(product_modes.editable_config(defaults))
+        self._lan_automatic = product_modes.infer_automatic(self.raw)
         source = self.raw.get('profile_file') or self.raw.get('subscription_file')
         if source:
             try:
@@ -564,7 +597,7 @@ class DesktopApp:
         if name:
             self._use_imported_file(Path(name), full=True)
 
-    def _use_imported_file(self, path, full=False):
+    def _use_imported_file(self, path, full=False, *, origin_url=None):
         from tkinter import messagebox
         from .profiles import inspect_profile, read_profile, validate_host_profile, host_overlay
         try:
@@ -584,6 +617,9 @@ class DesktopApp:
             if str(path.absolute()) != (self.raw.get('profile_file') or self.raw.get('subscription_file')):
                 self.raw.pop('node_policies', None)
             self.raw.pop('existing_proxy_port', None)
+            self.raw['source_provenance'] = dict(kind='local', path=str(path.absolute()))
+            if origin_url is not None:
+                self.raw['source_provenance'].update(kind='subscription', url=origin_url)
             try:
                 metadata = path.with_suffix(path.suffix + '.info.json')
                 self.view.subscription_info = read_config(metadata) if metadata.is_file() and metadata.stat().st_size <= 8192 else None
@@ -601,7 +637,37 @@ class DesktopApp:
         # Keep the previous linked proxy and manual network settings intact
         # until a validated import is accepted by _poll_import. A failed URL,
         # download or cancelled preparation must not change sharing modes.
-        if not self._configure_lan(commit=False): return
+        plan = self._configure_lan(commit=False)
+        if not plan:
+            return
+        source = next((self.vars[key].get().strip() for key in ('profile_file', 'subscription_file')
+                       if self.vars.get(key) and self.vars[key].get().strip()), '')
+        current_url = self.vars['subscription_url'].get().strip()
+        if reusable_source(self.raw, source, current_url) and 'product_mode' in self.vars:
+            # Switching use cases reuses the accepted source and node choices.
+            # Explicit import remains available for a subscription refresh.
+            from .profiles import inspect_profile
+            try:
+                info = inspect_profile(Path(source))
+                if not self.vars['profile_file'].get().strip() and info['kind'] != 'provider':
+                    raise ValueError('The saved provider is now a full profile. Import it again before starting.')
+            except (OSError, ValueError) as error:
+                from tkinter import messagebox
+                messagebox.showerror(self._t('Cannot inspect provider'), self._t(str(error)), parent=self.root)
+                return
+            try:
+                self._quick_rollback = self._quick_snapshot(None)
+            except (OSError, ValueError):
+                from tkinter import messagebox
+                messagebox.showerror(self._t('Cannot save configuration'),
+                    self._t('The configuration could not be saved. Choose a writable location and check file permissions.'), parent=self.root)
+                return
+            self._apply_lan(plan)
+            if self.start() is False:
+                self._rollback_quick_start()
+                return
+            self.view.show('Overview' if self.product_mode() == 'clash' else 'LAN sharing')
+            return
         self.quick_start_pending = True
         self.import_subscription()
         if not self.importing:
@@ -611,7 +677,20 @@ class DesktopApp:
         from tkinter import messagebox
         from .setup import discover_lan, available_port
         try:
-            network = discover_lan()
+            mode = self.product_mode() if 'product_mode' in self.vars else None
+            if mode == 'clash':
+                network = dict(host='127.0.0.1', clients=['127.0.0.1'], subnet='')
+            else:
+                # Quick setup follows the currently active physical network.
+                # Advanced Start still uses the manually configured bind host.
+                network = discover_lan()
+                if mode:
+                    clients = [part.strip() for part in self.vars['allowed_clients'].get().split(',') if part.strip()]
+                    automatic = (not clients or getattr(self, '_lan_automatic', product_modes.infer_automatic(self.raw)))
+                    if clients and not automatic:
+                        network = dict(network, clients=clients)
+            if mode:
+                product_modes.listener_policy(mode, network['host'], network['clients'])
             chosen = set(reserved)
             values = {}
             for key, host, default in (('listen_port', network['host'], 10081),
@@ -626,8 +705,11 @@ class DesktopApp:
                 selected = available_port(host, preferred, excluded)
                 chosen.add(selected)
                 values[key] = str(selected)
-            values.update(listen_host=network['host'], allowed_clients=', '.join(network['clients']))
+            if mode != 'clash':
+                values.update(listen_host=network['host'], allowed_clients=', '.join(network['clients']))
             plan = (values, network['subnet'])
+            if mode and mode != 'clash':
+                plan += (automatic,)
             if commit:
                 self._apply_lan(plan)
                 return True
@@ -637,9 +719,17 @@ class DesktopApp:
             return False
 
     def _apply_lan(self, plan):
-        values, subnet = plan
-        for key, value in values.items():
-            self.vars[key].set(value)
+        values, subnet = plan[:2]
+        loading = self.loading if hasattr(self, 'loading') else False
+        self.loading = True
+        try:
+            for key, value in values.items():
+                self.vars[key].set(value)
+        finally:
+            self.loading = loading
+        if len(plan) > 2:
+            self._lan_automatic = plan[2]
+        self.dirty = True
         self.view.setup_network = subnet
         self.view.refresh()
 
@@ -663,7 +753,7 @@ class DesktopApp:
         self.view.subscription_info = self.clash_info
         self.view.refresh()
         self.start()
-        self.view.show('LAN sharing')
+        self.view.show('Overview' if self.product_mode() == 'clash' else 'LAN sharing')
 
     def inspect_provider(self):
         from tkinter import messagebox
@@ -699,7 +789,7 @@ class DesktopApp:
         # or send the user back from a page they visited while it was running.
         owner_path = self.path
         navigation = self.view.navigation_generation
-        self._active_import = (generation, cancelled, owner_path, navigation)
+        self._active_import = (generation, cancelled, owner_path, navigation, url)
         self.running_controls(True)
         self._set_status('Preparing')
         self.backend.log(self._t('Importing subscription…'))
@@ -789,16 +879,92 @@ class DesktopApp:
             if pending and not plan:
                 self._discard_import(path)
                 return
-            if not self._use_imported_file(path):
+            rollback = None
+            if pending and 'product_mode' in getattr(self, 'vars', {}):
+                try:
+                    rollback = self._quick_snapshot(path)
+                except (OSError, ValueError):
+                    self._discard_import(path)
+                    self._set_status('Stopped with error')
+                    messagebox.showerror(self._t('Cannot save configuration'),
+                        self._t('The configuration could not be saved. Choose a writable location and check file permissions.'), parent=self.root)
+                    return
+            # Refreshing the same URL must not discard its saved node choices
+            # merely because the downloader uses a new private filename.
+            previous_policies = copy.deepcopy(getattr(self, 'raw', {}).get('node_policies'))
+            origin = getattr(self, 'raw', {}).get('source_provenance')
+            current_source = next((self.vars[key].get().strip() for key in ('profile_file', 'subscription_file')
+                                   if getattr(self, 'vars', {}).get(key) and self.vars[key].get().strip()), '')
+            same_source = (len(active) > 4 and isinstance(origin, dict)
+                           and origin.get('kind') == 'subscription' and origin.get('url') == active[4]
+                           and origin.get('path') == current_source)
+            if not self._use_imported_file(path, origin_url=active[4] if len(active) > 4 else None):
                 self._discard_import(path)
                 return
+            if same_source and previous_policies is not None:
+                self.raw['node_policies'] = previous_policies
             if pending:
+                self._quick_rollback = rollback
                 self._apply_lan(plan)
-                self.start()
+                if self.start() is False:
+                    self._rollback_quick_start()
+                    return
                 if self.view.navigation_generation == active[3]:
-                    self.view.show('LAN sharing')
+                    self.view.show('Overview' if self.product_mode() == 'clash' else 'LAN sharing')
             elif self.backend.process is None:
                 self._set_status('Stopped')
+
+    def _quick_snapshot(self, imported_path):
+        previous = None
+        if self.path.exists():
+            if self.path.is_symlink():
+                raise ValueError('Choose a regular configuration file, not a symbolic link')
+            with self.path.open('rb') as stream:
+                previous = stream.read(MAX_CONFIG_BYTES + 1)
+            if len(previous) > MAX_CONFIG_BYTES:
+                raise ValueError('Configuration is too large')
+        return dict(path=self.path, previous=previous, raw=copy.deepcopy(self.raw),
+                    values={key: variable.get() for key, variable in self.vars.items()},
+                    preview=self.view.preview, subscription_info=self.view.subscription_info,
+                    setup_network=self.view.setup_network, dirty=self.dirty, imported=imported_path,
+                    automatic=getattr(self, '_lan_automatic', False))
+
+    def _rollback_quick_start(self):
+        snapshot = getattr(self, '_quick_rollback', None)
+        self._quick_rollback = None
+        if not snapshot or snapshot['path'] != self.path:
+            return
+        restored = True
+        try:
+            if 'written' in snapshot:
+                if self.path.is_symlink():
+                    raise OSError('Configuration path changed')
+                with self.path.open('rb') as stream:
+                    current = stream.read(len(snapshot['written']) + 1)
+                if current != snapshot['written']:
+                    raise OSError('Configuration changed outside this start attempt')
+                if snapshot['previous'] is None:
+                    self.path.unlink(missing_ok=True)
+                else:
+                    from .core import atomic_private
+                    atomic_private(self.path, snapshot['previous'])
+        except OSError:
+            restored = False
+            self.backend.log(self._t('Previous settings could not be restored on disk. Review the configuration before restarting.'))
+        self.raw = snapshot['raw']
+        self.loading = True
+        for key, value in snapshot['values'].items():
+            self.vars[key].set(value)
+        self.loading = False
+        for key in ('preview', 'subscription_info', 'setup_network'):
+            setattr(self.view, key, snapshot[key])
+        self.dirty = snapshot['dirty']
+        self._lan_automatic = snapshot['automatic']
+        if restored:
+            self._discard_import(snapshot['imported'])
+        self.backend.secrets = secret_values(self.raw)
+        self.engine_controls()
+        self.view.refresh()
 
     def copy_address(self):
         from tkinter import messagebox
@@ -852,6 +1018,9 @@ class DesktopApp:
             values[key] = value
         if values.get('engine_mode') == 'external' and not values.get('existing_proxy_port'):
             values['live_node_controls'] = True
+        if 'product_mode' in self.vars:
+            values['product_lan_automatic'] = getattr(self, '_lan_automatic', product_modes.infer_automatic(self.raw))
+            values = product_modes.effective_config(values)
         return values
 
     def save(self) -> bool:
@@ -860,7 +1029,7 @@ class DesktopApp:
             values = self.collect()
             save_config(self.path, values)
         except ValueError as error:
-            messagebox.showerror(self._t('Check configuration'), redact_log(str(error), secret_values(self.raw)), parent=self.root)
+            messagebox.showerror(self._t('Check configuration'), self._t(redact_log(str(error), secret_values(self.raw))), parent=self.root)
             return False
         except OSError:
             messagebox.showerror(self._t('Cannot save configuration'), self._t('The configuration could not be saved. Choose a writable location and check file permissions.'), parent=self.root)
@@ -887,11 +1056,14 @@ class DesktopApp:
     def start(self):
         from tkinter import messagebox
         if self.closing or self.importing:
-            return
+            return False
         if self.backend.process is not None and self.backend.process.poll() is None:
-            return
+            return False
         if not self.save():
-            return
+            return False
+        snapshot = getattr(self, '_quick_rollback', None)
+        if snapshot and snapshot['path'] == self.path:
+            snapshot['written'] = (json.dumps(self.raw, ensure_ascii=False, indent=2) + '\n').encode('utf-8')
         self.statistics = None
         self.node_state = None
         self.pending_command = None
@@ -904,12 +1076,13 @@ class DesktopApp:
                        'The listener process could not start. Check the application files and executable permissions.')
             messagebox.showerror(self._t('Cannot start listener'), self._t(message), parent=self.root)
             self._set_status('Stopped with error')
-            return
+            return False
         self.running_controls(True)
         self._pending_node_request = None
         self._reported_command = None
         self.view.runtime = None
         self._set_status('Preparing')
+        return True
 
     def stop(self):
         if self.importing:
@@ -989,6 +1162,7 @@ class DesktopApp:
             self.log_widget.see('end')
             self.log_widget.configure(state='disabled')
         if self.backend.ready and self.backend.stopping_since is None:
+            self._quick_rollback = None
             states = {'preparing': 'Preparing', 'listening': 'Listening', 'waking': 'Waking',
                       'forwarding': 'Forwarding', 'error': 'Error', 'stopped': 'Stopped'}
             state = (self.view.runtime or {}).get('state')
@@ -997,6 +1171,7 @@ class DesktopApp:
         if process is not None:
             result = self.backend.poll()
             if result is not None:
+                self._rollback_quick_start()
                 self._set_status('Stopped' if result == 0 else 'Stopped with error')
                 self.statistics = None
                 self.node_state = None
@@ -1014,10 +1189,19 @@ class DesktopApp:
         if self.closing:
             return
         running = self.backend.process is not None and self.backend.process.poll() is None
+        if not running and getattr(self, '_quick_rollback', None):
+            # Close can arrive after the child exits but before the next poll.
+            # Settle ownership now so destroying Tk cannot lose the rollback.
+            if self.backend.ready:
+                self._quick_rollback = None
+            else:
+                self._rollback_quick_start()
+            if self.backend.process is not None:
+                self.backend.poll()
         question = ('Stop the listener and its core, then close?' if running else
                     'Cancel preparation and close?' if self.importing else
                     'Close and discard unsaved configuration edits?')
-        if (running or self.dirty or self.importing) and not messagebox.askyesno(self._t('Close PS Portal On-Demand?'), self._t(question), parent=self.root):
+        if (running or self.dirty or self.importing) and not messagebox.askyesno(self._t('Close StarPass?'), self._t(question), parent=self.root):
             return
         self.closing = True
         if self.importing:
@@ -1029,7 +1213,7 @@ class DesktopApp:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description='PS Portal On-Demand desktop application')
+    parser = argparse.ArgumentParser(description='StarPass desktop application')
     parser.add_argument('--config', type=Path, default=default_config_path())
     args = parser.parse_args(argv)
     try:

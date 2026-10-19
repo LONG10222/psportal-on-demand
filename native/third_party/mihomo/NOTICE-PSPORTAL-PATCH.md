@@ -16,14 +16,17 @@ PSPortal modifications, 2026-10-19:
    closure so shutdown cannot strand a late packet.
 3. Move queue Pop/Last locks before their slice-length reads. This removes a race
    with Put/Pop and prevents indexing an emptied slice after competing Pop calls.
+4. Synchronize manual Selector choices with concurrent status, dialing and
+   nested automatic-group health checks. Set/ForceSet writes and all selection
+   reads share a mutex; no lock is retained while an adapter dials.
 
 Focused regression tests accompany each patch. No race detection or logging is
 suppressed. Exact production changes are limited to log/log.go,
 common/queue/queue.go, tunnel/tunnel.go and tunnel/connection.go, plus the new
-tunnel/ingress.go lifecycle API.
+tunnel/ingress.go lifecycle API and adapter/outboundgroup/selector.go.
 
 The original project is https://github.com/MetaCubeX/mihomo. This is a local
 derivative, not an upstream release. Exact upstream module checksums, source
-inventory, three modification patches and verification instructions are in
+inventory, four modification patches and verification instructions are in
 PSPORTAL-PATCHES/. The original documentation logos are retained only for complete
 corresponding source and are not used as PSPortal app branding.

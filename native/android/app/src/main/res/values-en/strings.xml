@@ -1,6 +1,6 @@
 <resources>
-    <string name="app_name">OnDemand</string>
-    <string name="title">Your Portal, your network</string>
+    <string name="app_name">星渡 StarPass</string>
+    <string name="title">星渡 StarPass</string>
     <string name="subtitle">On-demand LAN HTTP / HTTPS-CONNECT proxy</string>
     <string name="explanation">Connect this phone and your PlayStation Portal to the same trusted LAN. Set the Portal’s manual HTTP proxy to the phone address and port below. Only the listed Portal IP is allowed.</string>
     <string name="limitations">The manual LAN proxy supports HTTP/HTTPS CONNECT only, not UDP games or streaming. With background sharing enabled, removing the app from Recents keeps sharing. Android force-stop, battery or OEM controls may interrupt the service.</string>
@@ -17,7 +17,7 @@
     <string name="phone_apps">Also proxy this phone’s apps (optional)</string>
     <string name="vpn_notification_channel">Phone-app VPN</string>
     <string name="vpn_notification_description">Shows phone-app proxy status with a Stop all proxying action</string>
-    <string name="vpn_notification_title">OnDemand is proxying phone apps</string>
+    <string name="vpn_notification_title">星渡 StarPass is proxying phone apps</string>
     <string name="vpn_notification_running">Phone-app VPN connected · tap for proxy status</string>
     <string name="vpn_notification_stopping">Stopping phone VPN</string>
     <string name="vpn_stop_phone_apps">Stop phone proxy</string>
@@ -44,12 +44,12 @@
     <string name="invalid_config">Check your configuration</string>
     <string name="notification_channel">Portal proxy connection</string>
     <string name="notification_description">Shows when the LAN proxy is active and provides an immediate Stop action</string>
-    <string name="notification_title">OnDemand is active</string>
+    <string name="notification_title">星渡 StarPass is active</string>
     <string name="notification_starting">Preparing selected proxy options</string>
     <string name="notification_running">LAN proxy ready · tap to open or Stop below</string>
     <string name="notification_stopping">Closing the listener and active connections</string>
     <string name="notification_required">Allow notifications to start the proxy. The persistent notification keeps its Stop action within reach.</string>
-    <string name="notifications_disabled">Notifications are disabled. Enable notifications for OnDemand in Android Settings, then tap Start again.</string>
+    <string name="notifications_disabled">Notifications are disabled. Enable notifications for 星渡 StarPass in Android Settings, then tap Start again.</string>
     <string name="local_network_required">Allow local network access so your Portal can connect to this phone. No connection starts until you allow it.</string>
     <string name="permission_denied">Permission was not granted. The proxy is stopped.</string>
     <string name="start_rejected">Android could not start the foreground service. Keep this app open, check its permissions, then try again.</string>

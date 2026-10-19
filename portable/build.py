@@ -37,6 +37,10 @@ def main(argv=None):
             if not (args.native_engine.parent / name).exists():
                 parser.error('Native release is missing its required license/source notices: ' + name)
     root = Path(__file__).resolve().parent
+    # Retained platform icons are verified with the standard library; rebuilding
+    # the application does not install Pillow or regenerate artwork implicitly.
+    subprocess.run([sys.executable, str(root.parent / 'native/scripts/generate_brand_assets.py'),
+                    '--verify'], check=True)
     if importlib.util.find_spec('PyInstaller') is None:
         parser.error('PyInstaller is missing. Install requirements-build.txt in a local build virtualenv first.')
     if importlib.util.find_spec('tkinter') is None:
