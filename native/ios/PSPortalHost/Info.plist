@@ -12,7 +12,9 @@
     <key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string>
     <key>LSRequiresIPhoneOS</key><true/>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Connect your allowed Portal on the same Wi-Fi network to this foreground-only HTTP proxy, and reach permitted local destinations.</string>
+    <string>Connect your allowed Portal on the same Wi-Fi network to this HTTP proxy, and reach permitted local destinations.</string>
+    <key>UIBackgroundModes</key><array><string>processing</string></array>
+    <key>BGTaskSchedulerPermittedIdentifiers</key><array><string>org.psportal.host.foreground.sharing.*</string></array>
     <key>UIApplicationSceneManifest</key>
     <dict><key>UIApplicationSupportsMultipleScenes</key><false/></dict>
     <key>UILaunchScreen</key><dict/>

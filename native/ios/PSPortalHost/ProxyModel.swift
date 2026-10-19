@@ -27,6 +27,16 @@ final class ProxyModel: ObservableObject {
     @Published var confirmOwnHotspot = false
     @Published private(set) var subscriptionInfo: SubscriptionAccounting?
     @Published private(set) var subscriptionInfoUpdatedAt: Date?
+    // Intent is deliberately memory-only and defaults to foreground operation.
+    @Published var backgroundEnabled = false
+    @Published var backgroundMinutes = 15
+    @Published private(set) var backgroundDeadline: Date?
+    @Published private(set) var backgroundMessage = ""
+    private let backgroundDriver: BackgroundSharingDriver
+    var backgroundAvailable: Bool { backgroundDriver.available }
+    var hasBackgroundGrant: Bool {
+        state == .running && backgroundDeadline.map { $0 > Date() } == true
+    }
     let network: NetworkEnvironment
     private var quickNetworkLAN: LANInterface?
     private var networkObservation: AnyCancellable?
@@ -36,6 +46,18 @@ final class ProxyModel: ObservableObject {
     func clearSubscriptionInfo() {
         subscriptionInfo = nil
         subscriptionInfoUpdatedAt = nil
+    }
+    var localizedBackgroundMessage: String { localized(backgroundMessage) }
+    private func localized(_ value: String) -> String {
+        guard language == "zh" else { return value }
+        return [
+            "Timed background task granted; the system may end it early": "限时后台任务已获授权；系统仍可提前终止",
+            "Requesting system permission; not yet granted": "正在请求系统授权，尚不可后台运行",
+            "Background sharing requires iOS 26+ on a real device.": "后台共享需要 iOS 26+ 真机。",
+            "Background sharing was not granted. Keep the app open.": "系统未授予后台任务，请保持应用打开。",
+            "Background sharing was ended by the system. Start again in the app.": "系统已结束后台共享，请回到应用手动启动。",
+            "The timed background sharing session finished. Start again in the app.": "限时后台共享已结束，请回到应用手动启动。"
+        ][value] ?? value
     }
     var localizedMessage: String {
         guard language == "zh" else { return message }
@@ -70,7 +92,7 @@ final class ProxyModel: ObservableObject {
             "No shareable LAN address found. Join Wi-Fi, or enable your own hotspot and connect the client first.": "未发现可共享地址。请接入 Wi-Fi；使用本机热点时，先开启热点并连接设备。",
             "No available port. Check Advanced settings.": "没有可用端口，请检查高级设置。",
             "Network changed. Listener stopped. Prepare again and update the client proxy address.": "网络已变化，监听已停止。请重新准备并更新设备的代理地址。"
-        ][message] ?? message
+        ][message] ?? localized(message)
     }
 
     func quickStart() {
@@ -141,7 +163,9 @@ final class ProxyModel: ObservableObject {
 
     init(engine: EngineController = EngineController(), store: PrivateSettingsStore = PrivateSettingsStore(),
          network: NetworkEnvironment? = nil,
+         backgroundDriver: BackgroundSharingDriver? = nil,
          findPort: @escaping (String, Int) -> Int? = { NetworkEnvironment.availablePort(host: $0, preferred: $1) }) {
+        self.backgroundDriver = backgroundDriver ?? makeBackgroundSharingDriver()
         self.engine = engine
         self.store = store
         self.network = network ?? NetworkEnvironment()
@@ -192,6 +216,7 @@ final class ProxyModel: ObservableObject {
             }
             self.state = .running
             self.message = "Listening; outbound pool will wake on demand."
+            self.requestBackgroundSession(token: token)
             self.refreshStatus()
             self.engine.subscriptionInfo(url: self.settings.subscriptionURL) { [weak self] info in
                 guard let self, self.generation == token else { return }
@@ -203,6 +228,7 @@ final class ProxyModel: ObservableObject {
 
     func stop(reason: String = "Stopped. Restore the Portal's proxy setting when finished.") {
         quickNetworkLAN = nil
+        backgroundDeadline = nil
         restoreIdleTimer()
         guard state != .stopped, state != .stopping else { return }
         // A finite UIKit assertion is used only to close the listener and owned
@@ -216,6 +242,7 @@ final class ProxyModel: ObservableObject {
         message = "Closing the listener and connections…"
         engine.stop { [weak self] in
             guard let self else { return }
+            self.backgroundDriver.finish(success: reason == "The timed background sharing session finished. Start again in the app.")
             self.endCleanupTask()
             guard self.generation == token else { return }
             self.state = .stopped
@@ -227,6 +254,8 @@ final class ProxyModel: ObservableObject {
     func scenePhaseChanged(_ phase: ScenePhase) {
         isActive = phase == .active
         if phase == .background {
+            restoreIdleTimer()
+            if hasBackgroundGrant { return }
             stop(reason: "Stopped because the app left the foreground. Tap Start to resume.")
         } else {
             // Temporary inactive states (e.g. a system permission prompt) mask
@@ -239,7 +268,34 @@ final class ProxyModel: ObservableObject {
     func didEnterBackground() {
         // Also handle UIKit's notification in case the view transition is delayed.
         isActive = false
+        restoreIdleTimer()
+        if hasBackgroundGrant { return }
         stop(reason: "Stopped because the app left the foreground. Tap Start to resume.")
+    }
+
+    func protectedDataUnavailable() {
+        isActive = false
+        restoreIdleTimer()
+        if hasBackgroundGrant { return }
+        stop(reason: "Stopped because the device was locked. Tap Start after unlocking.")
+    }
+
+    private func requestBackgroundSession(token: Int) {
+        backgroundMessage = ""
+        guard backgroundEnabled else { return }
+        backgroundMessage = "Requesting system permission; not yet granted"
+        backgroundDriver.begin(minutes: [15, 30, 60].contains(backgroundMinutes) ? backgroundMinutes : 15,
+            granted: { [weak self] deadline in
+                guard let self, self.generation == token, self.state == .running, self.isActive else { return }
+                self.backgroundDeadline = deadline
+                self.backgroundMessage = "Timed background task granted; the system may end it early"
+            }, ended: { [weak self] reason in
+                guard let self, self.generation == token, self.state == .running else { return }
+                let wasGranted = self.backgroundDeadline != nil
+                self.backgroundDeadline = nil
+                self.backgroundMessage = reason
+                if wasGranted || !self.isActive { self.stop(reason: reason) }
+            })
     }
 
     func refreshStatus() {
@@ -260,6 +316,8 @@ final class ProxyModel: ObservableObject {
             self.requestErrors = status.stats?.errors ?? 0
             self.deniedClients = status.stats?.denied_clients ?? 0
             if !status.running {
+                self.backgroundDeadline = nil
+                self.backgroundDriver.finish(success: false)
                 self.state = .stopped
                 self.clearRuntime()
                 self.restoreIdleTimer()

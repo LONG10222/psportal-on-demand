@@ -6,6 +6,89 @@ import UIKit
 /// These mocks test orchestration only. They do not prove transport works.
 final class ProxyLifecycleTests: XCTestCase {
     @MainActor
+    func testGrantedSessionSurvivesDuplicateBackgroundAndLockUntilExpiry() async {
+        let bg = BackgroundHarnessDriver()
+        let h = LifecycleHarness(background: bg)
+        defer { h.removeFiles() }
+        h.model.backgroundEnabled = true
+        h.model.start()
+        await h.waitUntilRunning()
+        bg.grant?(Date().addingTimeInterval(60))
+        XCTAssertTrue(h.model.hasBackgroundGrant)
+        h.model.scenePhaseChanged(.background)
+        h.model.didEnterBackground()
+        h.model.protectedDataUnavailable()
+        XCTAssertFalse(h.model.isActive)
+        XCTAssertEqual(h.model.state, .running)
+        XCTAssertTrue(h.driver.snapshot().running)
+        bg.end?("Expired test session")
+        await h.waitUntilStopped()
+        XCTAssertEqual(bg.finishes, 1)
+        h.model.scenePhaseChanged(.active)
+        XCTAssertEqual(h.driver.snapshot().starts, 1)
+    }
+
+    @MainActor
+    func testPendingSubmissionIsNotABackgroundGrantAndLateGrantCannotRestart() async {
+        let bg = BackgroundHarnessDriver()
+        let h = LifecycleHarness(background: bg)
+        defer { h.removeFiles() }
+        h.model.backgroundEnabled = true
+        h.model.start()
+        await h.waitUntilRunning()
+        XCTAssertFalse(h.model.hasBackgroundGrant)
+        h.model.didEnterBackground()
+        await h.waitUntilStopped()
+        bg.grant?(Date().addingTimeInterval(60))
+        XCTAssertFalse(h.model.hasBackgroundGrant)
+        XCTAssertEqual(h.model.state, .stopped)
+        XCTAssertEqual(bg.finishes, 1)
+    }
+
+    @MainActor
+    func testRejectedSessionKeepsForegroundOnlyAndStopsWhenLeaving() async {
+        let bg = BackgroundHarnessDriver()
+        let h = LifecycleHarness(background: bg)
+        defer { h.removeFiles() }
+        h.model.backgroundEnabled = true
+        h.model.start()
+        await h.waitUntilRunning()
+        bg.end?("Rejected test session")
+        XCTAssertEqual(h.model.state, .running)
+        XCTAssertFalse(h.model.hasBackgroundGrant)
+        h.model.scenePhaseChanged(.background)
+        await h.waitUntilStopped()
+    }
+
+    @MainActor
+    func testExpiredDeadlineDoesNotPermitBackgroundEvenBeforeTimerCallback() async {
+        let bg = BackgroundHarnessDriver()
+        let h = LifecycleHarness(background: bg)
+        defer { h.removeFiles() }
+        h.model.backgroundEnabled = true
+        h.model.start()
+        await h.waitUntilRunning()
+        bg.grant?(Date().addingTimeInterval(-1))
+        h.model.didEnterBackground()
+        await h.waitUntilStopped()
+        XCTAssertFalse(h.model.hasBackgroundGrant)
+    }
+
+    @MainActor
+    func testBackgroundIntentIsNotSavedAndSimulatorDoesNotClaimSupport() throws {
+        let h = LifecycleHarness()
+        defer { h.removeFiles() }
+        XCTAssertFalse(h.model.backgroundEnabled)
+        h.model.backgroundEnabled = true
+        h.model.saveSettings()
+        let fresh = ProxyModel(engine: EngineController(driver: h.driver), store: PrivateSettingsStore(directory: h.directory))
+        XCTAssertFalse(fresh.backgroundEnabled)
+#if targetEnvironment(simulator)
+        XCTAssertFalse(fresh.backgroundAvailable)
+#endif
+    }
+
+    @MainActor
     func testAccountingSnapshotIsTimestampedAndForgottenWithSettings() async {
         let harness = LifecycleHarness()
         defer { harness.removeFiles() }
@@ -114,13 +197,21 @@ private final class LifecycleHarness {
     let driver = RecordingDriver()
     let model: ProxyModel
 
-    init() {
-        model = ProxyModel(engine: EngineController(driver: driver), store: PrivateSettingsStore(directory: directory))
+    init(background: BackgroundSharingDriver? = nil) {
+        model = ProxyModel(engine: EngineController(driver: driver), store: PrivateSettingsStore(directory: directory), backgroundDriver: background)
         model.settings = validSettings()
         model.scenePhaseChanged(.active)
     }
 
     func removeFiles() { try? FileManager.default.removeItem(at: directory) }
+
+    func waitUntilRunning() async {
+        for _ in 0..<100 {
+            if model.state == .running { return }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTFail("Start did not finish")
+    }
 
     func waitUntilStopped() async {
         for _ in 0..<100 {
@@ -154,4 +245,16 @@ private final class RecordingDriver: EngineDriver {
         lock.lock(); defer { lock.unlock() }
         return (starts, running)
     }
+}
+
+@MainActor
+private final class BackgroundHarnessDriver: BackgroundSharingDriver {
+    var available = true
+    var grant: ((Date) -> Void)?
+    var end: ((String) -> Void)?
+    var finishes = 0
+    func begin(minutes: Int, granted: @escaping (Date) -> Void, ended: @escaping (String) -> Void) {
+        grant = granted; end = ended
+    }
+    func finish(success: Bool) { finishes += 1 }
 }

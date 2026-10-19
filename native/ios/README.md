@@ -1,10 +1,8 @@
-# iOS foreground-only development host
+# iOS development host with experimental timed background sharing
 
-Latest product requirement: mobile uses subscription-link import only and its own
-engine, with no dependency on another proxy app. Sustained LAN sharing while
-backgrounded is now an explicit **unmet requirement**. Current code stops when
-backgrounded/locked. See [mobile requirements and API feasibility](MOBILE-REQUIREMENTS.md)
-before treating this preview as a complete mobile product.
+Mobile uses subscription-link import and its own embedded engine. Default sharing remains foreground-only. An opt-in iOS 26+ **timed background experiment** requests a real continued-processing task for 15/30/60 minutes. Simulator and older SDK/system builds cannot grant it. This is not unlimited keepalive, and physical-device LAN/background/lock behavior remains unverified. See [mobile requirements and API feasibility](MOBILE-REQUIREMENTS.md).
+
+Latest local validation (2026-10-20): Xcode 27 arm64 Simulator, **38 XCTest total: 37 passed, one hardware-only Data Protection skip**; eight source guardrails passed. Five added lifecycle tests use an injected scheduler and prove orchestration only. Historical validation below describes earlier revisions.
 
 This SwiftUI app embeds the real Go/Mihomo engine in `../engine`, through
 `../mobile`. [CI run 39110679850](https://github.com/LONG10222/psportal-on-demand/actions/runs/39110679850)
@@ -44,18 +42,14 @@ The actual simulator XCFramework was rebuilt and linked locally. XCTest: **21 to
 - Only allowlisted private IPv4 clients can use the HTTP/HTTPS-CONNECT listener.
   The first external request loads the HTTPS subscription and real embedded
   Mihomo outbound adapters. The core's idle timer releases the outbound pool.
-- Keep the app foregrounded and the device unlocked. Scene backgrounding,
-  UIKit background notification, or protected-data lock notification requests
-  **Stop**, which cancels loading and closes the listener and owned connections.
+- Without a real unexpired continued-processing grant, background and lock notifications request **Stop**. A grant permits only the finite experiment; system expiry/cancellation, session deadline and network changes still stop sharing. The scheduler uses immediate-failure submission, unique identifiers and a five-second grant timeout; no queued restart or renewal.
 - A serialized engine queue and generation checks make repeated Start taps,
   Stop during Start, and stale status callbacks safe. The UI does not report
   stopped until the native Stop returns. UIKit may still suspend or terminate
   the process; hard timing and lock/background behavior need device testing.
 - A finite UIKit background assertion is requested **only while closing**
   connections. It ends on completion or expiration, is never renewed, and is
-  not a background proxy service. There are no `UIBackgroundModes`, Network
-  Extension targets, VPN profiles, Packet Tunnel entitlements, background audio,
-  background fetch, or background keep-alive loops.
+  not a continuing-service mechanism. The only `UIBackgroundModes` entry is `processing`, with the app-specific continued-task identifier prefix. There are no Network Extension targets, VPN profiles, background audio/location or automatic renewal loops.
 - Optional keep-awake is off by default. It applies only to the active app while
   starting/listening, and restores the previous idle-timer value on Stop,
   startup failure, backgrounding, or temporary inactivity. It consumes battery

@@ -21,12 +21,12 @@ class SourceGuardrails(unittest.TestCase):
             "NSPrivacyAccessedAPICategorySystemBootTime": ["35F9.1"],
         })
 
-    def test_valid_plist_without_background_modes_or_file_sharing(self):
+    def test_valid_plist_with_only_timed_processing_and_no_file_sharing(self):
         with (APP / "Info.plist").open("rb") as source:
             info = plistlib.load(source)
         self.assertTrue(info["NSLocalNetworkUsageDescription"])
-        self.assertNotIn("UIBackgroundModes", info)
-        self.assertNotIn("BGTaskSchedulerPermittedIdentifiers", info)
+        self.assertEqual(info["UIBackgroundModes"], ["processing"])
+        self.assertEqual(info["BGTaskSchedulerPermittedIdentifiers"], ["org.psportal.host.foreground.sharing.*"])
         self.assertFalse(info["UIFileSharingEnabled"])
         self.assertFalse(info["LSSupportsOpeningDocumentsInPlace"])
         self.assertFalse(info["UIApplicationSceneManifest"]["UIApplicationSupportsMultipleScenes"])

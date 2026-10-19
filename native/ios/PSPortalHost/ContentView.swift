@@ -151,7 +151,7 @@ struct ContentView: View {
                     metric(t("活动连接", "Connections"), value: model.activeConnections)
                     Spacer()
                     VStack(alignment: .trailing, spacing: 5) {
-                        Label(t("前台共享", "Foreground"), systemImage: "iphone")
+                        Label(model.hasBackgroundGrant ? t("限时后台已授权", "Timed background granted") : t("前台共享", "Foreground"), systemImage: "iphone")
                             .font(.caption.weight(.medium)).foregroundStyle(.secondary)
                         Text("HTTP · TCP").font(.caption2.monospaced()).foregroundStyle(.secondary)
                     }
@@ -222,7 +222,7 @@ struct ContentView: View {
                 }
             }
             connectionCard
-            Label(t("切后台或锁屏后停止共享，请保持应用打开。", "Sharing stops when backgrounded or locked. Keep this app open."), systemImage: "info.circle")
+            Label(model.hasBackgroundGrant ? t("限时后台实验已获授权，系统仍可提前终止。", "Timed background experiment granted; the system can end it early.") : t("切后台或锁屏后停止共享，请保持应用打开。", "Sharing stops when backgrounded or locked. Keep this app open."), systemImage: "info.circle")
                 .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 4)
         }
     }
@@ -415,7 +415,7 @@ struct ContentView: View {
         Form {
             Section {
                 Label(t("游戏 / 局域网共享", "Game / LAN sharing"), systemImage: "gamecontroller")
-                Text(t("仅提供前台 HTTP/CONNECT TCP 共享。UDP 游戏流量、整机 VPN 与完整分组 / 规则尚不可用。", "Foreground HTTP/CONNECT TCP sharing only. UDP game traffic, device-wide VPN, and full Clash groups/rules modes are unavailable."))
+                Text(t("提供 HTTP/CONNECT TCP 共享，后台为限时实验。UDP 游戏流量、整机 VPN 与完整分组 / 规则尚不可用。", "HTTP/CONNECT TCP sharing with an experimental timed background mode. UDP game traffic, device-wide VPN, and full Clash groups/rules modes are unavailable."))
                     .font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("productModeScope")
             } header: { Text(t("当前能力", "Available features")) }
             Section {
@@ -426,6 +426,22 @@ struct ContentView: View {
             } header: { Text(t("使用偏好", "Preferences")) } footer: {
                 Text(t("保持唤醒会增加耗电，不能让共享在后台继续。", "Keeping the screen awake uses more power and does not enable background sharing."))
             }
+            Section {
+                Toggle(t("启用限时后台共享（实验）", "Timed background sharing (experimental)"), isOn: $model.backgroundEnabled)
+                    .disabled(!model.canEdit || !model.backgroundAvailable)
+                    .accessibilityIdentifier("timedBackgroundToggle")
+                Picker(t("共享时长", "Session duration"), selection: $model.backgroundMinutes) {
+                    ForEach([15, 30, 60], id: \.self) { Text("\($0) " + t("分钟", "min")).tag($0) }
+                }.disabled(!model.canEdit || !model.backgroundAvailable)
+                if let deadline = model.backgroundDeadline {
+                    Text(t("结束时间：", "Ends: ") + deadline.formatted(date: .omitted, time: .shortened))
+                }
+                if !model.backgroundMessage.isEmpty { Text(model.localizedBackgroundMessage).font(.caption) }
+                Text(model.backgroundAvailable
+                    ? t("此选项不会保存，不会自动启动。系统授权后才可退到后台；取消、到期或网络变化会停止共享。锁屏联网尚待真机验证，不支持永久保活。", "This option is not saved and never starts sharing automatically. Wait for the system grant before leaving. Cancellation, expiry or network changes stop sharing. Lock-screen networking needs device validation; no unlimited keepalive.")
+                    : t("需要 iOS 26+ 真机与系统授权。模拟器不支持此后台任务；当前仍为前台共享。", "Requires a real device on iOS 26+ and a system grant. Simulator does not support this task; sharing remains foreground-only."))
+                    .font(.caption).foregroundStyle(.secondary)
+            } header: { Text(t("后台共享", "Background sharing")) }
             Section {
                 DisclosureGroup(t("高级接入设置", "Advanced connection settings")) {
                     TextField(t("本机私网 IPv4", "Local private IPv4"), text: $model.settings.listenHost).keyboardType(.decimalPad)

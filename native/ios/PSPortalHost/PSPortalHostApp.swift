@@ -17,7 +17,7 @@ struct PSPortalHostApp: App {
                     model.didEnterBackground()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIApplication.protectedDataWillBecomeUnavailableNotification)) { _ in
-                    model.stop(reason: "Stopped because the device was locked. Tap Start after unlocking.")
+                    model.protectedDataUnavailable()
                 }
         }
     }
