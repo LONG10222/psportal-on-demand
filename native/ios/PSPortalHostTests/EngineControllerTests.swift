@@ -4,10 +4,18 @@ import XCTest
 
 /// Queue gates make stale operations deterministic without real network access.
 final class EngineControllerTests: XCTestCase {
+    // Hosted simulators can delay utility work beyond two seconds. These tests
+    // verify ordering, not production QoS or a network performance deadline.
+    private let callbackTimeout: TimeInterval = 10
+
+    private func metadataQueue() -> DispatchQueue {
+        DispatchQueue(label: "test.engine-metadata", qos: .userInitiated)
+    }
+
     @MainActor
     func testUnavailableOrEmptyAccountingIsNotAUsableSnapshot() async {
         let driver = ControllerDriver()
-        let controller = EngineController(driver: driver)
+        let controller = EngineController(driver: driver, infoQueue: metadataQueue())
         await start(controller)
         for response in ["{\"available\":false}", "{}"] {
             driver.infoResponse = response
@@ -16,7 +24,7 @@ final class EngineControllerTests: XCTestCase {
                 XCTAssertNil(info)
                 fetched.fulfill()
             }
-            await fulfillment(of: [fetched], timeout: 2)
+            await fulfillment(of: [fetched], timeout: callbackTimeout)
         }
         await stop(controller)
     }
@@ -28,7 +36,7 @@ final class EngineControllerTests: XCTestCase {
         var suspended = true
         defer { if suspended { nodeQueue.resume() } }
         let driver = ControllerDriver()
-        let controller = EngineController(driver: driver, nodeQueue: nodeQueue)
+        let controller = EngineController(driver: driver, infoQueue: metadataQueue(), nodeQueue: nodeQueue)
         await start(controller)
 
         let stale = expectation(description: "Old command is rejected")
@@ -40,7 +48,7 @@ final class EngineControllerTests: XCTestCase {
         driver.onStop = { stopEntered.fulfill() }
         let stopped = expectation(description: "Stop completes")
         controller.stop { stopped.fulfill() }
-        await fulfillment(of: [stopEntered], timeout: 2)
+        await fulfillment(of: [stopEntered], timeout: callbackTimeout)
         let restarted = expectation(description: "Next Start completes")
         controller.start(json: "{}") { failure in
             XCTAssertNil(failure)
@@ -48,7 +56,7 @@ final class EngineControllerTests: XCTestCase {
         }
         nodeQueue.resume()
         suspended = false
-        await fulfillment(of: [stale, stopped, restarted], timeout: 2)
+        await fulfillment(of: [stale, stopped, restarted], timeout: callbackTimeout)
         XCTAssertTrue(driver.snapshot().commands.isEmpty)
         XCTAssertEqual(driver.snapshot().starts, 2)
         driver.onStop = nil
@@ -58,21 +66,22 @@ final class EngineControllerTests: XCTestCase {
     @MainActor
     func testStopCancelsThenJoinsAlreadyEnteredNodeCommand() async {
         let driver = ControllerDriver()
-        let controller = EngineController(driver: driver)
+        let controller = EngineController(driver: driver, infoQueue: metadataQueue())
         await start(controller)
         let nodeEntered = expectation(description: "Node command reaches native boundary")
         let releaseNode = DispatchSemaphore(value: 0)
         defer { releaseNode.signal() }
         driver.beforeNode = {
             nodeEntered.fulfill()
-            _ = releaseNode.wait(timeout: .now() + 5)
+            XCTAssertEqual(releaseNode.wait(timeout: .now() + 30), .success,
+                           "Node gate must be explicitly released, not expire")
         }
         let nodeFinished = expectation(description: "Stale node completion is rejected")
         controller.nodeCommand(action: "fastest", name: "") { success in
             XCTAssertFalse(success)
             nodeFinished.fulfill()
         }
-        await fulfillment(of: [nodeEntered], timeout: 2)
+        await fulfillment(of: [nodeEntered], timeout: callbackTimeout)
 
         let stopEntered = expectation(description: "Stop is not blocked behind node work")
         driver.onStop = { stopEntered.fulfill() }
@@ -83,18 +92,18 @@ final class EngineControllerTests: XCTestCase {
             if !driver.snapshot().nodeExited { earlyStop.fulfill() }
             stopped.fulfill()
         }
-        await fulfillment(of: [stopEntered], timeout: 2)
+        await fulfillment(of: [stopEntered], timeout: callbackTimeout)
         // The semaphore keeps the unsafe native-call window open throughout
         // this negative assertion; no assumed operation duration or sleep.
         await fulfillment(of: [earlyStop], timeout: 0.1)
         releaseNode.signal()
-        await fulfillment(of: [nodeFinished, stopped], timeout: 2)
+        await fulfillment(of: [nodeFinished, stopped], timeout: callbackTimeout)
         XCTAssertTrue(driver.snapshot().nodeExited)
     }
 
     @MainActor
     func testQueuedMetadataSkipsStoppedSessionAndUsesNewURL() async {
-        let infoQueue = DispatchQueue(label: "test.stale-metadata")
+        let infoQueue = DispatchQueue(label: "test.stale-metadata", qos: .userInitiated)
         infoQueue.suspend()
         var suspended = true
         defer { if suspended { infoQueue.resume() } }
@@ -110,7 +119,7 @@ final class EngineControllerTests: XCTestCase {
         driver.onStop = { stopEntered.fulfill() }
         let stopped = expectation(description: "Stop completes after accounting queue drains")
         controller.stop { stopped.fulfill() }
-        await fulfillment(of: [stopEntered], timeout: 2)
+        await fulfillment(of: [stopEntered], timeout: callbackTimeout)
         let restarted = expectation(description: "New session starts after stale work drains")
         controller.start(json: "{}") { failure in
             XCTAssertNil(failure)
@@ -118,13 +127,13 @@ final class EngineControllerTests: XCTestCase {
         }
         infoQueue.resume()
         suspended = false
-        await fulfillment(of: [oldInfo, stopped, restarted], timeout: 2)
+        await fulfillment(of: [oldInfo, stopped, restarted], timeout: callbackTimeout)
         let newInfo = expectation(description: "Current metadata is returned")
         controller.subscriptionInfo(url: "https://example.com/new") { info in
             XCTAssertEqual(info?.total, 100)
             newInfo.fulfill()
         }
-        await fulfillment(of: [newInfo], timeout: 2)
+        await fulfillment(of: [newInfo], timeout: callbackTimeout)
         XCTAssertEqual(driver.snapshot().urls, ["https://example.com/new"])
         driver.onStop = nil
         await stop(controller)
@@ -133,14 +142,15 @@ final class EngineControllerTests: XCTestCase {
     @MainActor
     func testStopCancelsInflightMetadataBeforeNewSession() async {
         let driver = ControllerDriver()
-        let controller = EngineController(driver: driver)
+        let controller = EngineController(driver: driver, infoQueue: metadataQueue())
         await start(controller)
         let infoEntered = expectation(description: "Old metadata request begins")
         let releaseInfo = DispatchSemaphore(value: 0)
         defer { releaseInfo.signal() }
         driver.beforeInfo = {
             infoEntered.fulfill()
-            _ = releaseInfo.wait(timeout: .now() + 5)
+            XCTAssertEqual(releaseInfo.wait(timeout: .now() + 30), .success,
+                           "Metadata gate must be explicitly cancelled, not expire")
         }
         // The real mobile driver cancels the engine context from Stop.
         driver.onStop = { releaseInfo.signal() }
@@ -149,11 +159,11 @@ final class EngineControllerTests: XCTestCase {
             XCTAssertNil(info)
             discarded.fulfill()
         }
-        await fulfillment(of: [infoEntered], timeout: 2)
+        await fulfillment(of: [infoEntered], timeout: callbackTimeout)
         await stop(controller)
         XCTAssertEqual(driver.snapshot().urls, ["https://example.com/old"])
         await start(controller)
-        await fulfillment(of: [discarded], timeout: 2)
+        await fulfillment(of: [discarded], timeout: callbackTimeout)
         driver.onStop = nil
         await stop(controller)
     }
@@ -162,13 +172,13 @@ final class EngineControllerTests: XCTestCase {
     func testFailedStartRejectsMetadataAndNodeCommands() async {
         let driver = ControllerDriver()
         driver.startFailure = "Fixture start failure"
-        let controller = EngineController(driver: driver)
+        let controller = EngineController(driver: driver, infoQueue: metadataQueue())
         let failed = expectation(description: "Start fails")
         controller.start(json: "{}") { failure in
             XCTAssertEqual(failure, "Fixture start failure")
             failed.fulfill()
         }
-        await fulfillment(of: [failed], timeout: 2)
+        await fulfillment(of: [failed], timeout: callbackTimeout)
         let infoDone = expectation(description: "Metadata is rejected")
         let nodeDone = expectation(description: "Node command is rejected")
         controller.subscriptionInfo(url: "https://example.com/sub") { info in
@@ -179,7 +189,7 @@ final class EngineControllerTests: XCTestCase {
             XCTAssertFalse(success)
             nodeDone.fulfill()
         }
-        await fulfillment(of: [infoDone, nodeDone], timeout: 2)
+        await fulfillment(of: [infoDone, nodeDone], timeout: callbackTimeout)
         XCTAssertTrue(driver.snapshot().urls.isEmpty)
         XCTAssertTrue(driver.snapshot().commands.isEmpty)
     }
@@ -191,14 +201,14 @@ final class EngineControllerTests: XCTestCase {
             XCTAssertNil(failure)
             started.fulfill()
         }
-        await fulfillment(of: [started], timeout: 2)
+        await fulfillment(of: [started], timeout: callbackTimeout)
     }
 
     @MainActor
     private func stop(_ controller: EngineController) async {
         let stopped = expectation(description: "Controller stops")
         controller.stop { stopped.fulfill() }
-        await fulfillment(of: [stopped], timeout: 2)
+        await fulfillment(of: [stopped], timeout: callbackTimeout)
     }
 }
 

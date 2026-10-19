@@ -11,6 +11,28 @@ TRANSIENT = ('i/o timeout', 'no such host', 'temporary failure in name resolutio
              '504 gateway timeout')
 FATAL = ('checksum mismatch', 'security error', 'unknown revision', 'invalid version',
          'permission denied', '401 unauthorized', '403 forbidden', 'x509:')
+STDOUT_DIAGNOSTIC_LIMIT = 8192
+
+def failed_stdout(raw):
+ """Report bounded diagnostics; only structured Go errors justify a retry."""
+ errors=[]
+ try:
+  for value in json_objects(raw):
+   if not isinstance(value,dict):continue
+   error=value.get('Error')
+   # go mod download uses a string; go list uses an object with an Err field.
+   if isinstance(error,dict):error=error.get('Err')
+   if isinstance(error,str) and error:errors.append(error)
+ except (ValueError,RecursionError):
+  # Partial/malformed stdout is still useful, but is not trusted for retries.
+  errors=[]
+ diagnostic='\n'.join(errors) or raw
+ if len(diagnostic)>STDOUT_DIAGNOSTIC_LIMIT:
+  half=STDOUT_DIAGNOSTIC_LIMIT//2
+  diagnostic=diagnostic[:half]+'\n... [stdout truncated] ...\n'+diagnostic[-half:]
+ if diagnostic:print('Failed module metadata stdout:\n'+diagnostic,file=sys.stderr)
+ return '\n'.join(errors)
+
 def network_output(args, *, attempts=3, timeout=120, env=None):
  if attempts < 1 or attempts > 3:
   raise ValueError('Module metadata operations allow at most three attempts')
@@ -22,9 +44,13 @@ def network_output(args, *, attempts=3, timeout=120, env=None):
    if result.stderr:print(result.stderr,end='',file=sys.stderr)
    return result.stdout
   except subprocess.CalledProcessError as error:
-   message=(error.stderr or '').lower()
    if error.stderr:print(error.stderr,end='',file=sys.stderr)
-   if attempt+1==attempts or any(x in message for x in FATAL) or not any(x in message for x in TRANSIENT):
+   stdout=error.stdout or ''
+   message=((error.stderr or '')+'\n'+failed_stdout(stdout)).lower()
+   # Inspect full output before truncation; fatal failures always take priority.
+   full_stdout=stdout.lower()
+   fatal=any(x in message or x in full_stdout for x in FATAL)
+   if attempt+1==attempts or fatal or not any(x in message for x in TRANSIENT):
     raise
   except subprocess.TimeoutExpired:
    if attempt+1==attempts:raise
