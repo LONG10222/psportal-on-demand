@@ -69,3 +69,36 @@ jobs:
           path: native/ios/build/diagnostics
           if-no-files-found: ignore
           retention-days: 1
+  ios-sdk26-background-driver:
+    # Narrow compile-only gate: uses existing official SDKs, no app or task launch.
+    if: github.event.repository.private == false
+    runs-on: macos-15
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        sdk: [iphoneos, iphonesimulator]
+    env:
+      # Installed SDK inventory (no Xcode download or host selection change):
+      # https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md#xcode
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Check out source without persisting credentials
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Test SDK gate command and workflow guards without Swift
+        run: python3 native/ios/scripts/check-sdk26-tests.py
+      - name: Compile unchanged background driver with iOS 26 SDK
+        run: python3 native/ios/scripts/check-sdk26.py --sdk ${{ matrix.sdk }}
+      - name: Upload compile-only evidence and logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: psportal-ios-sdk26-${{ matrix.sdk }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            native/ios/build/sdk26/${{ matrix.sdk }}/EVIDENCE.json
+            native/ios/build/sdk26/${{ matrix.sdk }}/compile.log
+          if-no-files-found: error
+          retention-days: 1

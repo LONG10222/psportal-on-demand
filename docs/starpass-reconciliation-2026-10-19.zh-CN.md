@@ -32,6 +32,16 @@
 旧 SDK 和模拟器明确不可用。模拟驱动和模拟器通过不等于真机系统已授权，
 真实热点、锁屏联网、游戏机、长期运行与签名安装仍待验证。
 
+## 现代 Apple SDK 编译门禁
+
+原有完整 app/XCTest 工作流使用 Xcode 16.4 / SDK 18.5，只覆盖旧 SDK 回退实现。
+新增独立门禁使用标准 ARM64 runner 已安装的 Xcode 26.3，分别为 iPhoneOS 和 Simulator
+编译未经修改的 `BackgroundSharingSession.swift`，并要求编译器至少 6.2、SDK 至少 26、
+产物为 ARM64 对象且含真实 `SystemBackgroundSharing.begin` / `finish` 实现符号。
+源文件 Git blob、工具链、目标和对象哈希作为证据保留；不替换实现、不安装 SDK 或修改全局 Xcode。
+这只证明该驱动现代 SDK 分支能够编译，不代表完整 app 已用现代 SDK 链接，更不代表真机任务获批。
+原完整 app、模拟器与无签名设备编译流程保持原样。
+
 ## 图标状态
 
 人物轮廓版已选定。此次构建修复先保留仓库现有整套图标与资源清单一致，

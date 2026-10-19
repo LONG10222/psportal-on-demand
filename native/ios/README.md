@@ -119,11 +119,21 @@ no mock or fallback transport in the application target.
 ### Public GitHub Apple build/test CI
 
 `../ci/ios-simulator.yml.example` is the maintained template for the reviewed
-`.github/workflows/ios-simulator.yml` on the development PR. It defines one standard
+`.github/workflows/ios-simulator.yml` on the development PR. Its full-app validation uses one standard
 `macos-15` public-repository job, using the runner's existing Xcode 16.4, pinned
 Go 1.27.2, pinned gomobile, and official checksum-verified XcodeGen 2.46.0.
 GitHub Actions themselves are pinned to full commit SHAs. The job refuses private
-repositories, has no matrix, caches nothing, and cancels superseded runs.
+repositories, has no full-app matrix, caches nothing, and cancels superseded runs.
+
+A separate compile-only matrix uses the runner's existing Xcode 26.3 to compile
+unchanged `BackgroundSharingSession.swift` for iPhoneOS and Simulator, using
+Swift 5 language mode and iOS 16 deployment settings. It requires compiler 6.2+,
+SDK 26+ and defined `SystemBackgroundSharing.begin` / `finish` implementation
+symbols, and retains source, toolchain and object-hash evidence for one day.
+It does not build/link the full app, execute a background task or validate a
+physical device. The Xcode 16.4 full-app/XCTest job remains unchanged. Availability
+is checked against the [official ARM64 runner inventory](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md#xcode);
+a missing SDK is a failure, never a silent older-SDK fallback or SDK download.
 
 The job builds the runner's simulator architecture and iPhoneOS ARM64 by setting
 `IOS_TARGET` on the shared mobile recipe, runs native Go fixture tests, generates
