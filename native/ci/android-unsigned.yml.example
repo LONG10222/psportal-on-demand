@@ -12,6 +12,9 @@ name: Native Android Unsigned
     paths:
       - 'native/engine/**'
       - 'native/mobile/**'
+      - 'native/androidcore/**'
+      - 'native/androidmobile/**'
+      - 'native/third_party/**'
       - 'native/android/**'
       - 'native/scripts/**'
       - 'native/go.mod'

@@ -24,6 +24,26 @@ public final class HostTests {
         String json = valid.toJson("/data/user/0/org.psportal.host/files/runtime");
         check(json.contains("\"allowed_clients\":[\"192.168.1.30\"]"), "Client allowlist is explicit");
         check(!json.contains("core_path"), "No executable path");
+        check(valid.lanEnabled && !valid.phoneVpn && json.contains("\"lan_enabled\":true") && json.contains("\"phone_vpn\":false"), "Default shares LAN only without phone VPN");
+        HostConfig vpnOnly = new HostConfig("", java.util.Collections.emptyList(), "10081", "https://example.com/", "auto", "", "60", 50, "rule", false, true);
+        check(!vpnOnly.lanEnabled && vpnOnly.phoneVpn && vpnOnly.allowedClients.isEmpty() && vpnOnly.listenHost.isEmpty(), "VPN-only needs no LAN address or client allowlist");
+        check(vpnOnly.toJson("/private/runtime").contains("\"lan_enabled\":false,\"phone_vpn\":true"), "VPN-only explicitly disables LAN listener");
+        HostConfig combined = new HostConfig("10.0.0.1", java.util.Arrays.asList("10.0.0.2"), "10081", "https://example.com/", "auto", "", "60", 50, "global", true, true);
+        check(combined.lanEnabled && combined.phoneVpn, "LAN and phone VPN can both be selected");
+        rejects(() -> new HostConfig("", java.util.Collections.emptyList(), "10081", "https://example.com/", "auto", "", "60", 50, "rule", false, false));
+        rejects(() -> new HostConfig("10.0.0.1", java.util.Collections.emptyList(), "10081", "https://example.com/", "auto", "", "60", 50, "rule", false, true));
+        rejects(() -> new HostConfig("", java.util.Arrays.asList("10.0.0.2"), "10081", "https://example.com/", "auto", "", "60", 50, "rule", false, true));
+        check(valid.routingMode.equals("rule") && json.contains("\"routing_mode\":\"rule\""), "Existing constructors default to explicit rule routing");
+        for (String routing : new String[]{"rule", "global", "direct"}) {
+            HostConfig routed = new HostConfig("10.0.0.1", java.util.Arrays.asList("10.0.0.2"), "10081", "https://example.com/", "fixed", "香港 A", "60", 75, routing);
+            check(routed.routingMode.equals(routing) && routed.toJson("/private/runtime").contains("\"routing_mode\":" + HostConfig.quote(routing)), "Serialize exact routing mode " + routing);
+            check(routed.selectionMode.equals("fixed") && routed.preferredNode.equals("香港 A") && routed.switchThresholdMs == 75, "Routing remains independent from node policy " + routing);
+            check(!routed.toJson("/private/runtime").contains("background_sharing"), "Background sharing is an Android service policy");
+        }
+        for (String routing : new String[]{"", "RULE", "rules", "global ", "auto", "direct\n"})
+            rejects(() -> new HostConfig("10.0.0.1", java.util.Arrays.asList("10.0.0.2"), "10081", "https://example.com/", "auto", "", "60", 50, routing));
+        rejects(() -> new HostConfig("10.0.0.1", java.util.Arrays.asList("10.0.0.2"), "10081", "https://example.com/", "auto", "", "60", 50, null));
+        rejects(() -> new HostConfig("10.0.0.1", java.util.Arrays.asList("10.0.0.2"), "10081", "", "auto", "", "60", 50, "direct"));
         check(json.contains("\"idle_seconds\":60"), "Correct idle");
         check(HostConfig.quote("x\"y\\z\n😀").equals("\"x\\\"y\\\\z\\u000a\\ud83d\\ude00\""), "JSON escaping");
         for (String ip : new String[] {"0.0.0.0", "127.0.0.1", "8.8.8.8", "192.168.1.30"}) rejects(() -> config(ip, "192.168.1.30", "10081", "https://example.com/", "auto", "", "60"));
@@ -73,6 +93,15 @@ public final class HostTests {
         check(new SubscriptionAccounting("100", "200", "0", "253402300800").total == null, "Zero total is not unlimited");
         check(new SubscriptionAccounting("9223372036854775807", "1", "-1", "999999999999999999999999").used == null, "Overflow accounting unknown");
         check(new SubscriptionAccounting("NaN", "1", "100", "253402300800").expires == null, "Reject out-of-range expiry");
+        check(RuntimePresentation.settingLabel("dns", false).equals("DNS"), "Known overridden DNS key uses a local label");
+        check(RuntimePresentation.settingLabel("hosts", true).equals("Hosts mappings"), "Known hosts override is explicit");
+        for (String unsafe : new String[]{"https://secret.example/token", "secret-value", "dns\nsecret", "\u202esecret"})
+            check(RuntimePresentation.settingLabel(unsafe, true).equals("Other settings"), "Unknown keys never echo upstream strings");
+        check(RuntimePresentation.settingLabel(null, false).equals("其他设置"), "Missing setting labels stay safe");
+        for (String code : new String[]{"profile_unsupported", "profile_selection_required", "profile_invalid", "download_failed"})
+            check(!RuntimePresentation.profileError(code, false).isEmpty() && !RuntimePresentation.profileError(code, true).isEmpty(), "Known safe profile error is localized " + code);
+        check(RuntimePresentation.profileError("https://secret.example/token", true).isEmpty(), "Unknown error never exposes raw native text");
+        check(RuntimePresentation.profileError(null, false).isEmpty(), "Missing error code stays absent");
         SessionController.Phase run = SessionController.Phase.RUNNING;
         check(RuntimePresentation.state(run, false, true, "stopped", 0L, false) == RuntimePresentation.State.LISTENING, "Idle core does not imply stopped listener");
         check(RuntimePresentation.state(run, false, true, "starting", 0L, false) == RuntimePresentation.State.WAKING, "Real waking state");

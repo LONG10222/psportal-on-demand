@@ -12,10 +12,18 @@ assert 'android.permission.ACCESS_LOCAL_NETWORK' not in permissions, 'target36 m
 assert 'android.permission.RECEIVE_BOOT_COMPLETED' not in permissions
 app = manifest.find('application')
 assert app.attrib[a+'allowBackup'] == 'false'
-assert len(app.findall('service')) == 1
-service = app.find('service')
+assert len(app.findall('service')) == 2
+services = {entry.attrib[a+'name']: entry for entry in app.findall('service')}
+service = services['.ProxyService']
 assert service.attrib[a+'exported'] == 'false'
-assert service.attrib[a+'foregroundServiceType'] == 'connectedDevice'
+assert service.attrib[a+'foregroundServiceType'] == 'connectedDevice|systemExempted'
+vpn_service = services['.PhoneVpnService']
+assert vpn_service.attrib[a+'permission'] == 'android.permission.BIND_VPN_SERVICE'
+assert vpn_service.attrib[a+'exported'] == 'false'
+assert vpn_service.attrib[a+'foregroundServiceType'] == 'systemExempted'
+assert vpn_service.find('meta-data').attrib[a+'value'] == 'false'
+assert vpn_service.find('intent-filter/action').attrib[a+'name'] == 'android.net.VpnService'
+assert service.attrib[a+'stopWithTask'] == 'false', 'Background-on runs survive Recents removal'
 assert not app.findall('receiver')
 src = root/'app/src/main/java/org/psportal/host'
 service_source = (src/'ProxyService.java').read_text()
@@ -23,16 +31,21 @@ assert 'START_NOT_STICKY' in service_source and 'START_STICKY' not in service_so
 assert 'onTaskRemoved' in service_source and 'onDestroy' in service_source
 # API26 emulator regression: task removal has an internal framework start ID,
 # so a guarded unconditional stop is needed after native teardown completes.
-assert 'onTaskRemoved(Intent rootIntent) { requestStop(latestStartId, true); }' in service_source
+assert 'BackgroundPolicy.stopWhenTaskRemoved(allowBackground)' in service_source
+assert 'BackgroundPolicy.PREFERENCE_KEY, BackgroundPolicy.DEFAULT_ALLOW_BACKGROUND' in service_source
+assert 'taskRemovedSinceCommand = true;' in service_source
+assert 'taskRemovedSinceCommand = false;' in service_source
 assert 'if (startId != latestStartId) return;' in service_source
-assert 'if (taskRemoved) stopSelf();' in service_source
+assert 'if (taskRemoved || taskRemovedSinceCommand) stopSelf();' in service_source
+assert 'REQUEST_IGNORE_BATTERY_OPTIMIZATIONS' not in permissions
+assert 'android.permission.WAKE_LOCK' not in permissions, 'No unmeasured battery locks'
 native_source = (src/'NativeEngine.java').read_text()
-assert 'org.psportal.engine.mobile.Mobile' in native_source
-assert 'Mobile.start(configJson)' in native_source
+assert 'org.psportal.engine.androidmobile.Androidmobile' in native_source
+assert 'Androidmobile.start(configJson)' in native_source
 for source in src.glob('*.java'):
     content = source.read_text()
     assert 'ProcessBuilder' not in content and 'Runtime.getRuntime().exec' not in content
-    assert 'VpnService' not in content
+    if 'extends VpnService' in content: assert source.name == 'PhoneVpnService.java'
 build = (root/'app/build.gradle').read_text()
 assert build.count('signingConfig = null') == 2
 assert 'targetSdk 36' in build and 'minSdk 26' in build
@@ -52,18 +65,77 @@ assert 'FLAG_SECURE' in activity and 'IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDA
 assert 'subscription.setSaveEnabled(false)' in activity
 assert 'subscription.setTransformationMethod(android.text.method.PasswordTransformationMethod.getInstance())' in activity, 'setSingleLine can clear password masking; restore the transformation explicitly'
 assert activity.index('subscription = input(') < activity.index('subscription.setTransformationMethod(')
-assert 'Mobile.subscriptionInfo(requested.subscriptionUrl)' in activity
+assert 'Androidmobile.subscriptionInfo(requested.subscriptionUrl)' in activity
 assert 'preparationGeneration++' in activity and 'generation != preparationGeneration' in activity
 assert 'pendingPreparation.cancel(true)' in activity, 'Cancel obsolete preparation work'
 assert '.putString("subscription"' not in activity and '.putString("subscriptionUrl"' not in activity
 assert 'nativeState, "connected_clients"' in activity and 'nativeState, "active_connections"' in activity
 assert 'return number >= 0' in activity, 'Missing metrics must stay unknown'
 assert 'getMessage()' not in activity, 'Never expose untrusted subscription/native exceptions'
-assert 'Mobile.prepare()' in native_source and 'Mobile.testNodes()' in native_source
-assert 'Mobile.selectNodeWithThreshold' in native_source
+assert 'Androidmobile.prepare()' in native_source and 'Androidmobile.testNodes()' in native_source
+assert 'Androidmobile.selectNodeWithThreshold' in native_source
 session = (src/'SessionController.java').read_text()
 assert 'teardownFinished || commandPending' in session, 'Restart must wait for old probe lane'
 assert 'portal-node-probes' in (src/'PortalApplication.java').read_text()
 assert 'LanSetup.safeInterface(network.getName())' in (src/'NetworkAddresses.java').read_text()
 assert (root/'app/src/main/res/values-en/strings.xml').exists()
 print('PASS: Android manifest, lifecycle, JNI, simple-home privacy/localization and XML structural guards')
+
+vpn = (src/'PhoneVpnService.java').read_text()
+assert 'START_NOT_STICKY' in vpn and 'START_STICKY' not in vpn
+assert 'VpnService.prepare(this)' in vpn and 'hasVpnConflict(this)' in vpn
+assert '.addRoute("0.0.0.0", 0).addRoute("::", 0)' in vpn
+assert '.addDnsServer("198.18.0.2").addDnsServer("fdfe:dcba:9876::2")' in vpn
+assert '.addDisallowedApplication(getPackageName())' in vpn
+assert 'allowBypass(' not in vpn and 'allowFamily(' not in vpn
+assert 'PhoneVpnService.this.protect((int)fd)' in vpn
+assert 'Androidmobile.stopPhoneVPN()' in vpn and 'descriptor.close()' in vpn
+assert 'Androidmobile.releasePhoneVPNProtection()' in vpn
+assert 'onRevoke()' in vpn and 'onLost(Network n)' in vpn
+assert 'new Intent(this, ProxyService.class).setAction(ProxyService.ACTION_STOP)' in vpn
+assert 'lanEnabled && !NetworkAddresses.isAssigned(listenAddress)' in service_source
+print('PASS: optional Android-only dual-stack VPN, consent, conflict, socket protection and cleanup guards')
+
+# These are source guardrails only; actual widget and OS-consent behavior remains
+# covered by Android instrumentation/device checks, never inferred from strings.
+config_source = (src/'HostConfig.java').read_text()
+assert 'ROUTING_MODES = {"rule", "global", "direct"}' in activity
+assert 'getString("routing_mode", "rule")' in activity
+assert 'getBoolean("lan_enabled", true)' in activity
+assert 'phoneApps.setChecked(PhoneVpnService.isRequested())' in activity
+assert '.putBoolean("phone_vpn"' not in activity, 'Never save consent intent as a standing opt-in'
+assert 'boolean hasSelectedTraffic = lanSharing.isChecked() || phoneApps.isChecked();' in activity
+assert 'start.setEnabled(editable && hasSelectedTraffic)' in activity
+assert 'if (!lanSharing.isChecked()) { configureStart(null); return; }' in activity
+assert 'pendingConfig.lanEnabled && Permissions.requiresLocalNetwork' in activity
+assert 'requested.lanEnabled && !NetworkAddresses.isAssigned' in activity
+assert 'if (!lanEnabled && !phoneVpn)' in config_source
+assert 'routingMode, boolean lanEnabled, boolean phoneVpn' in config_source
+assert 'if (requestCode != REQUEST_PHONE_VPN) return;' in activity
+assert 'resultCode == RESULT_OK && pendingConfig != null && phoneApps.isChecked()' in activity
+assert 'startActivityForResult(consent, REQUEST_PHONE_VPN)' in activity
+assert 'if (!vpnConsentPending)' in activity, 'Retain setup only for the explicit OS consent activity'
+assert 'resumeAfterVpnConsent = false; continueStart();' in activity
+assert 'BackgroundPolicy.stopWhenUiHidden(backgroundSharing.isChecked(), isChangingConfigurations())' in activity
+assert '!PhoneVpnService.isActive() && pendingConfig == null' in activity, 'Wait for old VPN cleanup before a new session'
+assert 'if (!checked && PhoneVpnService.isRequested()) PhoneVpnService.stop(this)' in activity
+assert 'snapshot.phase == SessionController.Phase.RUNNING && phoneApps.isChecked()' in activity, 'Permit only live OFF; live ON requires a new Start'
+assert 'nativeState.optString("routing_mode", "")' in activity
+assert 'coreName + " · "' in activity and 'phoneVpnDescription()' in activity
+assert 'two improving rounds' not in activity and '连续两轮' not in activity
+print('PASS: independent routing/LAN/phone/background UI, explicit consent, cancellation and safe mode-status guards')
+assert 'phoneRequested && PhoneVpnService.requestPending()' in service_source, 'Canceled phone selection must not start from a queued core callback'
+assert 'if (!requested)' in vpn, 'A queued VPN Start must honor a newer off intent'
+assert 'STATE.stop("stopped")' in vpn, 'Live OFF invalidates native-start generations synchronously'
+
+assert 'state.optJSONArray("ignored_profile_settings")' in activity
+assert 'Math.min(settings.length(), 64)' in activity
+assert 'RuntimePresentation.settingLabel(settings.optString(i, ""), english)' in activity
+assert 'RuntimePresentation.profileError(nativeState.optString("error_code", ""), english)' in activity
+assert 'state.optJSONArray("policy_groups")' in activity and 'Math.min(groups.length(), 20)' in activity
+assert 'safeNodeName(state.optString("selected_group", ""))' in activity
+
+assert 'UDP unsupported by the selected node is blocked, without direct fallback' in activity
+assert 'ICMP (ping) is unsupported' in activity
+assert 'including in Direct mode. Turn it off to restore normal networking.' in activity
+assert 'Phone routing currently supports TCP and DNS only' not in activity

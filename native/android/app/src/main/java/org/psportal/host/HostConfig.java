@@ -11,9 +11,10 @@ import java.util.LinkedHashSet;
 
 /** UI-side validation; the native engine independently validates every configuration. */
 public final class HostConfig {
-    public final String listenHost, portalHost, subscriptionUrl, selectionMode, preferredNode;
+    public final String listenHost, portalHost, subscriptionUrl, selectionMode, preferredNode, routingMode;
     public final int listenPort, idleSeconds, switchThresholdMs;
     public final List<String> allowedClients;
+    public final boolean lanEnabled, phoneVpn;
 
     public HostConfig(String listenHost, String portalHost, String listenPort,
                       String subscriptionUrl, String selectionMode, String preferredNode,
@@ -30,11 +31,36 @@ public final class HostConfig {
     public HostConfig(String listenHost, List<String> allowedClients, String listenPort,
                       String subscriptionUrl, String selectionMode, String preferredNode,
                       String idleSeconds, int switchThresholdMs) {
+        this(listenHost, allowedClients, listenPort, subscriptionUrl, selectionMode,
+                preferredNode, idleSeconds, switchThresholdMs, "rule");
+    }
+    public HostConfig(String listenHost, List<String> allowedClients, String listenPort,
+                      String subscriptionUrl, String selectionMode, String preferredNode,
+                      String idleSeconds, int switchThresholdMs, String routingMode) {
+        this(listenHost, allowedClients, listenPort, subscriptionUrl, selectionMode,
+                preferredNode, idleSeconds, switchThresholdMs, routingMode, true);
+    }
+    public HostConfig(String listenHost, List<String> allowedClients, String listenPort,
+                      String subscriptionUrl, String selectionMode, String preferredNode,
+                      String idleSeconds, int switchThresholdMs, String routingMode, boolean lanEnabled) {
+        this(listenHost, allowedClients, listenPort, subscriptionUrl, selectionMode,
+                preferredNode, idleSeconds, switchThresholdMs, routingMode, lanEnabled, false);
+    }
+    public HostConfig(String listenHost, List<String> allowedClients, String listenPort,
+                      String subscriptionUrl, String selectionMode, String preferredNode,
+                      String idleSeconds, int switchThresholdMs, String routingMode, boolean lanEnabled, boolean phoneVpn) {
+        if (!lanEnabled && !phoneVpn) throw new IllegalArgumentException("Select LAN sharing or phone-app VPN");
+        this.lanEnabled = lanEnabled; this.phoneVpn = phoneVpn;
+        if (!java.util.Arrays.asList("rule", "global", "direct").contains(routingMode))
+            throw new IllegalArgumentException("Invalid routing mode");
+        this.routingMode = routingMode;
         if (switchThresholdMs < 0 || switchThresholdMs > 60000) throw new IllegalArgumentException("Invalid switch threshold");
         this.switchThresholdMs = switchThresholdMs;
         this.listenHost = listenHost.trim();
-        if (allowedClients == null || allowedClients.isEmpty() || allowedClients.size() > 253)
+        if (allowedClients == null || allowedClients.size() > 253 || lanEnabled && allowedClients.isEmpty())
             throw new IllegalArgumentException("Enter 1–253 explicit private client addresses");
+        if (!lanEnabled && (!this.listenHost.isEmpty() || !allowedClients.isEmpty()))
+            throw new IllegalArgumentException("VPN-only mode cannot include a LAN listener or clients");
         LinkedHashSet<String> unique = new LinkedHashSet<>();
         for (String client : allowedClients) {
             if (client == null || !isPrivateIpv4(client.trim()) || this.listenHost.equals(client.trim()))
@@ -42,15 +68,15 @@ public final class HostConfig {
             unique.add(client.trim());
         }
         this.allowedClients = Collections.unmodifiableList(new ArrayList<>(unique));
-        this.portalHost = this.allowedClients.get(0); // Existing single-client integration remains supported.
+        this.portalHost = this.allowedClients.isEmpty() ? "" : this.allowedClients.get(0); // Existing single-client integration remains supported.
         this.subscriptionUrl = subscriptionUrl.trim();
         this.selectionMode = selectionMode;
         this.preferredNode = preferredNode.trim();
         this.listenPort = number(listenPort, 1024, 65535, "Proxy port must be 1024–65535");
         this.idleSeconds = number(idleSeconds, 1, 86400, "Idle seconds must be 1–86400");
-        if (!isPrivateIpv4(this.listenHost)) throw new IllegalArgumentException("Enter this phone's specific private IPv4 address");
-        if (!isPrivateIpv4(this.portalHost)) throw new IllegalArgumentException("Enter the Portal's specific private IPv4 address");
-        if (this.listenHost.equals(this.portalHost)) throw new IllegalArgumentException("Phone and Portal addresses must differ");
+        if (lanEnabled && !isPrivateIpv4(this.listenHost)) throw new IllegalArgumentException("Enter this phone's specific private IPv4 address");
+        if (lanEnabled && !isPrivateIpv4(this.portalHost)) throw new IllegalArgumentException("Enter the Portal's specific private IPv4 address");
+        if (lanEnabled && this.listenHost.equals(this.portalHost)) throw new IllegalArgumentException("Phone and Portal addresses must differ");
         if (this.listenPort == 10082 || this.listenPort == 10090) throw new IllegalArgumentException("Use a proxy port other than 10082 or 10090");
         validateSubscription(this.subscriptionUrl);
         if (!selectionMode.equals("auto") && !selectionMode.equals("prefer") && !selectionMode.equals("fixed") && !selectionMode.equals("fastest")) {
@@ -117,9 +143,9 @@ public final class HostConfig {
             if (clients.length() > 0) clients.append(',');
             clients.append(quote(client));
         }
-        return "{\"listen_host\":" + quote(listenHost) + ",\"listen_port\":" + listenPort +
+        return "{\"lan_enabled\":" + lanEnabled + ",\"phone_vpn\":" + phoneVpn + ",\"listen_host\":" + quote(listenHost) + ",\"listen_port\":" + listenPort +
                 ",\"allowed_clients\":[" + clients + "],\"subscription_url\":" + quote(subscriptionUrl) +
-                ",\"selection_mode\":" + quote(selectionMode) + ",\"preferred_node\":" + quote(preferredNode) +
+                ",\"routing_mode\":" + quote(routingMode) + ",\"selection_mode\":" + quote(selectionMode) + ",\"preferred_node\":" + quote(preferredNode) +
                 ",\"switch_threshold_ms\":" + switchThresholdMs +
                 ",\"idle_seconds\":" + idleSeconds + ",\"backend_port\":10082,\"api_port\":10090,\"data_dir\":" +
                 quote(appPrivateDataDirectory) + "}";

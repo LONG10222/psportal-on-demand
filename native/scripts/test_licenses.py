@@ -2,7 +2,10 @@
 """License/source collection must never turn a download failure into success."""
 import contextlib
 import io
+import json
+import pathlib
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 import licenses
@@ -79,9 +82,10 @@ class ProductionScopeTests(unittest.TestCase):
         self.assertEqual(len(targets),10)
         for call in output.call_args_list:
             self.assertEqual(call.args[0][1:5],['list','-deps','-json','-tags'])
-            self.assertEqual(call.args[0][5],licenses.TAGS)
             env=call.kwargs['env']
+            self.assertEqual(call.args[0][5], licenses.ANDROID_TAGS if env['GOOS']=='android' else licenses.TAGS)
             self.assertEqual(env['CGO_ENABLED'],'1' if env['GOOS'] in ('ios','android') else '0')
+            self.assertEqual(call.args[0][-1], './androidmobile' if env['GOOS']=='android' else './mobile' if env['GOOS']=='ios' else './cmd/psportal')
 
     def test_missing_actual_license_fails_and_graph_only_exclusion_is_explicit(self):
         actual=dict(module='example/runtime',version='v1',licenses=['LICENSE'])
@@ -101,6 +105,64 @@ class ProductionScopeTests(unittest.TestCase):
             with self.subTest(data=data),self.assertRaises(RuntimeError):licenses.production_scope('go')
         output.side_effect=subprocess.CalledProcessError(1,['go'],stderr='unsupported target')
         with self.assertRaises(subprocess.CalledProcessError):licenses.production_scope('go')
+
+
+class ReplacementSourceTests(unittest.TestCase):
+    def test_local_replacement_preferred_and_original_identity_preserved_in_notices(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            original = root / 'upstream'
+            replacement = root / 'replacement'
+            goroot = root / 'go'
+            output = root / 'notices'
+            for directory in (original, replacement, goroot):
+                directory.mkdir()
+            (root / 'LICENSE').write_text('combined application license fixture\n')
+            (original / 'LICENSE').write_text('wrong original-only fixture\n')
+            (replacement / 'LICENSE').write_text('replacement license fixture\n')
+            (replacement / 'NOTICE-PSPORTAL-PATCH.md').write_text('local patch notice fixture\n')
+            metadata = replacement / 'PSPORTAL-PATCHES'
+            metadata.mkdir()
+            provenance = dict(module='github.com/metacubex/mihomo', version='v1.19.32',
+                              upstream_go_mod_sum='original-go-mod-sum', upstream_module_sum='original-module-sum')
+            (metadata / 'PROVENANCE.json').write_text(json.dumps(provenance))
+            (metadata / '0001-atomic-log-level.patch').write_text('exact patch fixture\n')
+            module = dict(Path=provenance['module'], Version=provenance['version'], Dir=str(original),
+                          Replace=dict(Path='./third_party/mihomo', Dir=str(replacement)))
+            with patch.object(licenses, 'ROOT', root), patch.object(licenses, 'network_output', return_value=json.dumps(module)) as network, patch.object(licenses, 'production_scope', return_value=({(module['Path'], module['Version'])}, [])), patch.object(licenses.verify_mihomo_patch, 'verify', return_value=provenance) as verify, patch.object(licenses.subprocess, 'check_output', return_value=str(goroot)), patch('sys.argv', ['licenses.py', '--go', 'verified-go', '--output', str(output)]):
+                licenses.main()
+            verify.assert_called_once_with(replacement)
+            network.assert_called_once_with(['verified-go', 'list', '-m', '-json', 'all'])
+            item = json.loads((output / 'MODULES.json').read_text())[0]
+            self.assertEqual((item['module'], item['version']), ('github.com/metacubex/mihomo', 'v1.19.32'))
+            self.assertEqual(item['replacement']['path'], './third_party/mihomo')
+            self.assertEqual(item['replacement']['provenance'], provenance)
+            self.assertEqual(item['go_mod'], 'original-go-mod-sum')
+            self.assertEqual(item['upstream_sum'], 'original-module-sum')
+            combined = (output / 'ENGINE-NOTICES.txt').read_text()
+            self.assertIn('replacement license fixture', combined)
+            self.assertIn('local patch notice fixture', combined)
+            self.assertNotIn('wrong original-only fixture', combined)
+            preserved = output / 'github.com_metacubex_mihomo@v1.19.32' / 'PSPORTAL-PATCHES'
+            self.assertEqual((preserved / '0001-atomic-log-level.patch').read_text(), 'exact patch fixture\n')
+
+    @patch('licenses.network_output')
+    def test_missing_local_replacement_never_downloads_unpatched_upstream(self, network):
+        module = dict(Path='github.com/metacubex/mihomo', Version='v1.19.32',
+                      Replace=dict(Path='./third_party/mihomo'))
+        with self.assertRaisesRegex(RuntimeError, 'Missing local replacement'):
+            licenses.module_source('go', module)
+        network.assert_not_called()
+
+    @patch('licenses.network_output')
+    def test_invalid_local_provenance_fails_before_collecting_notices(self, network):
+        with tempfile.TemporaryDirectory() as temporary:
+            module = dict(Path='github.com/metacubex/mihomo', Version='v1.19.32',
+                          Replace=dict(Path='./third_party/mihomo', Dir=temporary))
+            with patch.object(licenses.verify_mihomo_patch, 'verify', side_effect=ValueError('source changed')):
+                with self.assertRaisesRegex(ValueError, 'source changed'):
+                    licenses.module_source('go', module)
+        network.assert_not_called()
 
 
 if __name__ == '__main__': unittest.main()
