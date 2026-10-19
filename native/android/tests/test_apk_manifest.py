@@ -2,11 +2,18 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Isolated aapt2 dump parser/contract tests; no SDK, APK or VPN required."""
 import pathlib
+import re
+import runpy
+import struct
+import subprocess
 import sys
+import tempfile
 import unittest
+from unittest import mock
+import zipfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'tools'))
-from apk_manifest import EXPECTED_PERMISSIONS, audit_manifest, parse_xmltree
+from apk_manifest import EXPECTED_PERMISSIONS, NAMESPACES, audit_manifest, parse_xmltree
 
 
 def fixture():
@@ -44,6 +51,26 @@ def fixture():
 '''
 
 
+def aapt2_fixture():
+    # AOSP aapt2 Debug::XmlPrinter: each namespace increases indentation; child
+    # elements are two levels below their parent, attributes one level below.
+    lines = ['N: android=' + NAMESPACES['android'] + ' (line=2)',
+             '  N: tools=' + NAMESPACES['tools'] + ' (line=3)']
+    for line in fixture().splitlines()[1:]:
+        indent = len(line) - len(line.lstrip())
+        token = line.lstrip()
+        if token.startswith('A: '):
+            indent = indent * 2 - 2
+            token = token.replace('A: android:', 'A: ' + NAMESPACES['android'] + ':')
+            token = re.sub(r'\(type 0x10\)(0x[0-9a-f]+)', lambda m: str(int(m[1], 16)), token)
+            token = re.sub(r'\(type 0x11\)(0x[0-9a-f]+)', lambda m: f'0x{int(m[1], 16):08x}', token)
+            token = token.replace('(type 0x12)0xffffffff', 'true').replace('(type 0x12)0x0', 'false')
+        else:
+            indent *= 2
+        lines.append(' ' * indent + token)
+    return '\n'.join(lines) + '\n'
+
+
 class CompiledManifestTests(unittest.TestCase):
     def reject(self, text):
         with self.assertRaises((AssertionError, ValueError)):
@@ -56,6 +83,87 @@ class CompiledManifestTests(unittest.TestCase):
         self.assertEqual(report['version_code'], 4)
         self.assertEqual(report['version_name'], '0.4.0-dev')
         self.assertEqual(report['services']['org.psportal.host.PhoneVpnService']['binding_permission'], 'android.permission.BIND_VPN_SERVICE')
+
+    def test_aapt2_namespace_lines_uri_attributes_and_pretty_values(self):
+        text = aapt2_fixture()
+        self.assertEqual(audit_manifest(text), audit_manifest(fixture()))
+        # A tools annotation is not an Android service permission or export flag.
+        text = text.replace('            E: service (line=20)\n',
+                            '            E: service (line=20)\n'
+                            '              A: http://schemas.android.com/tools:ignore="ForegroundServicePermission"\n')
+        self.assertEqual(audit_manifest(text), audit_manifest(fixture()))
+
+    def test_element_local_namespace_keeps_siblings_and_scope(self):
+        lines = aapt2_fixture().splitlines()
+        # Move tools from the root to the first service, as aapt2 prints an
+        # element-local declaration. The following service remains its sibling.
+        lines = [lines[0]] + [line[2:] for line in lines[2:]]
+        start = lines.index('          E: service (line=20)')
+        end = lines.index('          E: service (line=25)')
+        lines[start:end] = ['          N: tools=' + NAMESPACES['tools'] + ' (line=20)'] + ['  ' + line for line in lines[start:end]]
+        text = '\n'.join(lines) + '\n'
+        self.assertEqual(audit_manifest(text), audit_manifest(fixture()))
+        self.reject(text.replace('          E: service (line=25)\n',
+                                 '          E: service (line=25)\n'
+                                 '            A: tools:ignore="ForegroundServicePermission"\n'))
+
+    def test_namespace_spoofs_duplicates_and_unknowns_fail(self):
+        text = aapt2_fixture()
+        for old, new in [('N: tools=', 'N: other='),
+                         (NAMESPACES['tools'], 'https://schemas.android.com/tools'),
+                         (NAMESPACES['android'], NAMESPACES['android'] + '/spoof'),
+                         ('N: tools=' + NAMESPACES['tools'], 'N: tools=' + NAMESPACES['android']),
+                         (' (line=3)', ' (line=three)'),
+                         (' (line=3)', ' (line=3) trailing')]:
+            with self.subTest(old=old, new=new):
+                self.reject(text.replace(old, new))
+        for alias in NAMESPACES:
+            self.reject(text.replace('    E: manifest',
+                                     '    N: ' + alias + '=' + NAMESPACES[alias] + '\n      E: manifest'))
+        self.reject(text + 'N: unknown=http://example.invalid\n')
+        self.reject(text.replace('A: ' + NAMESPACES['android'] + ':', 'A: unknown:'))
+        self.reject(text.replace('A: ' + NAMESPACES['android'] + ':', 'A: https://untrusted.invalid:'))
+        self.reject(text.replace('      A: package=', '      A: android:versionCode=4\n      A: package='))
+
+    def test_aapt2_values_remain_strict_and_references_opaque(self):
+        text = aapt2_fixture()
+        for old, new in [('versionCode(0x0101021b)=4', 'versionCode(0x0101021b)="4"'),
+                         ('versionCode(0x0101021b)=4', 'versionCode(0x0101021b)=true'),
+                         ('exported(0x01010010)=false', 'exported(0x01010010)=0'),
+                         ('exported(0x01010010)=false', 'exported(0x01010010)=true (Raw: "false")'),
+                         ('foregroundServiceType(0x01010599)=0x00000400', 'foregroundServiceType(0x01010599)=@0x7f010001'),
+                         ('foregroundServiceType(0x01010599)=0x00000400', 'foregroundServiceType(0x01010599)="0x00000400"')]:
+            with self.subTest(old=old, new=new):
+                self.reject(text.replace(old, new))
+
+    def test_compiled_dump_is_saved_before_a_failed_audit(self):
+        # Exercise the CLI failure path using a structural APK fixture and
+        # mocked SDK output; this is not an Android binary/runtime validation.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            apk, report = root / 'test.apk', root / 'reports/audit.json'
+            elf = bytearray(120)
+            elf[:6] = b'\x7fELF\x02\x01'
+            struct.pack_into('<H', elf, 18, 183)
+            struct.pack_into('<Q', elf, 32, 64)
+            struct.pack_into('<HH', elf, 54, 56, 1)
+            struct.pack_into('<IIQQQQQQ', elf, 64, 1, 0, 0, 0, 0, 0, 0, 16384)
+            with zipfile.ZipFile(apk, 'w') as archive:
+                for name in ('assets/licenses/ENGINE-NOTICES.txt', 'assets/licenses/GPL-3.0.txt',
+                             'assets/licenses/PROJECT-MIT.txt', 'classes.dex', 'AndroidManifest.xml'):
+                    archive.writestr(name, b'fixture')
+                archive.writestr('lib/arm64-v8a/libgojni.so', elf)
+            badging = "package: name='org.psportal.host'\nminSdkVersion:'26'\ntargetSdkVersion:'36'\nlaunchable-activity: name='org.psportal.host.MainActivity'\n"
+            dump = aapt2_fixture().replace('N: android=', 'N: unknown=')
+            script = pathlib.Path(__file__).resolve().parents[1] / 'tools/audit-apk.py'
+            argv = [str(script), str(apk), '--sdk', str(root / 'sdk'), '--report', str(report), '--abis', 'arm64-v8a']
+            with mock.patch.object(sys, 'argv', argv), \
+                    mock.patch('subprocess.run', return_value=subprocess.CompletedProcess([], 0, '', '')), \
+                    mock.patch('subprocess.check_output', side_effect=[badging, dump]):
+                with self.assertRaisesRegex(AssertionError, 'Unexpected compiled namespace'):
+                    runpy.run_path(str(script), run_name='__main__')
+            self.assertEqual((report.parent / 'compiled-manifest.txt').read_text(), dump)
+            self.assertFalse(report.exists())
 
     def test_exact_compiled_version_is_required(self):
         for old, new in [('(type 0x10)0x4', '(type 0x10)0x3'),

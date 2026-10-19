@@ -41,6 +41,8 @@ for expected in ["package: name='org.psportal.host'", "minSdkVersion:'26'", "tar
     assert expected in badging, expected
 assert 'RECEIVE_BOOT_COMPLETED' not in badging
 manifest = subprocess.check_output([str(tools/'aapt2'), 'dump', 'xmltree', str(a.apk), '--file', 'AndroidManifest.xml'], text=True)
+a.report.parent.mkdir(parents=True, exist_ok=True)
+(a.report.parent/'compiled-manifest.txt').write_text(manifest)
 report['compiled_manifest'] = audit_manifest(manifest)
 report['package'] = 'org.psportal.host'; report['min_sdk'] = 26; report['target_sdk'] = 36
 report['version_code'] = VERSION_CODE; report['version_name'] = VERSION_NAME
