@@ -26,6 +26,15 @@ def run(command, *, cwd=ROOT, env=None):
     subprocess.run([str(value) for value in command], cwd=cwd, env=env, check=True)
 
 
+def source_commit():
+    # The workflow uses this same expression for actions/checkout.ref. Avoid
+    # changing Git ownership/security settings in containerized build jobs.
+    value = os.environ.get('PSPORTAL_SOURCE_COMMIT', os.environ.get('GITHUB_SHA', ''))
+    if value and not re.fullmatch(r'[0-9a-f]{40}', value):
+        raise ValueError('Build evidence requires a full immutable commit SHA')
+    return value
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--debian-runtime-notices', action='store_true')
@@ -104,7 +113,7 @@ def main():
         run([sys.executable, PORTABLE / 'scripts/verify_macos_archive.py',
              '--archive', archives[0], '--output', PORTABLE / 'build/final-macos-archive',
              '--evidence', release / 'MACOS-ARCHIVE-ACCEPTANCE.json'], env=env)
-    evidence = dict(source_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(), system=system, architecture=arch,
+    evidence = dict(source_commit=source_commit(), system=system, architecture=arch,
         platform=platform.platform(), python=sys.version, native_binary_sha256=hashlib.sha256(native.read_bytes()).hexdigest(),
         corresponding_source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
         tests_run=int(count.group(1)), tests_skipped=int(skips.group(1)) if skips else 0,
