@@ -76,7 +76,7 @@ class DesktopView:
         root.rowconfigure(0, weight=1)
         sidebar = ttk.Frame(root, style='Portal.Side.TFrame', padding=(22, 28))
         sidebar.grid(row=0, column=0, sticky='nsew')
-        self.brand_avatar = load_avatar(root, size=56)
+        self.brand_avatar = load_avatar(root, size=48)
         if self.brand_avatar is not None:
             ttk.Label(sidebar, image=self.brand_avatar, style='Portal.SideNote.TLabel').pack(anchor='w', pady=(0, 10))
         ttk.Label(sidebar, text='StarPass', style='Portal.Brand.TLabel').pack(anchor='w')

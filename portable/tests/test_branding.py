@@ -1,3 +1,5 @@
+import ast
+import inspect
 from pathlib import Path
 import sys
 import tempfile
@@ -31,6 +33,19 @@ class BrandingTests(unittest.TestCase):
             branding.load_avatar(root, 63)
         with patch.object(tk, "PhotoImage", side_effect=tk.TclError("unsupported")):
             self.assertIsNone(branding.load_avatar(root))
+
+    def test_desktop_avatar_sizes_have_supported_packaged_assets(self):
+        from portalproxy import desktop_view
+        calls = [node for node in ast.walk(ast.parse(inspect.getsource(desktop_view)))
+                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                 and node.func.id == 'load_avatar']
+        self.assertTrue(calls)
+        for call in calls:
+            size = next((ast.literal_eval(item.value) for item in call.keywords
+                         if item.arg == 'size'), 64)
+            self.assertTrue(branding.asset_path(f'starpass-{size}.png').is_file())
+            with patch.object(tk, 'PhotoImage', return_value='image'):
+                self.assertEqual(branding.load_avatar(Mock(), size), 'image')
 
     def test_windows_uses_ico_and_other_window_managers_retain_png_references(self):
         root = Mock()
