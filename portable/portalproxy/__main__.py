@@ -37,16 +37,21 @@ async def serve(config, desktop_child=False):
             from .runtime import RuntimeControl, MAX_COMMAND_BYTES
             control = RuntimeControl(proxy, core)
             def watch_parent():
-                while True:
-                    line = sys.stdin.readline(MAX_COMMAND_BYTES + 2)
-                    if not line or line.strip() == 'stop':
-                        stop()
-                        return
-                    if len(line) > MAX_COMMAND_BYTES:
-                        # Refuse oversized input; do not interpret a suffix as a command.
-                        stop()
-                        return
-                    loop.call_soon_threadsafe(control.accept, line)
+                try:
+                    while True:
+                        line = sys.stdin.readline(MAX_COMMAND_BYTES + 2)
+                        if not line or line.strip() == 'stop':
+                            return
+                        if len(line) > MAX_COMMAND_BYTES:
+                            # Refuse oversized input; never interpret its suffix.
+                            return
+                        loop.call_soon_threadsafe(control.accept, line)
+                except (OSError, UnicodeError):
+                    # A broken/invalid private control pipe ends ownership.
+                    # Never leave the listener running after its reader exits.
+                    pass
+                finally:
+                    stop()
             threading.Thread(target=watch_parent, daemon=True).start()
             async def publish_status():
                 while True:
@@ -82,6 +87,14 @@ def main(argv=None):
     parser.add_argument('--check', action='store_true')
     parser.add_argument('--desktop-child', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if args.desktop_child:
+        # The desktop always reads/writes UTF-8 pipes. Windows redirected
+        # streams otherwise use the system code page (or PYTHONIOENCODING),
+        # corrupting node names and sometimes killing the status publisher.
+        # Configure before validation, diagnostics or the stdin reader thread.
+        for stream in (sys.stdin, sys.stdout, sys.stderr):
+            if stream is not None and hasattr(stream, 'reconfigure'):
+                stream.reconfigure(encoding='utf-8', errors='strict')
     try:
         config = load(args.config)
         if config['engine_mode'] == 'embedded':

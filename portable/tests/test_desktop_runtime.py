@@ -176,6 +176,8 @@ class ImportInterruptionTests(unittest.TestCase):
         app.running_controls = Mock()
         app._set_status = Mock()
         app._use_imported_file = Mock(return_value=True)
+        app._persist_import = Mock()
+        app.view.refresh = Mock()
         app._configure_lan = Mock(return_value=True)
         app._apply_lan = Mock()
         app.start = Mock()
@@ -230,7 +232,8 @@ class ImportInterruptionTests(unittest.TestCase):
             app.view.navigation_generation = 1
             app.import_events.put((1, Path(directory) / 'new.yaml', None))
             app._poll_import()
-            app.start.assert_called_once()
+            app.start.assert_not_called()
+            app._persist_import.assert_called_once()
             app.view.show.assert_not_called()
 
     def test_changed_configuration_drops_old_result(self):
@@ -296,6 +299,7 @@ class DesktopLifecycleTests(unittest.TestCase):
         app.closing = app.importing = False
         app.raw = {}
         app.path = Path('/unused-offline-fixture.json')
+        app.vars = {'subscription_url': SimpleNamespace(get=lambda: '')}
         app.backend = SimpleNamespace(process=None, start=Mock(), stop=Mock())
         app.view = SimpleNamespace(runtime=None)
         app.stop_button = Mock()

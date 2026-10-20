@@ -30,7 +30,7 @@ class QuickStartTransactionTests(unittest.TestCase):
         app.raw = {'existing_proxy_port': 7897, 'extra': {'preserved': True}}
         app.backend = SimpleNamespace(process=None, log=Mock())
         app.view = SimpleNamespace(setup_network='192.168.1.0/24', refresh=Mock(),
-                                   navigation_generation=0, show=Mock())
+                                   navigation_generation=0, show=Mock(), language='en', theme='dark')
         app.vars = {key: Variable(value) for key, value in dict(
             listen_host='192.168.1.20', allowed_clients='192.168.1.30',
             listen_port='10081', backend_port='10082', api_port='10090',
@@ -62,7 +62,8 @@ class QuickStartTransactionTests(unittest.TestCase):
              patch('portalproxy.setup.available_port', side_effect=[10101, 10102, 10103]), \
              patch('tkinter.messagebox.showerror') as error:
             app.quick_start()
-        error.assert_called_once()
+        error.assert_not_called()
+        self.assertIn('Paste a subscription', app.subscription_message)
         self.assertEqual(self.snapshot(app), before)
         self.assertFalse(app.importing)
         self.assertFalse(app.quick_start_pending)
@@ -84,7 +85,8 @@ class QuickStartTransactionTests(unittest.TestCase):
         with patch('portalproxy.setup.discover_lan', return_value=self.network()), \
              patch('portalproxy.setup.available_port', side_effect=[10101, 10102, 10103]):
             app.quick_start()
-        self.assertTrue(app.quick_start_pending)
+        self.assertFalse(app.quick_start_pending)
+        app.import_subscription.assert_not_called()
         self.assertEqual(self.snapshot(app), before)
 
     def pending_import(self, app, path):
@@ -115,27 +117,23 @@ class QuickStartTransactionTests(unittest.TestCase):
         self.assertEqual(self.snapshot(app), before)
         self.assertFalse(app.importing)
 
-    def test_network_change_during_import_keeps_previous_source_and_sharing_mode(self):
-        for fail_ports in (False, True):
-            app = self.app()
-            app.vars.update(engine_mode=Variable('external'), profile_file=Variable(''),
-                            subscription_file=Variable(''))
-            app.start = Mock()
-            before = self.snapshot(app)
-            with tempfile.TemporaryDirectory() as folder:
-                self.pending_import(app, Path(folder) / 'config.json')
-                provider = Path(folder) / 'import.json'
-                provider.write_text('{"proxies": []}', encoding='utf-8')
-                app.import_events.put((1, provider, None))
-                with patch('portalproxy.setup.discover_lan', return_value=self.network(),
-                           side_effect=None if fail_ports else ValueError('Network changed.')), \
-                     patch('portalproxy.setup.available_port', side_effect=[10101, ValueError('Port unavailable.')]), \
-                     patch('tkinter.messagebox.showerror'), self.subTest(fail_ports=fail_ports):
-                    app._poll_import()
-                self.assertEqual(self.snapshot(app), before)
-                self.assertFalse(provider.exists())
-            app.start.assert_not_called()
-            self.assertFalse(app.importing)
+    def test_import_ignores_network_changes_and_keeps_lan_fields(self):
+        app = self.app()
+        app.vars.update(engine_mode=Variable('external'), profile_file=Variable(''), subscription_file=Variable(''))
+        app.start = Mock()
+        old_lan = app.vars['listen_host'].get(), app.vars['allowed_clients'].get()
+        with tempfile.TemporaryDirectory() as folder:
+            self.pending_import(app, Path(folder) / 'config.json')
+            provider = Path(folder) / 'import.json'
+            provider.write_text('{"proxies": []}', encoding='utf-8')
+            app.import_events.put((1, provider, None))
+            with patch('portalproxy.setup.discover_lan', side_effect=AssertionError('Import must not inspect LAN')):
+                app._poll_import()
+            self.assertTrue(provider.exists())
+            self.assertEqual((app.vars['listen_host'].get(), app.vars['allowed_clients'].get()), old_lan)
+            self.assertEqual(app.vars['subscription_file'].get(), str(provider))
+            self.assertNotIn('existing_proxy_port', app.raw)
+        app.start.assert_not_called()
 
     def test_validated_provider_import_can_switch_from_linked_to_owned_mode(self):
         app = self.app()
@@ -169,27 +167,23 @@ class QuickStartTransactionTests(unittest.TestCase):
             error.assert_called_once()
         app.start.assert_not_called()
 
-    def test_valid_final_network_and_provider_are_applied_before_start(self):
+    def test_valid_import_saves_source_without_network_or_start(self):
         app = self.app()
-        app.vars.update(engine_mode=Variable('external'), profile_file=Variable(''),
-                        subscription_file=Variable(''))
-        def start():
-            self.assertNotIn('existing_proxy_port', app.raw)
-            self.assertEqual(app.vars['listen_host'].get(), '192.168.2.20')
-            self.assertEqual(app.vars['listen_port'].get(), '10101')
-            self.assertEqual(app.vars['subscription_file'].get(), str(provider))
-        app.start = Mock(side_effect=start)
+        app.vars.update(engine_mode=Variable('external'), profile_file=Variable(''), subscription_file=Variable(''))
+        app.start = Mock()
         with tempfile.TemporaryDirectory() as folder:
             self.pending_import(app, Path(folder) / 'config.json')
             provider = Path(folder) / 'import.json'
             provider.write_text('{"proxies": []}', encoding='utf-8')
             app.import_events.put((1, provider, None))
-            with patch('portalproxy.setup.discover_lan', return_value=self.network()), \
-                 patch('portalproxy.setup.available_port', side_effect=[10101, 10102, 10103]):
+            with patch('portalproxy.setup.discover_lan') as network, patch('portalproxy.setup.available_port') as ports:
                 app._poll_import()
+            network.assert_not_called(); ports.assert_not_called()
             self.assertTrue(provider.exists())
-        app.start.assert_called_once()
-        app.view.show.assert_called_once_with('LAN sharing')
+            self.assertTrue(app.path.exists())
+            self.assertEqual(app.raw['subscription_file'], str(provider))
+        app.start.assert_not_called()
+        app.view.show.assert_not_called()
 
     def test_successful_configuration_applies_complete_network_once(self):
         app = self.app()

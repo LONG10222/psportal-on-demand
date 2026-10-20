@@ -60,7 +60,7 @@ def listener_policy(mode, host, clients):
     if mode == 'clash':
         return '127.0.0.1', ['127.0.0.1']
     if not is_lan(host):
-        raise ValueError('Game and Mixed modes need a private LAN IPv4 address. Use Prepare & start or Advanced settings.')
+        raise ValueError('Game and Mixed modes need a private LAN IPv4 address. Use Start sharing or Advanced settings.')
     if not isinstance(clients, list) or not all(is_lan(client) for client in clients):
         raise ValueError('Allowed devices must be specific private LAN IPv4 addresses.')
     allowed = list(dict.fromkeys(client for client in clients if client != host))

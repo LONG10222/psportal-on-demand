@@ -6,9 +6,11 @@ not install a VPN or alter the host's system proxy, firewall, DNS or autostart.
 
 The same desktop app now has an experimental `embedded` engine option alongside
 the default `external` Python/separate-Mihomo fallback. Choose the shared native
-engine executable in the window; no binary is downloaded and no failure silently
+engine executable in Advanced settings; no failure silently
 switches engines. Existing configurations remain external unless explicitly
 changed. See [engine selection and compatibility limits](docs/desktop.md#choose-an-engine-in-the-same-app).
+
+Windows GUI users do not need to select a core: a packaged default is discovered automatically, and Start sharing prepares the pinned default if absent. Paste/import and Start remain separate. Linked Clash uses only Game mode and does not spawn another core. See [desktop workflow](docs/desktop.md).
 
 ## Run from source
 

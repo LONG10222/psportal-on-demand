@@ -21,7 +21,16 @@ def main(argv=None):
     parser.add_argument('--cpython-runtime-notices', action='store_true', help='Retain the exact reviewed Windows/macOS CPython supplemental notices; fail on unreviewed versions')
     parser.add_argument('--native-engine', type=Path, help='Bundle a reviewed native psportal executable as an experimental option')
     parser.add_argument('--native-source', type=Path, help='Matching complete native source+vendor archive; required with --native-engine')
+    parser.add_argument('--default-mihomo', type=Path, help='Pinned official Windows x64 core for zero-configuration use')
+    parser.add_argument('--mihomo-source', type=Path, help='Matching pinned upstream source ZIP; required with --default-mihomo')
     args = parser.parse_args(argv)
+    if bool(args.default_mihomo) != bool(args.mihomo_source):
+        parser.error('--default-mihomo and --mihomo-source must be supplied together')
+    if args.default_mihomo:
+        if sys.platform != 'win32' or platform.machine().lower() not in ('amd64', 'x86_64'):
+            parser.error('The pinned default Mihomo bundle supports Windows x64 only')
+        from scripts.default_mihomo import verify
+        verify(args.default_mihomo, args.mihomo_source)
     if args.debian_runtime_notices and (not sys.platform.startswith('linux') or Path(sys.base_prefix) != Path('/usr')):
         parser.error('--debian-runtime-notices requires the distro /usr Linux Python used for this build')
     if args.cpython_runtime_notices and sys.platform not in ('win32', 'darwin'):
@@ -71,6 +80,9 @@ def main(argv=None):
     folder = root / 'dist' / 'PSPortalProxy'
     executable = folder / ('PSPortalProxy.exe' if sys.platform == 'win32' else 'PSPortalProxy')
     subprocess.run([str(executable), '--smoke-test'], check=True, timeout=30)
+    if args.default_mihomo:
+        from scripts.default_mihomo import retain
+        retain(folder, args.default_mihomo, args.mihomo_source)
     if args.native_engine:
         native_folder = (root / 'dist' / 'PSPortalProxy.app' / 'Contents' / 'Resources' / 'native') if sys.platform == 'darwin' else folder / 'native'
         native_folder.mkdir(parents=True, exist_ok=True)
