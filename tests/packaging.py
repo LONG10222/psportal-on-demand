@@ -79,6 +79,9 @@ class PackagingTests(unittest.TestCase):
                 self.assertTrue(all(m.isfile() and not m.issym() and not m.islnk() for m in members))
                 names = {m.name for m in members}
                 self.assertIn('starpass-router-source/src/openclash.lua', names)
+                template_name = 'starpass-router-source/luci/view/portalproxy/onboarding.htm'
+                self.assertIn(template_name, names)
+                self.assertEqual(archive.extractfile(template_name).read(), (ROOT / 'luci/view/portalproxy/onboarding.htm').read_bytes())
                 self.assertFalse(any('mihomo' in name or 'api-secret' in name or 'policy.json' in name for name in names))
                 manifest = archive.extractfile('starpass-router-source/SHA256SUMS').read().decode()
                 for line in manifest.splitlines():
