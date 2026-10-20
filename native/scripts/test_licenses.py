@@ -48,6 +48,22 @@ class MetadataRetryTests(unittest.TestCase):
 
     @patch('licenses.time.sleep')
     @patch('licenses.subprocess.run')
+    def test_http2_peer_internal_error_retries_but_integrity_errors_do_not(self, run, sleep):
+        transport = 'Get https://proxy.golang.org/module.zip: stream error: stream ID 7; INTERNAL_ERROR; received from peer'
+        failed = json.dumps(dict(Error=transport))
+        run.side_effect = [subprocess.CalledProcessError(1, ['go'], output=failed, stderr=''),
+                           subprocess.CompletedProcess(['go'], 0, 'complete', '')]
+        self.assertEqual(licenses.network_output(['go']), 'complete')
+        self.assertEqual(run.call_count, 2)
+        sleep.assert_called_once_with(2)
+        run.reset_mock(); sleep.reset_mock()
+        run.side_effect = subprocess.CalledProcessError(1, ['go'], output=failed, stderr='checksum mismatch')
+        with self.assertRaises(subprocess.CalledProcessError): licenses.network_output(['go'])
+        self.assertEqual(run.call_count, 1)
+        sleep.assert_not_called()
+
+    @patch('licenses.time.sleep')
+    @patch('licenses.subprocess.run')
     def test_download_json_error_retries_with_empty_stderr(self, run, sleep):
         command = ['go', 'mod', 'download', '-json', 'github.com/mdlayher/packet@v1.1.2']
         message = 'github.com/mdlayher/packet@v1.1.2: proxy.golang.org: i/o timeout'

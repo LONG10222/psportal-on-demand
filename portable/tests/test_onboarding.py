@@ -5,8 +5,69 @@ import unittest
 from unittest.mock import Mock, patch
 from portalproxy import onboarding, i18n
 from portalproxy.desktop import DesktopApp
+from portalproxy.desktop_view import core_readiness_note
+
+
+class CoreReadinessNoteTests(unittest.TestCase):
+    def test_missing_external_core_is_honest_about_platform_support(self):
+        for platform, machine, automatic in (
+                ('win32', 'AMD64', True), ('win32', 'ARM64', False),
+                ('darwin', 'arm64', False), ('linux', 'x86_64', False)):
+            with self.subTest(platform=platform, machine=machine), \
+                    patch('portalproxy.core_setup.sys.platform', platform), \
+                    patch('portalproxy.core_setup.platform.machine', return_value=machine):
+                note = core_readiness_note('external', '')
+                if automatic:
+                    self.assertEqual(note, 'The default core will be prepared when you click Start sharing.')
+                else:
+                    self.assertEqual(note, 'Choose your verified Mihomo executable in Advanced settings, or reuse an existing Clash client.')
+                self.assertNotEqual(i18n.text(note, 'zh'), note)
+
+    def test_embedded_never_promises_default_mihomo_or_automatic_download(self):
+        for platform in ('win32', 'darwin', 'linux'):
+            with self.subTest(platform=platform), \
+                    patch('portalproxy.core_setup.sys.platform', platform), \
+                    patch('portalproxy.core_setup.platform.machine', return_value='AMD64'):
+                note = core_readiness_note('embedded', '')
+                self.assertEqual(note, 'Select a matching native engine in Advanced settings, or switch to external Mihomo.')
+                self.assertNotEqual(i18n.text(note, 'zh'), note)
+
+    def test_existing_custom_core_is_not_called_default_or_executed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            core = Path(tmp) / 'user-selected-core'
+            core.write_bytes(b'not executable')
+            for engine, expected in (
+                    ('external', 'Selected Mihomo core is available.'),
+                    ('embedded', 'Experimental embedded engine is available.')):
+                with self.subTest(engine=engine), \
+                        patch('portalproxy.core_setup.can_install', side_effect=AssertionError('not needed')):
+                    note = core_readiness_note(engine, str(core))
+                    self.assertEqual(note, expected)
+                    self.assertNotEqual(i18n.text(note, 'zh'), note)
 
 class OnboardingTests(unittest.TestCase):
+    def test_preparation_and_first_step_match_supported_platform_setup(self):
+        for platform, machine, automatic in (
+                ('win32', 'AMD64', True), ('win32', 'ARM64', False),
+                ('darwin', 'arm64', False), ('linux', 'x86_64', False)):
+            with self.subTest(platform=platform, machine=machine), \
+                    patch('portalproxy.core_setup.sys.platform', platform), \
+                    patch('portalproxy.core_setup.platform.machine', return_value=machine):
+                preparation = onboarding.preparation_notes({})[-1]
+                first_step = onboarding.next_step('clash', False, 0)
+                if automatic:
+                    self.assertIn('Start sharing prepares a missing default core', preparation)
+                    self.assertIn('prepared automatically', first_step)
+                else:
+                    self.assertIn('Select your trusted Mihomo executable', preparation)
+                    self.assertIn('does not download a core automatically', preparation)
+                    self.assertIn('needs a trusted core', first_step)
+                    self.assertNotIn('prepared automatically', first_step)
+                embedded = onboarding.preparation_notes({'engine_mode': 'embedded'})[-1]
+                self.assertEqual(embedded, 'Select a matching native engine in Advanced settings, or switch to external Mihomo.')
+                for text in (preparation, first_step, embedded):
+                    self.assertNotEqual(i18n.text(text, 'zh'), text)
+
     def test_empty_first_launch(self):
         notes=onboarding.preparation_notes({})
         self.assertEqual(len(notes),2)

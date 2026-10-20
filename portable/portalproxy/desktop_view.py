@@ -21,6 +21,20 @@ SUBTITLES = dict(zip(PAGES, (
 )))
 
 
+def core_readiness_note(engine_mode, executable):
+    """Describe only the selected engine and this platform's supported setup."""
+    from pathlib import Path
+    from .core_setup import can_install
+    if executable and Path(executable).is_file():
+        return ('Experimental embedded engine is available.' if engine_mode == 'embedded'
+                else 'Selected Mihomo core is available.')
+    if engine_mode == 'embedded':
+        return 'Select a matching native engine in Advanced settings, or switch to external Mihomo.'
+    if can_install():
+        return 'The default core will be prepared when you click Start sharing.'
+    return 'Choose your verified Mihomo executable in Advanced settings, or reuse an existing Clash client.'
+
+
 def probe_note(runtime, language):
     """Distinguish measured partial rounds from a claim about the entire pool."""
     tested, total = runtime.get('probe_tested'), runtime.get('probe_total')
@@ -815,8 +829,7 @@ class DesktopView:
         executable = self.app.vars['native_path' if self.app.vars['engine_mode'].get() == 'embedded' else 'core_path'].get().strip()
         self.core_note_var.set(self.tr('Existing proxy selected; nodes and core are managed in Clash.') if linked else
             self.tr(self.app.core_message) if self.app.core_message else
-            self.tr('Default Mihomo is ready.') if executable and Path(executable).is_file() else
-            self.tr('The default core will be prepared when you click Start sharing.'))
+            self.tr(core_readiness_note(self.app.vars['engine_mode'].get(), executable)))
         auto_link = bool(self.app.existing_proxy and not self.app.vars['subscription_url'].get().strip()
             and not self.app.vars['profile_file'].get().strip() and not self.app.vars['subscription_file'].get().strip())
         from .core_setup import can_install

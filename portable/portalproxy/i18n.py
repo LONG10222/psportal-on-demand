@@ -6,6 +6,9 @@ from pathlib import Path
 import tempfile
 
 ZH = {
+    'Selected Mihomo core is available.': '已找到所选的 Mihomo 核心。',
+    'Experimental embedded engine is available.': '已找到实验性内嵌引擎。',
+    'Choose your verified Mihomo executable in Advanced settings, or reuse an existing Clash client.': '请在高级设置中选择已经核验的 Mihomo 可执行文件，或复用已有 Clash 客户端。',
     'Mihomo is selected automatically. Start sharing prepares a missing default core; Share existing Clash reuses the running client.': '首次使用默认采用 Mihomo，无需选择核心。点击“启动共享”会自动准备缺少的核心；复用已有 Clash 则使用它现有的代理。',
     '1. Paste once to import and save, then click Start sharing. The default Mihomo core is prepared automatically, or reuse an existing Clash client.': '第 1 步：粘贴一次导入并保存，再点击“启动共享”。默认核心会自动准备，也可以复用已有 Clash。',
     'Default Mihomo is ready.': '默认 Mihomo 已就绪，无需选择核心。',
