@@ -45,6 +45,14 @@ def main():
     source = NATIVE / 'dist/psportal-native-corresponding-source.tar.gz'
     env = dict(os.environ, PSPORTAL_NATIVE_BINARY=str(native))
     build = [sys.executable, PORTABLE / 'build.py', '--native-engine', native, '--native-source', source]
+    default_core = None
+    if system == 'windows':
+        from fetch_default_mihomo import prepare
+        default_core = prepare(Path(os.environ['RUNNER_TEMP']) / 'psportal-default-core')
+        build.extend(['--default-mihomo', default_core[0], '--mihomo-source', default_core[1],
+                      '--mihomo-complete-source', default_core[2]])
+        # Exercise exactly the distributable compatible core, not another fixture build.
+        env['MIHOMO_BINARY'] = str(default_core[0])
     if args.debian_runtime_notices:
         build.append('--debian-runtime-notices')
     if args.cpython_runtime_notices:
@@ -58,6 +66,12 @@ def main():
     assert bundled.is_file(), 'Matching native executable is missing from desktop package'
     assert hashlib.sha256(bundled.read_bytes()).digest() == hashlib.sha256(native.read_bytes()).digest()
     assert (bundled.parent / 'corresponding-source.tar.gz').read_bytes() == source.read_bytes()
+    if default_core:
+        from scripts.default_mihomo import verify, verify_complete_source
+        notice = executable.parent / 'licenses/mihomo-v1.19.32'
+        verify(executable.parent / 'mihomo.exe', notice / 'mihomo-v1.19.32-source.zip')
+        verify_complete_source(notice / 'corresponding-source.tar.gz', notice / 'mihomo-v1.19.32-source.zip')
+        env['MIHOMO_BINARY'] = str(executable.parent / 'mihomo.exe')
     env.update(PSPORTAL_BINARY=str(executable), PSPORTAL_DUAL_BINARY=str(executable))
     if args.frozen_window:
         env['PSPORTAL_FROZEN_WINDOW_TEST'] = '1'
@@ -90,10 +104,13 @@ def main():
         run([sys.executable, PORTABLE / 'scripts/verify_macos_archive.py',
              '--archive', archives[0], '--output', PORTABLE / 'build/final-macos-archive',
              '--evidence', release / 'MACOS-ARCHIVE-ACCEPTANCE.json'], env=env)
-    evidence = dict(source_commit=os.environ.get('GITHUB_SHA', ''), system=system, architecture=arch,
+    evidence = dict(source_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(), system=system, architecture=arch,
         platform=platform.platform(), python=sys.version, native_binary_sha256=hashlib.sha256(native.read_bytes()).hexdigest(),
         corresponding_source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
         tests_run=int(count.group(1)), tests_skipped=int(skips.group(1)) if skips else 0,
+        default_mihomo_bundled=bool(default_core),
+        default_mihomo_binary_sha256=hashlib.sha256(default_core[0].read_bytes()).hexdigest() if default_core else None,
+        default_mihomo_complete_source_sha256=hashlib.sha256(default_core[2].read_bytes()).hexdigest() if default_core else None,
         actual_external_core_tested=bool(env.get('MIHOMO_BINARY')),
         actual_frozen_gui_both_modes_tested=args.xvfb,
         native_platform_frozen_window_smoke_tested=args.frozen_window,

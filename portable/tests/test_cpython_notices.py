@@ -137,14 +137,30 @@ class CPythonNoticeTests(unittest.TestCase):
             root = Path(temporary)
             runtime_dll = root / 'VCRUNTIME140.dll'
             runtime_dll.write_bytes(b'owned test fixture')
+            extra_dll = root / 'VCRUNTIME140_1.dll'
+            extra_dll.write_bytes(b'additional owned test fixture')
             license_file = SOURCE / 'CPython-LICENSE'
             with patch.object(notices, 'WINDOWS_INSTALLED_LICENSE_SHA256', notices.sha256(license_file)), \
-                 patch.object(notices, 'WINDOWS_VCRUNTIME_SHA256', notices.sha256(runtime_dll)):
+                 patch.object(notices, 'WINDOWS_VCRUNTIME_SHA256', notices.sha256(runtime_dll)), \
+                 patch.object(notices, 'WINDOWS_VCRUNTIME_1_SHA256', notices.sha256(extra_dll)):
                 report = notices.retain_supplement(SOURCE, root / 'notices', license_file,
                     target_platform='win32', runtime=RUNTIME,
                     vcruntime_origin=runtime_dll, bundled_vcruntime=runtime_dll)
                 self.assertIn('Microsoft Distributable Code', report['microsoft_runtime']['classification'])
+                self.assertIn('Microsoft Distributable Code', report['microsoft_runtime_additional']['classification'])
                 self.assertFalse(report['distribution_approved'])
+                extra_dll.unlink()
+                with self.assertRaises(ValueError):
+                    notices.retain_supplement(SOURCE, root / 'missing-extra', license_file,
+                        target_platform='win32', runtime=RUNTIME,
+                        vcruntime_origin=runtime_dll, bundled_vcruntime=runtime_dll)
+                self.assertFalse((root / 'missing-extra').exists())
+                extra_dll.write_bytes(b'changed')
+                with self.assertRaises(ValueError):
+                    notices.retain_supplement(SOURCE, root / 'changed-extra', license_file,
+                        target_platform='win32', runtime=RUNTIME,
+                        vcruntime_origin=runtime_dll, bundled_vcruntime=runtime_dll)
+                self.assertFalse((root / 'changed-extra').exists())
                 runtime_dll.write_bytes(b'changed')
                 with self.assertRaises(ValueError):
                     notices.retain_supplement(SOURCE, root / 'changed', license_file,

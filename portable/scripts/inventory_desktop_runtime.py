@@ -331,6 +331,12 @@ def main(argv=None):
         if path.name in ('psportal-native', 'psportal-native.exe'):
             candidates += [dict(source=str(source), sha256=digest(source), type='REVIEWED_NATIVE')
                            for source in native_origins]
+        if relative == 'mihomo.exe' and sys.platform == 'win32':
+            from default_mihomo import BINARY_SHA256, VERSION
+            # A pinned upstream release is independent of PyInstaller's TOCs.
+            # Do not infer provenance merely from the executable's filename.
+            candidates += [dict(source='https://github.com/MetaCubeX/mihomo/releases/tag/' + VERSION,
+                                sha256=BINARY_SHA256, type='PINNED_OFFICIAL_MIHOMO')]
         # Relocated framework links may have a different destination name.
         if not candidates:
             candidates = [item for item in origins if item['type'] in BINARY_TYPES

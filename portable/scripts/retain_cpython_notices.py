@@ -28,6 +28,7 @@ MACOS_COMPONENTS = {'openssl': [3, 0, 21], 'zlib': '1.2.12', 'libmpdec': '4.0.1'
                     'unicode': '15.1.0', 'liblzma': '5.2.3'}
 WINDOWS_INSTALLED_LICENSE_SHA256 = '62bec384df47b0328307db41455ff6ea2559e5546b394ac69148561b21703120'
 WINDOWS_VCRUNTIME_SHA256 = 'd1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7'
+WINDOWS_VCRUNTIME_1_SHA256 = 'a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e'
 WINDOWS_COMPONENTS = {'openssl': [3, 5, 9], 'zlib': '1.3.1', 'libmpdec': '4.0.0',
                       'expat': 'expat_2.8.5', 'tcl': '8.6.15', 'tk_script': '8.6.15', 'unicode': '15.1.0'}
 
@@ -181,6 +182,17 @@ def retain_supplement(source, destination, installed_license, *, target_platform
         report['microsoft_runtime'] = dict(component='VCRUNTIME140.dll',
             classification='Microsoft Distributable Code, not PSF-licensed',
             origin=str(vcruntime_origin), sha256=WINDOWS_VCRUNTIME_SHA256,
+            notice='Full Additional Conditions for this Windows binary build in ../Python-LICENSE.txt',
+            scope='Unmodified runtime supplied with the audited Windows Python distribution only')
+        extra_origin = Path(vcruntime_origin).with_name('VCRUNTIME140_1.dll')
+        extra_bundled = Path(bundled_vcruntime).with_name('VCRUNTIME140_1.dll')
+        if any(not path.is_file() or sha256(path) != WINDOWS_VCRUNTIME_1_SHA256
+               for path in (extra_origin, extra_bundled)):
+            raise ValueError('Microsoft VCRUNTIME140_1.dll does not match the audited Python distribution')
+        report['microsoft_runtime_additional'] = dict(
+            component='VCRUNTIME140_1.dll',
+            classification='Microsoft Distributable Code, not PSF-licensed',
+            origin=str(extra_origin), sha256=WINDOWS_VCRUNTIME_1_SHA256,
             notice='Full Additional Conditions for this Windows binary build in ../Python-LICENSE.txt',
             scope='Unmodified runtime supplied with the audited Windows Python distribution only')
     else:

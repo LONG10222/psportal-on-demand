@@ -146,7 +146,7 @@ class FrozenGuiTests(unittest.TestCase):
                     status = next(widget for widget in widgets
                         if remote('winfo', 'class', widget) == 'TLabel'
                         and str(remote(widget, 'cget', '-text')) == 'Stopped')
-                    self.assertIn('Start listener', buttons)
+                    self.assertIn('Start sharing', buttons)
                     self.assertIn('Stop', buttons)
                     self.assertFalse((root / 'runtime').exists(), 'Opening GUI must not start the listener')
                     self.assertFalse(list(child_tmp.glob('psportal-native-*')))
@@ -168,7 +168,7 @@ class FrozenGuiTests(unittest.TestCase):
                             'Stopping must remove the native private configuration')
 
                     def start(cycle):
-                        remote(buttons['Start listener'], 'invoke')
+                        remote(buttons['Start sharing'], 'invoke')
                         wait_for(lambda: ready_records(str(remote(log, 'get', '1.0', 'end')),
                             mode, '127.0.0.1', listen) >= cycle + 1, state=f'{mode} readiness record')
                         if mode == 'embedded':
@@ -185,7 +185,7 @@ class FrozenGuiTests(unittest.TestCase):
                         self.assertFalse(list((root / 'runtime').glob('session-*/providers/subscription.yaml')),
                             'Socket probes must not load an external provider')
                         self.assertNotIn('Core: starting', str(remote(log, 'get', '1.0', 'end')))
-                        self.assertEqual(str(remote(buttons['Start listener'], 'cget', '-state')), 'disabled')
+                        self.assertEqual(str(remote(buttons['Start sharing'], 'cget', '-state')), 'disabled')
                         self.assertEqual(str(remote(buttons['Save / validate'], 'cget', '-state')), 'disabled')
                         self.assertEqual(str(remote(buttons['Stop'], 'cget', '-state')), 'normal')
 
@@ -193,8 +193,8 @@ class FrozenGuiTests(unittest.TestCase):
                     for cycle in range(2):
                         start(cycle)
                         remote(buttons['Stop'], 'invoke')
-                        wait_for(lambda: str(remote(buttons['Start listener'], 'cget', '-state')) == 'normal',
-                            state='re-enabled Start listener button')
+                        wait_for(lambda: str(remote(buttons['Start sharing'], 'cget', '-state')) == 'normal',
+                            state='re-enabled Start sharing button')
                         self.assertEqual(str(remote(status, 'cget', '-text')), 'Stopped')
                         self.assertEqual(str(remote(buttons['Stop'], 'cget', '-state')), 'disabled')
                         self.assertEqual(str(remote(buttons['Save / validate'], 'cget', '-state')), 'normal')
