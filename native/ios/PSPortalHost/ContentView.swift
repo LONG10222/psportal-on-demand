@@ -23,16 +23,16 @@ struct ContentView: View {
     }
 
     private func t(_ zh: String, _ en: String) -> String { model.t(zh, en) }
-    // Shared StarPass slate/blue language; native semantic text and Dynamic Type remain intact.
-    private var primaryAccent: Color { Color(red: 0.14, green: 0.39, blue: 0.74) }
+    // Static anime navigator theme; semantic text, Dynamic Type and lifecycle remain intact.
+    private var primaryAccent: Color { Color(red: 0.34, green: 0.25, blue: 0.72) }
     private var brandAccent: Color {
-        model.darkAppearance ? Color(red: 0.48, green: 0.70, blue: 1.0) : primaryAccent
+        model.darkAppearance ? Color(red: 0.68, green: 0.68, blue: 1.0) : primaryAccent
     }
     private var pageSurface: Color {
-        model.darkAppearance ? Color(red: 0.06, green: 0.09, blue: 0.13) : Color(red: 0.95, green: 0.97, blue: 0.99)
+        model.darkAppearance ? Color(red: 0.065, green: 0.065, blue: 0.14) : Color(red: 0.965, green: 0.96, blue: 0.99)
     }
     private var cardSurface: Color {
-        model.darkAppearance ? Color(red: 0.11, green: 0.15, blue: 0.20) : Color(.secondarySystemGroupedBackground)
+        model.darkAppearance ? Color(red: 0.115, green: 0.12, blue: 0.22) : Color(.secondarySystemGroupedBackground)
     }
     private var running: Bool { model.state == .running }
     private var transitioning: Bool { model.state == .starting || model.state == .stopping }
@@ -92,7 +92,7 @@ struct ContentView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10)).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(t("星渡", "StarPass")).font(.title3.bold())
-                Text(t("让设备轻松连接", "Connect your devices")).font(.caption).foregroundStyle(.secondary)
+                Text(t("星海领航 · 轻松连接", "Star-sea navigator")).font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)
             Menu {
@@ -122,7 +122,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 16, content: content)
             .frame(maxWidth: .infinity, alignment: .leading).padding(20)
             .background(cardSurface, in: RoundedRectangle(cornerRadius: 20))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(brandAccent.opacity(model.darkAppearance ? 0.20 : 0.12), lineWidth: 1))
     }
 
     private func sectionTitle(_ title: String, detail: String? = nil) -> some View {
@@ -139,11 +139,50 @@ struct ContentView: View {
         }.accessibilityAddTraits(.isHeader)
     }
 
+    // The original character is decorative, never a control or network-status indicator.
+    // Fixed artwork (no animation/timers) respects reduced motion without additional settings.
+    private var navigatorHero: some View {
+        (dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 16))) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(t("星海领航员", "STAR-SEA NAVIGATOR"))
+                    .font(.caption.weight(.semibold)).tracking(1.2)
+                    .foregroundStyle(Color(red: 0.77, green: 0.83, blue: 1.0))
+                Text(t("从这里，开始连接", "Start your connection"))
+                    .font(.title2.bold()).foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
+                Text(t("沿着星轨，让连接更简单。", "Follow the stars. Connect with clarity."))
+                    .font(.subheadline).foregroundStyle(Color.white.opacity(0.86))
+                    .fixedSize(horizontal: false, vertical: true)
+            }.frame(maxWidth: .infinity, alignment: .leading)
+            Image("StarPassMark").resizable().scaledToFit()
+                .frame(width: dynamicTypeSize.isAccessibilitySize ? 72 : 96,
+                       height: dynamicTypeSize.isAccessibilitySize ? 72 : 96)
+                .background(Color.black, in: RoundedRectangle(cornerRadius: 24))
+                .clipShape(RoundedRectangle(cornerRadius: 24))
+                .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.white.opacity(0.25), lineWidth: 1))
+                .shadow(color: Color(red: 0.47, green: 0.38, blue: 0.95).opacity(0.35), radius: 16)
+                .accessibilityHidden(true)
+        }
+        .padding(20).frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            ZStack {
+                LinearGradient(colors: [Color(red: 0.12, green: 0.14, blue: 0.32),
+                                        Color(red: 0.22, green: 0.15, blue: 0.39)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+                NavigatorStarfield().allowsHitTesting(false).accessibilityHidden(true)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(brandAccent.opacity(0.30), lineWidth: 1))
+        .accessibilityIdentifier("animeNavigatorHero")
+    }
+
     private var sharingPage: some View {
         page {
+            navigatorHero
             VStack(alignment: .leading, spacing: 8) {
-                Text(t("从这里，开始连接", "Start your connection"))
-                    .font(.title2.bold()).accessibilityAddTraits(.isHeader)
                 Text(t("游戏模式 · 设备共享", "Game mode · Device sharing"))
                     .font(.subheadline.weight(.medium)).accessibilityIdentifier("availableProductMode")
                 Text(networkTitle).font(.caption).foregroundStyle(.secondary)
@@ -512,6 +551,33 @@ struct ContentView: View {
         guard let value, value > 0, value <= 253402300799 else { return t("未提供", "Not provided") }
         let date = Date(timeIntervalSince1970: Double(value))
         return date.formatted(date: .numeric, time: .omitted) + (date < Date() ? t(" · 已到期", " · Expired") : "")
+    }
+}
+
+
+// Native vector decoration: no external image downloads, animation or secret-bearing labels.
+private struct NavigatorStarfield: View {
+    var body: some View {
+        Canvas { context, size in
+            let stars: [(CGFloat, CGFloat, CGFloat)] = [
+                (0.05, 0.16, 1.8), (0.18, 0.07, 1.2), (0.35, 0.16, 1.0),
+                (0.54, 0.09, 1.5), (0.72, 0.12, 2.2), (0.90, 0.05, 1.0),
+                (0.97, 0.30, 1.4), (0.64, 0.83, 1.5), (0.84, 0.92, 1.2),
+                (0.40, 0.95, 1.0), (0.08, 0.91, 1.2), (0.96, 0.80, 1.0)
+            ]
+            for (x, y, radius) in stars {
+                let center = CGPoint(x: size.width * x, y: size.height * y)
+                let dot = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius,
+                                                width: radius * 2, height: radius * 2))
+                context.fill(dot, with: .color(.white.opacity(0.45)))
+            }
+            var orbit = Path()
+            orbit.move(to: CGPoint(x: size.width * 0.50, y: 0))
+            orbit.addCurve(to: CGPoint(x: size.width, y: size.height * 0.85),
+                           control1: CGPoint(x: size.width * 0.58, y: size.height * 0.55),
+                           control2: CGPoint(x: size.width * 0.85, y: size.height * 1.1))
+            context.stroke(orbit, with: .color(.white.opacity(0.12)), lineWidth: 1)
+        }
     }
 }
 

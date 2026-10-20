@@ -1,3 +1,10 @@
+## 2026-10-20 — Anime star-sea navigator (draft)
+
+- Give desktop (Windows/macOS/Linux), Android, iOS and LuCI a visible anime navigator hero using the original approved character, not a replacement app icon.
+- Unify restrained blue-violet surfaces with static native/CSS star trails; no downloaded artwork, animation, timers or new permissions.
+- Keep setup/start controls readable and separate from decorative artwork; adapt native mobile hero layouts for narrow screens and large text.
+- Preserve connection, privacy, networking, Apple lifecycle and game-mode boundaries. Build checks and offline fixture screenshots do not establish real-device or network acceptance.
+
 ## 2026-10-20 — Cross-platform visual clarity (draft)
 
 - Extend the shared desktop slate/blue visual language to native Android and iOS without copying desktop controls or changing the approved artwork.
