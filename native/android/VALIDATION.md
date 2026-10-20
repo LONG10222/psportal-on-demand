@@ -1,5 +1,30 @@
 # Android validation record
 
+## 2026-10-20 Android capability admission and Windows verification
+
+Based on StarPass anime navigator `e28e197`. Refs #19. No portable/Windows,
+Apple or router implementation is modified by this Android change.
+
+- Reproduced Chinese Windows `UnicodeDecodeError` in `check_project.py` with
+  default GBK decoding. Explicit UTF-8 reads/writes, Java compiler encoding and a
+  PowerShell host runner remove the failure without changing the host locale.
+- 369 JVM assertions pass locally: 241 host/controller, 105 runtime/product/
+  accounting, 8 background and 15 phone state; XML/source guards and 17 compiled
+  manifest/notice helper tests pass. These are host tests, not device execution.
+- New cases cover all service/native topology pairs, missing/non-boolean flags
+  and Game-only availability with another VPN. Services reject mismatched inputs
+  before native Start; phone consent/conflict gates remain independent.
+- UI disables Mixed/Clash and phone opt-in when another VPN is present, blocks
+  Start for a stale phone selection, and leaves Game selectable. Disconnecting
+  that VPN restores choices. Android has no external-Clash association feature.
+- adb platform tools were downloaded locally; `adb devices -l` returned no
+  device. No install, logcat, Android instrumentation, real VPN/TUN, hotspot,
+  OEM/background or actual game test was performed. No phone data was changed.
+- CI now builds/lints and audits both unsigned release and debug APKs using the
+  same real AAR; matching corresponding source, notices and checksums accompany
+  them. Inspect this change's exact-revision CI result, not a prior green run.
+  Signing is unchanged: installation still needs separately authorized signing.
+
 ## 2026-10-19 StarPass product modes and profile selectors
 
 Local checked source adds Game/Mixed/Clash next-session input presets, manual

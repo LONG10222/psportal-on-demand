@@ -16,6 +16,14 @@ public enum ProductMode {
     public static boolean canChange(SessionController.Phase phase, boolean setupPending, boolean phoneVpnActive) {
         return (phase == SessionController.Phase.STOPPED || phase == SessionController.Phase.ERROR) && !setupPending && !phoneVpnActive;
     }
+    public boolean available(boolean otherVpnActive) {
+        return !phoneVpn || !otherVpnActive;
+    }
+    /** The service envelope must describe the same inputs as the native config. */
+    public static boolean matchesSessionInputs(boolean lan, boolean phone, Object configLan, Object configPhone) {
+        return fromInputs(lan, phone) != null && configLan instanceof Boolean && configPhone instanceof Boolean
+                && ((Boolean) configLan) == lan && ((Boolean) configPhone) == phone;
+    }
     public String label(boolean english) {
         switch (this) {
             case GAME: return english ? "Game" : "游戏";

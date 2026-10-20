@@ -49,6 +49,17 @@ public final class RuntimeNodePresentationTests {
             check(!mode.label(true).isEmpty() && !mode.label(false).isEmpty(), "Product label is bilingual");
             check(!mode.description(true).isEmpty() && !mode.description(false).isEmpty(), "Product boundaries are bilingual");
         }
+        for (ProductMode mode : ProductMode.values()) {
+            check(mode.available(false), "Every mode is available without another VPN");
+            check(mode.available(true) == (mode == ProductMode.GAME), "Another VPN permits only LAN game mode");
+            for (ProductMode envelope : ProductMode.values())
+                check(ProductMode.matchesSessionInputs(envelope.lanEnabled, envelope.phoneVpn, mode.lanEnabled, mode.phoneVpn)
+                        == (mode == envelope), "Service flags must match native inputs exactly");
+        }
+        check(!ProductMode.matchesSessionInputs(false, false, false, false), "No-input service config is rejected");
+        check(!ProductMode.matchesSessionInputs(true, false, "true", false), "String LAN flags cannot bypass admission");
+        check(!ProductMode.matchesSessionInputs(true, false, true, "false"), "String phone flags cannot bypass admission");
+        check(!ProductMode.matchesSessionInputs(true, false, null, false), "Missing native input flag is rejected");
         check(ProductMode.fromInputs(false, false) == null, "Both inputs off never silently enables a preset");
         check(ProductMode.GAME.description(true).contains("separate checks"), "Game setup separates service, connection and verified access");
         check(ProductMode.GAME.description(false).contains("分别确认"), "Chinese game setup preserves verification boundaries");

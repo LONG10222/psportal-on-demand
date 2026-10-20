@@ -35,7 +35,7 @@ assert all(element.attrib[t+'ignore'] == 'ForegroundServicePermission' for eleme
 assert service.attrib[a+'stopWithTask'] == 'false', 'Background-on runs survive Recents removal'
 assert not app.findall('receiver')
 src = root/'app/src/main/java/org/psportal/host'
-service_source = (src/'ProxyService.java').read_text()
+service_source = (src/'ProxyService.java').read_text(encoding="utf-8")
 assert 'START_NOT_STICKY' in service_source and 'START_STICKY' not in service_source
 assert 'onTaskRemoved' in service_source and 'onDestroy' in service_source
 # API26 emulator regression: task removal has an internal framework start ID,
@@ -48,14 +48,14 @@ assert 'if (startId != latestStartId) return;' in service_source
 assert 'if (taskRemoved || taskRemovedSinceCommand) stopSelf();' in service_source
 assert 'REQUEST_IGNORE_BATTERY_OPTIMIZATIONS' not in permissions
 assert 'android.permission.WAKE_LOCK' not in permissions, 'No unmeasured battery locks'
-native_source = (src/'NativeEngine.java').read_text()
+native_source = (src/'NativeEngine.java').read_text(encoding="utf-8")
 assert 'org.psportal.engine.androidmobile.Androidmobile' in native_source
 assert 'Androidmobile.start(configJson)' in native_source
 for source in src.glob('*.java'):
-    content = source.read_text()
+    content = source.read_text(encoding="utf-8")
     assert 'ProcessBuilder' not in content and 'Runtime.getRuntime().exec' not in content
     if 'extends VpnService' in content: assert source.name == 'PhoneVpnService.java'
-build = (root/'app/build.gradle').read_text()
+build = (root/'app/build.gradle').read_text(encoding="utf-8")
 assert build.count('signingConfig = null') == 2
 assert 'targetSdk 36' in build and 'minSdk 26' in build
 assert 'verifyEmbeddedEngine' in build
@@ -66,10 +66,10 @@ assert "include 'arm64-v8a', 'x86_64'" in build and 'universalApk false' in buil
 strings = {entry.attrib.get('name') for entry in ET.parse(root/'app/src/main/res/values/strings.xml').getroot()}
 import re
 for source in src.glob('*.java'):
-    for name in re.findall(r'R\.string\.([a-zA-Z_0-9]+)', source.read_text()):
+    for name in re.findall(r'R\.string\.([a-zA-Z_0-9]+)', source.read_text(encoding="utf-8")):
         if name != 'cancel': assert name in strings, f'Missing string {name}'
 for resource in root.glob('app/src/main/res/**/*.xml'): ET.parse(resource)
-activity = (src/'MainActivity.java').read_text()
+activity = (src/'MainActivity.java').read_text(encoding="utf-8")
 assert 'getBoolean("english", false)' in activity and 'getBoolean("dark", true)' in activity
 assert 'recreate()' not in activity, 'Language/theme changes must preserve active service and inputs'
 assert 'FLAG_SECURE' in activity and 'IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS' in activity
@@ -85,21 +85,24 @@ assert 'return number >= 0' in activity, 'Missing metrics must stay unknown'
 assert 'getMessage()' not in activity, 'Never expose untrusted subscription/native exceptions'
 assert 'Androidmobile.prepare()' in native_source and 'Androidmobile.testNodes()' in native_source
 assert 'Androidmobile.selectNodeWithThreshold' in native_source
-session = (src/'SessionController.java').read_text()
+session = (src/'SessionController.java').read_text(encoding="utf-8")
 assert 'teardownFinished || commandPending' in session, 'Restart must wait for old probe lane'
-assert 'portal-node-probes' in (src/'PortalApplication.java').read_text()
-assert 'LanSetup.safeInterface(network.getName())' in (src/'NetworkAddresses.java').read_text()
+assert 'portal-node-probes' in (src/'PortalApplication.java').read_text(encoding="utf-8")
+assert 'LanSetup.safeInterface(network.getName())' in (src/'NetworkAddresses.java').read_text(encoding="utf-8")
 assert (root/'app/src/main/res/values-en/strings.xml').exists()
 print('PASS: Android manifest, lifecycle, JNI, simple-home privacy/localization and XML structural guards')
 
-vpn = (src/'PhoneVpnService.java').read_text()
+vpn = (src/'PhoneVpnService.java').read_text(encoding="utf-8")
 assert 'START_NOT_STICKY' in vpn and 'START_STICKY' not in vpn
 assert 'VpnService.prepare(this)' in vpn and 'hasVpnConflict(this)' in vpn
 # Both foreground entries must reject missing/revoked VPN consent before using
 # systemExempted. LAN operation continues to request only connectedDevice.
 proxy_start = service_source.split('@Override public int onStartCommand(', 1)[1].split('private boolean notificationsAllowed()', 1)[0]
 vpn_start = vpn.split('@Override public int onStartCommand(', 1)[1].split('private void startTunnel(', 1)[0]
-assert '(!requestedLan && !requestedPhone)' in proxy_start
+assert '!inputsMatch(config, requestedLan, requestedPhone)' in proxy_start
+assert 'ProductMode.matchesSessionInputs(lan, phone, json.opt("lan_enabled"), json.opt("phone_vpn"))' in service_source
+assert proxy_start.index('!inputsMatch(') < proxy_start.index('startForeground(')
+assert 'mode.available(otherVpnActive)' in activity and '(!phoneApps.isChecked() || !otherVpnActive)' in activity
 assert '(requestedPhone && (android.net.VpnService.prepare(this) != null || PhoneVpnService.hasVpnConflict(this)))' in proxy_start
 # Framework start IDs change on ignored duplicate commands. Startup identity is
 # fenced by SessionController, while service cleanup must use the newest ID.
@@ -132,14 +135,14 @@ print('PASS: optional Android-only dual-stack VPN, consent, conflict, socket pro
 
 # These are source guardrails only; actual widget and OS-consent behavior remains
 # covered by Android instrumentation/device checks, never inferred from strings.
-config_source = (src/'HostConfig.java').read_text()
+config_source = (src/'HostConfig.java').read_text(encoding="utf-8")
 assert 'ROUTING_MODES = {"rule", "global", "direct"}' in activity
 assert 'getString("routing_mode", "rule")' in activity
 assert 'getBoolean("lan_enabled", true)' in activity
 assert 'phoneApps.setChecked(PhoneVpnService.isRequested())' in activity
 assert '.putBoolean("phone_vpn"' not in activity, 'Never save consent intent as a standing opt-in'
 assert 'boolean hasSelectedTraffic = lanSharing.isChecked() || phoneApps.isChecked();' in activity
-assert 'start.setEnabled(editable && hasSelectedTraffic)' in activity
+assert 'start.setEnabled(canStartSelected)' in activity
 assert 'if (!lanSharing.isChecked()) { configureStart(null); return; }' in activity
 assert 'pendingConfig.lanEnabled && Permissions.requiresLocalNetwork' in activity
 assert 'requested.lanEnabled && !NetworkAddresses.isAssigned' in activity
@@ -196,7 +199,7 @@ assert 'session and reset after Stop' in activity
 assert 'Androidmobile.groupChoices(group)' in native_source and 'Androidmobile.selectGroup(group, choice)' in native_source
 print('PASS: bounded session-fenced manual groups, honest latency/accounting and visible network refresh guards')
 
-product_mode = (src/'ProductMode.java').read_text()
+product_mode = (src/'ProductMode.java').read_text(encoding="utf-8")
 assert 'GAME(true, false), MIXED(true, true), CLASH(false, true)' in product_mode
 assert 'return null;' in product_mode, 'Both inputs off must not silently enable another mode'
 assert 'TCP only' in product_mode and 'not guaranteed' in product_mode

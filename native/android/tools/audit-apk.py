@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
 """Read-only structural audit for the unsigned development APK; not device execution."""
-import argparse, hashlib, json, pathlib, struct, subprocess, zipfile
+import argparse, hashlib, json, os, pathlib, struct, subprocess, zipfile
 from apk_manifest import VERSION_CODE, VERSION_NAME, audit_manifest
 p = argparse.ArgumentParser()
 p.add_argument('apk', type=pathlib.Path)
@@ -11,6 +11,10 @@ p.add_argument('--abis', nargs='+', choices=['arm64-v8a', 'x86_64'], default=['a
                help='Exact expected ABI set; defaults to the universal APK')
 a = p.parse_args()
 tools = a.sdk / 'build-tools/35.0.0'
+def sdk_tool(name):
+    suffix = ('.bat' if name == 'apksigner' else '.exe') if os.name == 'nt' else ''
+    return str(tools / (name + suffix))
+
 report = {'apk': a.apk.name, 'sha256': hashlib.sha256(a.apk.read_bytes()).hexdigest(), 'bytes': a.apk.stat().st_size, 'native_libraries': {}}
 with zipfile.ZipFile(a.apk) as apk:
     for asset in ['assets/licenses/ENGINE-NOTICES.txt', 'assets/licenses/GPL-3.0.txt', 'assets/licenses/PROJECT-MIT.txt', 'classes.dex', 'AndroidManifest.xml']:
@@ -36,24 +40,24 @@ with zipfile.ZipFile(a.apk) as apk:
                 loads.append(align)
         assert loads and apk.getinfo(name).compress_type == zipfile.ZIP_STORED
         report['native_libraries'][abi] = {'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest(), 'load_segment_alignments': loads, 'stored_uncompressed': True}
-aligned = subprocess.run([str(tools/'zipalign'), '-c', '-P', '16', '-v', '4', str(a.apk)], text=True, capture_output=True)
+aligned = subprocess.run([sdk_tool('zipalign'), '-c', '-P', '16', '-v', '4', str(a.apk)], text=True, encoding='utf-8', capture_output=True)
 assert aligned.returncode == 0, aligned.stdout + aligned.stderr
 report['zipalign_16k'] = 'passed'
-badging = subprocess.check_output([str(tools/'aapt2'), 'dump', 'badging', str(a.apk)], text=True)
+badging = subprocess.check_output([sdk_tool('aapt2'), 'dump', 'badging', str(a.apk)], text=True, encoding='utf-8')
 for expected in ["package: name='org.psportal.host'", "minSdkVersion:'26'", "targetSdkVersion:'36'", "launchable-activity: name='org.psportal.host.MainActivity'"]:
     assert expected in badging, expected
 assert 'RECEIVE_BOOT_COMPLETED' not in badging
-manifest = subprocess.check_output([str(tools/'aapt2'), 'dump', 'xmltree', str(a.apk), '--file', 'AndroidManifest.xml'], text=True)
+manifest = subprocess.check_output([sdk_tool('aapt2'), 'dump', 'xmltree', str(a.apk), '--file', 'AndroidManifest.xml'], text=True, encoding='utf-8')
 a.report.parent.mkdir(parents=True, exist_ok=True)
-(a.report.parent/'compiled-manifest.txt').write_text(manifest)
+(a.report.parent/'compiled-manifest.txt').write_text(manifest, encoding="utf-8")
 report['compiled_manifest'] = audit_manifest(manifest)
 report['package'] = 'org.psportal.host'; report['min_sdk'] = 26; report['target_sdk'] = 36
 report['version_code'] = VERSION_CODE; report['version_name'] = VERSION_NAME
-signature = subprocess.run([str(tools/'apksigner'), 'verify', '--verbose', str(a.apk)], text=True, capture_output=True)
+signature = subprocess.run([sdk_tool('apksigner'), 'verify', '--verbose', str(a.apk)], text=True, encoding='utf-8', capture_output=True)
 # This workflow intentionally creates no signing identity. Require the specific
 # unsigned failure, not an arbitrary verifier error, so packaging defects fail.
 assert signature.returncode != 0 and 'Missing META-INF/MANIFEST.MF' in signature.stderr, signature.stdout + signature.stderr
 report['signing'] = 'unsigned; Android installation requires separately authorized signing'
 a.report.parent.mkdir(parents=True, exist_ok=True)
-a.report.write_text(json.dumps(report, indent=2)+'\n')
+a.report.write_text(json.dumps(report, indent=2)+'\n', encoding='utf-8')
 print(json.dumps(report, indent=2))

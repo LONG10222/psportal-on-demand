@@ -202,7 +202,7 @@ public final class MainActivity extends Activity {
         lanSharing.setOnCheckedChangeListener((view, checked) -> { prefs().edit().putBoolean("lan_enabled", checked).apply(); refreshNetwork(); render(); });
         phoneApps.setOnCheckedChangeListener((view, checked) -> {
             if (!checked && PhoneVpnService.isRequested()) PhoneVpnService.stop(this);
-            else if (checked && (!session.snapshot().canStart() || PhoneVpnService.isActive())) {
+            else if (checked && (!session.snapshot().canStart() || PhoneVpnService.isActive() || PhoneVpnService.hasVpnConflict(this))) {
                 phoneApps.setChecked(false); return;
             }
             render();
@@ -211,6 +211,7 @@ public final class MainActivity extends Activity {
             if (updatingProductMode) return;
             if (!canChangeProductMode()) { syncProductMode(); return; }
             for (ProductMode mode : ProductMode.values()) if (productModeIds[mode.ordinal()] == checkedId) {
+                if (!mode.available(PhoneVpnService.hasVpnConflict(this))) { syncProductMode(); render(); return; }
                 // Presets only update the next session's inputs. The existing
                 // Start path still owns every permission and VPN consent check.
                 updatingProductMode = true; vpnConsentGranted = false; resumeAfterVpnConsent = false;
@@ -736,9 +737,14 @@ public final class MainActivity extends Activity {
         for (View view : configurationViews) view.setEnabled(editable);
         // Phone routing may be stopped independently while LAN sharing continues.
         // Turning it back on requires a new stopped-session Start and consent check.
-        phoneApps.setEnabled(editable || snapshot.phase == SessionController.Phase.RUNNING && phoneApps.isChecked());
+        boolean otherVpnActive = editable && PhoneVpnService.hasVpnConflict(this);
+        for (ProductMode mode : ProductMode.values())
+            productModes.findViewById(productModeIds[mode.ordinal()]).setEnabled(editable && mode.available(otherVpnActive));
+        phoneApps.setEnabled(editable && !otherVpnActive || snapshot.phase == SessionController.Phase.RUNNING && phoneApps.isChecked());
+        if (otherVpnActive) productModeDescription.append(t("\n检测到其他 VPN：混合 / Clash 不可用。可选择游戏模式；本应用不会联动或控制其他 Clash。断开其他 VPN 后可重新选择。", "\nAnother VPN is active: Mixed / Clash are unavailable. Game remains available; this app does not link to or control another Clash client. Disconnect the other VPN to choose phone routing."));
         boolean hasSelectedTraffic = lanSharing.isChecked() || phoneApps.isChecked();
-        start.setEnabled(editable && hasSelectedTraffic); manualStart.setEnabled(editable && hasSelectedTraffic);
+        boolean canStartSelected = editable && hasSelectedTraffic && (!phoneApps.isChecked() || !otherVpnActive);
+        start.setEnabled(canStartSelected); manualStart.setEnabled(canStartSelected);
         stop.setEnabled(preparing || pendingConfig != null || launchRequested || PhoneVpnService.isActive() || snapshot.isActive() && snapshot.phase != SessionController.Phase.STOPPING);
         JSONObject nativeState;
         try { nativeState = new JSONObject(snapshot.nativeStatus); } catch (org.json.JSONException invalid) { nativeState = new JSONObject(); }
