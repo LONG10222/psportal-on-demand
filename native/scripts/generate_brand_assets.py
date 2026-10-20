@@ -17,7 +17,7 @@ import struct
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = "assets/branding/starpass-original.png"
 MANIFEST = "assets/branding/manifest.json"
-SOURCE_SHA256 = "cded3888e0a9538615cf9b0841147400f214b7480ac992ef002b729c0006bfab"
+SOURCE_SHA256 = "c2c78755d5b73fc5e2897bfbc418525956932add2222319bb21cc3ec5fe3aa54"
 PILLOW_VERSION = "12.3.0"
 ANDROID = "android/app/src/main/res"
 CATALOG = "ios/PSPortalHost/Assets.xcassets"
