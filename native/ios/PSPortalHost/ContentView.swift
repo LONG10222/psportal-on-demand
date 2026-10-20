@@ -125,7 +125,7 @@ struct ContentView: View {
         page {
             card {
                 HStack {
-                    Label(t("设备共享", "Device sharing"), systemImage: "gamecontroller")
+                    Label(t("游戏模式 · 设备共享", "Game mode · Device sharing"), systemImage: "gamecontroller")
                         .font(.subheadline.weight(.medium)).accessibilityIdentifier("availableProductMode")
                     Spacer()
                     Label(networkTitle, systemImage: network.snapshot.uplink == .cellular ? "antenna.radiowaves.left.and.right" : "wifi")
@@ -144,6 +144,9 @@ struct ContentView: View {
                     }
                     if transitioning { Spacer(minLength: 0); ProgressView() }
                 }
+                Text(t("启动共享 → 设备设置手动代理 → 在设备上验证访问。监听就绪或有连接，不代表外网访问已成功。仅 HTTP/TCP，不接管游戏 UDP；默认保持前台。", "Start sharing → set the device’s manual proxy → verify access on the device. A ready listener or a connection does not prove Internet access. HTTP/TCP only, not game UDP; foreground by default."))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("gameSetupGuide")
                 Divider()
                 HStack {
                     metric(t("接入设备", "Devices"), value: model.activeDevices)

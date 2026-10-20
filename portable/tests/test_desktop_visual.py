@@ -76,6 +76,18 @@ class DesktopVisualEvidenceTests(unittest.TestCase):
                 self.assertFalse(app.view.runtime_panel.winfo_ismapped())
                 self.assertFalse(app.view.node_controls.winfo_ismapped())
                 visible(app.view.quick_button)
+                visible(app.view.preflight_button)
+                visible(app.view.core_setup_button)
+                with patch('tkinter.messagebox.showinfo') as help_dialog:
+                    app.view.preflight_button.invoke()
+                self.assertIn('首次使用', help_dialog.call_args.args[1])
+                self.assertIsNone(app.backend.process)
+                self.assertIn('第 1 步', app.view.hero_note_var.get())
+                app.view.observe('Core: failed')
+                self.assertIn(app._t('failed'), app.view.hero_note_var.get())
+                app.view.observe('Core: starting')
+                self.assertIn(app._t('starting'), app.view.hero_note_var.get())
+                app.view.observe('Core: stopped')
                 save('simple-home-zh-dark')
                 provider = folder / 'synthetic-provider.json'
                 provider.write_text(json.dumps({'proxies': [

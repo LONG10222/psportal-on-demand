@@ -23,6 +23,8 @@ http.header('Cache-Control', 'no-store')
 local cursor = require('uci').cursor()
 local options = cursor:get_all('portalproxy', 'main') or {}
 local linked = options.core_mode == 'openclash'
+local game_mode = form:field(DummyValue, '_game_mode', translate('Game mode / 游戏模式'))
+game_mode.value = translate('Game-device sharing (HTTP/TCP). Configure the allowed device, start the service, then enter this router address and proxy port in the device manual HTTP proxy settings. Verify a webpage on the device before testing the intended game feature. Listener ready or a connection does not prove Internet access. Game UDP and whole-device routing are not provided. Turn off the device HTTP proxy when finished.')
 local core_mode = form:field(ListValue, 'core_mode', translate('Core ownership'),
     translate('Standalone starts and stops its own core. OpenClash linked reuses the already running external core; final DNS, rules and DIRECT choices stay with OpenClash. Idle closes only StarPass sessions. HTTP sharing does not carry game UDP.'))
 core_mode:value('standalone', translate('Standalone on-demand core'))

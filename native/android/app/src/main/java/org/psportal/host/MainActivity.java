@@ -232,7 +232,7 @@ public final class MainActivity extends Activity {
         LinearLayout guide = card(layout);
         address = text(guide, "准备后显示服务器和端口", "Server and port appear after preparation", 17, true, false);
         address.setTextIsSelectable(true);
-        text(guide, "1. 让设备加入同一个可互通的 Wi-Fi\n2. 打开设备 Wi-Fi 设置 → HTTP 代理 → 手动\n3. 填写上方服务器和端口，认证关闭", "1. Join the same reachable Wi-Fi\n2. Open the device Wi-Fi settings → HTTP Proxy → Manual\n3. Enter the server and port above; leave authentication off", 14, false, false);
+        text(guide, "1. 让设备加入同一个可互通的 Wi-Fi\n2. 打开设备 Wi-Fi 设置 → HTTP 代理 → 手动\n3. 填写上方服务器和端口，认证关闭\n4. 在设备上打开网页验证，再测试目标游戏功能", "1. Join the same reachable Wi-Fi\n2. Open the device Wi-Fi settings → HTTP Proxy → Manual\n3. Enter the server and port above; leave authentication off\n4. Open a webpage on the device, then test the intended game feature", 14, false, false);
         text(guide, "IP 变化后需重新准备并更新设备设置。停止使用时，将设备 HTTP 代理恢复为关闭。仅支持 HTTP/HTTPS CONNECT，不保证 UDP 游戏或串流可用。", "Prepare again and update the device if the IP changes. Turn its HTTP proxy off when finished. HTTP/HTTPS CONNECT only; UDP games and streaming are not guaranteed.", 12, false, true);
 
         advancedToggle = button(layout, "高级设置 ▾", "Advanced settings ▾", false, v -> {
@@ -710,7 +710,7 @@ public final class MainActivity extends Activity {
         if (snapshot.phase == SessionController.Phase.RUNNING) {
             counts = t("局域网设备：", "LAN devices: ") + (clients == null ? t("未提供", "Not provided") : clients) + t(" · 连接：", " · Connections: ") + (connections == null ? t("未提供", "Not provided") : connections);
             if (clients == null && count(nativeState, "active") != null) counts += "\n" + t("外部连接：", "External connections: ") + count(nativeState, "active");
-            counts += "\n" + t("设备数仅统计连接到本程序的不同来源 IP，不是所有 Wi-Fi 设备。", "Devices count distinct source IPs connected to this app, not all Wi-Fi devices.");
+            counts += "\n" + t("设备数仅统计连接到本程序的不同来源 IP，不是所有 Wi-Fi 设备。有连接不代表外网访问成功，请在设备上验证。", "Devices count distinct source IPs connected to this app, not all Wi-Fi devices. A connection does not prove Internet access; verify on the device.");
         }
         if (!nativeState.optBoolean("lan_enabled", lanSharing.isChecked())) counts = "";
         metrics.setText(counts); metrics.setVisibility(counts.isEmpty() ? View.GONE : View.VISIBLE);

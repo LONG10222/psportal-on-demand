@@ -6,6 +6,20 @@ from pathlib import Path
 import tempfile
 
 ZH = {
+    'Sharing an existing client: keep that client running with its proxy enabled. StarPass does not need a separate subscription or core; verify access on the connected device.': '正在复用已有客户端：请保持该客户端运行并开启代理。星渡无需另选订阅或核心；请在接入设备上验证访问。',
+    'Before you start': '使用前检查',
+    'Choose trusted Mihomo…': '选择可信的 Mihomo 核心…',
+    'Paste a valid HTTPS subscription, or select a local configuration in Advanced settings.': '先粘贴有效的 HTTPS 订阅链接；也可以在高级设置中选择本地配置。',
+    'Select your trusted Mihomo executable, or use Share existing Clash. StarPass does not download a core automatically.': '首次使用需要选择你已获取的可信 Mihomo 可执行文件，或点击“复用已有 Clash / 系统代理”。星渡不会自动下载核心。',
+    'Select a matching native engine in Advanced settings, or switch to external Mihomo.': '请在高级设置中选择对应平台的内嵌引擎，或切换到外部 Mihomo。',
+    'Subscription and engine paths are present. Prepare & start will validate the contents and choose an available port; Internet access is not verified yet.': '已找到订阅来源和核心文件。点击“一键准备并启动”后会校验内容、选择可用端口；这不代表已经验证外网可用。',
+    '1. Prepare the service: paste a subscription and click Prepare & start. First use also needs a trusted core or an existing Clash client.': '第 1 步：粘贴订阅，点击“一键准备并启动”。首次使用还需选择可信核心，或复用已有 Clash；可先点“使用前检查”。',
+    '3. A device connected, but request errors were recorded. Check its proxy settings and the selected node. A connection is not proof of Internet access.': '第 3 步：设备已接入，但有请求错误。请检查设备代理设置和所选节点；接入成功不代表外网已连通。',
+    '3. A device connected. Open the intended service on that device to verify access; this is not proof that game UDP or streaming uses the proxy.': '第 3 步：设备已接入，请在该设备打开目标服务验证访问。这不代表游戏 UDP 或串流已经经过代理。',
+    '2. Configure the local app with 127.0.0.1 and the displayed port. System-wide proxying is not enabled automatically.': '第 2 步：在本机应用中填写 127.0.0.1 和显示的端口；不会自动接管整个系统的流量。',
+    '2. Connect the game device to the same reachable LAN, then follow LAN sharing to enter the displayed HTTP proxy address.': '第 2 步：让游戏设备接入同一可互通局域网，按“局域网共享”页面填写显示的 HTTP 代理地址。',
+    'When finished, turn off the proxy setting on the device before stopping StarPass. Do not disable firewall or certificate protection.': '结束使用时，先关闭设备上的代理设置，再停止星渡。不要关闭防火墙或证书安全保护。',
+
     'The saved provider is now a full profile. Import it again before starting.': '已保存的节点文件现在包含完整配置，请重新导入后再启动。',
     'Using your selected local file. Import subscription explicitly to replace this override.': '正在使用手动选择的本地文件；如需替换，请点击“导入订阅”。',
     'LAN listener IPv4 (saved for Game / Mixed)': '局域网监听 IPv4（游戏 / 混合模式）',
