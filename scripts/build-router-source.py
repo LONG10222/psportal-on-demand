@@ -17,7 +17,7 @@ def build(destination):
     paths = [ROOT / name for name in FILES]
     for name in DIRS:
         paths.extend(p for p in (ROOT / name).rglob('*')
-                     if p.is_file() and p.suffix in ('.lua', '.sh', '.md', '.py', '.init', '.config'))
+                     if p.is_file() and p.suffix in ('.lua', '.sh', '.md', '.py', '.init', '.config', '.htm'))
     paths.append(ROOT / 'files/portalproxy')
     entries = {}
     for path in sorted(set(paths)):

@@ -219,3 +219,25 @@ assert 'A connection does not prove Internet access; verify on the device.' in a
 assert 'Open a webpage on the device, then test the intended game feature' in activity
 assert 'Turn its HTTP proxy off when finished.' in activity
 print('PASS: novice game setup separates connection evidence from verified access and explains cleanup')
+
+# Shared desktop visual language, adapted to native Android without changing consent.
+assert 'mark.setImageResource(R.mipmap.ic_launcher)' in activity, 'Reuse the approved packaged artwork'
+assert 'subscription.setHint(t(' in activity and 'Subscription link · HTTPS' in activity
+assert 'Service status · Next step' in activity and 'Connect & verify' in activity
+assert 'connection counts do not prove a game works' in activity
+assert 'button.setMinHeight(dp(primary ? 56 : 48))' in activity
+layout_method = activity.split('private void updateProductModeLayout(int width)', 1)[1].split('private int dp', 1)[0]
+assert 'width < dp(310)' in layout_method and 'fontScale > 1.2f' in layout_method
+assert 'LinearLayout.VERTICAL' in layout_method and 'new RadioGroup.LayoutParams(-1, -2)' in layout_method
+assert 'setChecked' not in layout_method and 'beginStart' not in layout_method and 'prefs()' not in layout_method
+# White primary-button text remains readable in both themes (WCAG normal text).
+def luminance(rgb):
+    values = [x / 255 for x in rgb]
+    linear = [x / 12.92 if x <= .04045 else ((x + .055) / 1.055) ** 2.4 for x in values]
+    return sum(v * w for v, w in zip(linear, [.2126, .7152, .0722]))
+assert 'int accent = Color.rgb(35, 103, 192);' in activity
+assert 1.05 / (luminance((35, 103, 192)) + .05) >= 4.5
+for foreground, background in [((177, 191, 209), (27, 39, 55)), ((82, 98, 119), (255, 255, 255))]:
+    values = sorted((luminance(foreground), luminance(background)))
+    assert (values[1] + .05) / (values[0] + .05) >= 4.5
+print('PASS: Android slate/blue hierarchy, approved artwork, non-mutating responsive modes and text contrast guards')

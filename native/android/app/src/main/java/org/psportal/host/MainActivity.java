@@ -31,6 +31,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
@@ -132,6 +133,11 @@ public final class MainActivity extends Activity {
         setContentView(scroll);
         LinearLayout heading = new LinearLayout(this);
         heading.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        ImageView mark = new ImageView(this);
+        mark.setImageResource(R.mipmap.ic_launcher);
+        mark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams markLayout = new LinearLayout.LayoutParams(dp(40), dp(40));
+        markLayout.setMarginEnd(dp(12)); heading.addView(mark, markLayout);
         TextView title = text(heading, "星渡 StarPass", "星渡 StarPass", 25, true, false);
         title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
         Button language = button(heading, "English", "中文", false, v -> switchLanguage());
@@ -141,7 +147,7 @@ public final class MainActivity extends Activity {
 
         section(layout, "当前网络", "Current network");
         network = text(card(layout), "正在识别网络", "Detecting network", 16, false, false);
-        section(layout, "使用模式", "Use mode");
+        section(layout, "选择用途", "Choose your use");
         LinearLayout modeCard = card(layout);
         productModes = new RadioGroup(this); productModes.setTag("product_modes");
         productModes.setOrientation(LinearLayout.HORIZONTAL);
@@ -152,14 +158,17 @@ public final class MainActivity extends Activity {
             productModes.addView(choice, new RadioGroup.LayoutParams(0, -2, 1)); configurationViews.add(choice);
         }
         modeCard.addView(productModes);
+        productModes.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
+                updateProductModeLayout(right - left));
         productModeDescription = text(modeCard, "", "", 13, false, true);
         text(modeCard, "使用模式选择接入哪些设备；下方规则 / 全局 / 直连选择如何分流。更改模式不会自动启动或授予 VPN 权限。本机 VPN 选项不会保存为下次启动授权。", "Use mode chooses which devices connect; Rule / Global / Direct below chooses how traffic is routed. Changing modes never starts a service or grants VPN consent. Phone VPN opt-in is not saved for the next launch.", 12, false, true);
-        section(layout, "订阅", "Subscription");
+        section(layout, "准备并启动", "Prepare & start");
         LinearLayout subscriptionCard = card(layout);
-        subscription = input(subscriptionCard, "粘贴 HTTPS 订阅链接", "Paste HTTPS subscription URL", "",
+        subscription = input(subscriptionCard, "订阅链接 · HTTPS", "Subscription link · HTTPS", "",
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         // setSingleLine() may replace the transformation installed by setInputType().
         subscription.setTransformationMethod(android.text.method.PasswordTransformationMethod.getInstance());
+        subscription.setHint(t("在这里粘贴订阅链接", "Paste your subscription here"));
         subscription.setSaveEnabled(false);
         subscription.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
         subscription.addTextChangedListener(new TextWatcher() {
@@ -211,10 +220,11 @@ public final class MainActivity extends Activity {
         text(subscriptionCard, "开启局域网共享时，自动识别地址并优先使用端口 10081。仅手动填写本机代理的设备使用共享；关闭共享时不开放局域网端口。", "LAN sharing detects the address and prefers port 10081. Only devices manually configured to use this proxy send traffic through it. Turning sharing off opens no LAN port.", 13, false, true);
         text(subscriptionCard, "订阅链接仅留在本次内存，启动后清空，不保存到设置。套餐数据来自服务器响应头，非实时统计。", "The subscription URL stays in session memory, clears after Start and is not saved. Accounting is a server-header snapshot, not live traffic.", 12, false, true);
 
-        section(layout, "运行状态", "Status");
+        section(layout, "服务状态 · 下一步", "Service status · Next step");
         LinearLayout stateCard = card(layout);
         status = text(stateCard, "", "", 18, true, false);
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        text(stateCard, "服务启动、设备接入、访问成功是三个不同步骤。请按下方指引在设备上验证，不以连接数代替游戏可用性。", "Service started, device connected and successful access are separate steps. Verify on the device below; connection counts do not prove a game works.", 13, false, true);
         metrics = text(stateCard, "", "", 14, false, true);
         engine = text(stateCard, "内置代理引擎 · 按需运行", "Embedded proxy engine · on demand", 13, false, true);
         phoneVpnStatus = text(stateCard, "", "", 13, false, true);
@@ -228,7 +238,7 @@ public final class MainActivity extends Activity {
         backgroundSharing.setOnCheckedChangeListener((view, checked) -> prefs().edit().putBoolean(BackgroundPolicy.PREFERENCE_KEY, checked).apply());
         text(stateCard, "开启后，回到桌面、锁屏或移出最近任务仍继续本次共享与本机代理。关闭后，离开页面即停止全部代理。运行时通知提供停止按钮；Android 强行停止、省电或厂商限制仍可能中断服务。", "When enabled, this session’s LAN sharing and phone proxy continue on Home, screen lock and removal from Recents. When disabled, leaving this screen stops all proxying. The running notification provides Stop; Android force-stop, battery or OEM controls can still interrupt the service.", 12, false, true);
 
-        section(layout, "设备 Wi-Fi 怎么设置", "Device Wi-Fi setup");
+        section(layout, "连接设备并验证", "Connect & verify");
         LinearLayout guide = card(layout);
         address = text(guide, "准备后显示服务器和端口", "Server and port appear after preparation", 17, true, false);
         address.setTextIsSelectable(true);
@@ -271,14 +281,14 @@ public final class MainActivity extends Activity {
 
     private LinearLayout column() { LinearLayout view = new LinearLayout(this); view.setOrientation(LinearLayout.VERTICAL); return view; }
     private LinearLayout card(LinearLayout parent) {
-        LinearLayout card = column(); card.setTag("card"); card.setPadding(dp(16), dp(12), dp(16), dp(12));
+        LinearLayout card = column(); card.setTag("card"); card.setPadding(dp(18), dp(16), dp(18), dp(16));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2); lp.bottomMargin = dp(12); parent.addView(card, lp); return card;
     }
-    private void section(LinearLayout parent, String zh, String en) { TextView label = text(parent, zh, en, 14, true, true); label.setPadding(dp(8), dp(20), 0, dp(10)); }
+    private void section(LinearLayout parent, String zh, String en) { TextView label = text(parent, zh, en, 16, true, false); label.setPadding(dp(8), dp(20), 0, dp(10)); }
     private void bind(TextView view, String zh, String en) { labels.add(new Label(view, zh, en)); view.setText(t(zh, en)); }
     private TextView text(LinearLayout parent, String zh, String en, int size, boolean bold, boolean secondary) {
         TextView text = new TextView(this); bind(text, zh, en); text.setTextSize(size); text.setTag(secondary ? "secondary" : "text");
-        if (bold) text.setTypeface(null, Typeface.BOLD); text.setPadding(0, dp(7), 0, dp(7));
+        if (bold) text.setTypeface(null, Typeface.BOLD); text.setPadding(0, dp(7), 0, dp(7)); text.setLineSpacing(dp(2), 1.08f);
         parent.addView(text, new LinearLayout.LayoutParams(-1, -2)); return text;
     }
     private EditText input(LinearLayout parent, String zh, String en, String value, int inputType) {
@@ -290,25 +300,42 @@ public final class MainActivity extends Activity {
     }
     private Button button(LinearLayout parent, String zh, String en, boolean primary, View.OnClickListener listener) {
         Button button = new Button(this); bind(button, zh, en); button.setTag(primary ? "primary" : "button");
-        button.setAllCaps(false); button.setMinHeight(dp(48)); button.setOnClickListener(listener);
+        button.setAllCaps(false); button.setMinHeight(dp(primary ? 56 : 48));
+        if (primary) button.setTypeface(null, Typeface.BOLD); button.setOnClickListener(listener);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2); lp.topMargin = dp(6); parent.addView(button, lp); return button;
+    }
+    /** Presentation only: keep large text and narrow phones from clipping mode names. */
+    private void updateProductModeLayout(int width) {
+        boolean stacked = width < dp(310) || getResources().getConfiguration().fontScale > 1.2f;
+        int orientation = stacked ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL;
+        if (productModes.getOrientation() == orientation) return;
+        productModes.setOrientation(orientation);
+        for (int i = 0; i < productModes.getChildCount(); i++)
+            productModes.getChildAt(i).setLayoutParams(stacked ?
+                    new RadioGroup.LayoutParams(-1, -2) : new RadioGroup.LayoutParams(0, -2, 1));
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private String value(EditText input) { return input.getText().toString(); }
     private void applySystemBars() {
-        getWindow().setStatusBarColor(dark ? Color.BLACK : Color.rgb(245, 247, 252));
-        getWindow().setNavigationBarColor(dark ? Color.BLACK : Color.rgb(245, 247, 252));
+        getWindow().setStatusBarColor(dark ? Color.rgb(15, 23, 34) : Color.rgb(243, 246, 250));
+        getWindow().setNavigationBarColor(dark ? Color.rgb(15, 23, 34) : Color.rgb(243, 246, 250));
         getWindow().getDecorView().setSystemUiVisibility(dark ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
     }
     private void applyTheme(View view) {
-        int foreground = dark ? Color.rgb(242, 243, 247) : Color.rgb(26, 32, 46);
-        int secondary = dark ? Color.rgb(170, 175, 187) : Color.rgb(88, 96, 112);
-        int accent = dark ? Color.rgb(48, 138, 255) : Color.rgb(21, 92, 202);
-        if (view == scroll) view.setBackgroundColor(dark ? Color.BLACK : Color.rgb(245, 247, 252));
-        if ("card".equals(view.getTag())) { GradientDrawable background = new GradientDrawable(); background.setColor(dark ? Color.rgb(29, 30, 34) : Color.WHITE); background.setCornerRadius(dp(20)); view.setBackground(background); }
+        int foreground = dark ? Color.rgb(240, 244, 250) : Color.rgb(27, 39, 56);
+        int secondary = dark ? Color.rgb(177, 191, 209) : Color.rgb(82, 98, 119);
+        int accent = Color.rgb(35, 103, 192);
+        if (view == scroll) view.setBackgroundColor(dark ? Color.rgb(15, 23, 34) : Color.rgb(243, 246, 250));
+        if ("card".equals(view.getTag())) { GradientDrawable background = new GradientDrawable(); background.setColor(dark ? Color.rgb(27, 39, 55) : Color.WHITE); background.setCornerRadius(dp(18)); background.setStroke(dp(1), dark ? Color.rgb(43, 59, 79) : Color.rgb(217, 226, 237)); view.setBackground(background); }
         if (view instanceof TextView) ((TextView)view).setTextColor(new ColorStateList(new int[][]{new int[]{-android.R.attr.state_enabled}, new int[]{}}, new int[]{dark ? Color.rgb(105, 110, 120) : Color.rgb(130, 136, 147), "secondary".equals(view.getTag()) ? secondary : foreground}));
-        if (view instanceof Button) { boolean primary = "primary".equals(view.getTag()); view.setBackgroundTintList(ColorStateList.valueOf(primary ? accent : dark ? Color.rgb(46, 49, 57) : Color.rgb(229, 234, 244))); if (primary) ((Button)view).setTextColor(Color.WHITE); }
-        if (view instanceof EditText) view.setBackgroundTintList(ColorStateList.valueOf(secondary));
+        if (view instanceof Button) { boolean primary = "primary".equals(view.getTag()); view.setBackgroundTintList(ColorStateList.valueOf(primary ? accent : dark ? Color.rgb(36, 52, 73) : Color.rgb(228, 236, 246))); if (primary) ((Button)view).setTextColor(Color.WHITE); }
+        if (view instanceof EditText) {
+            view.setBackgroundTintList(ColorStateList.valueOf(secondary));
+            ((EditText)view).setHintTextColor(secondary);
+        }
+        if (view instanceof RadioButton) ((RadioButton)view).setButtonTintList(new ColorStateList(
+                new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}},
+                new int[]{dark ? Color.rgb(112, 174, 255) : accent, secondary}));
         if (view instanceof ProgressBar) ((ProgressBar)view).setProgressTintList(ColorStateList.valueOf(accent));
         if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup)view).getChildCount(); i++) applyTheme(((ViewGroup)view).getChildAt(i));
     }
@@ -336,6 +363,7 @@ public final class MainActivity extends Activity {
     private void switchLanguage() {
         english = !english; prefs().edit().putBoolean("english", english).apply();
         for (Label label : labels) label.view.setText(t(label.zh, label.en));
+        subscription.setHint(t("在这里粘贴订阅链接", "Paste your subscription here"));
         updateModes(selection.getSelectedItemPosition()); updateRoutingModes(routing.getSelectedItemPosition()); refreshNetwork(); renderAccounting(); render();
     }
 

@@ -1,3 +1,11 @@
+## 2026-10-20 — Cross-platform visual clarity (draft)
+
+- Extend the shared desktop slate/blue visual language to native Android and iOS without copying desktop controls or changing the approved artwork.
+- Prioritize subscription and start actions, separate setup from runtime status, and adapt mode controls/headings/metrics for narrow displays and larger text.
+- Add a scoped light/dark LuCI three-step guide, package its read-only template, and preserve the router's explicit apply and OpenClash boundaries.
+- Preserve privacy masks, Android screenshot protection, native Apple lifecycle, network permissions, and all existing game-mode capability limits.
+- Source checks and CI builds are separate from physical-device testing; listener/connection status does not prove Internet access or game compatibility.
+
 ## 2026-10-20 — Desktop visual clarity (draft)
 
 - Refine shared Windows/macOS/Linux desktop colors, spacing and hierarchy with a restrained navy/slate dark theme and a legible light theme.

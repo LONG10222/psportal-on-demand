@@ -13,6 +13,7 @@ struct ContentView: View {
     @State private var nodeSearch = ""
     @State private var healthyOnly = false
     @State private var sortByDelay = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @FocusState private var subscriptionFocused: Bool
     private let refresh = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
@@ -22,6 +23,17 @@ struct ContentView: View {
     }
 
     private func t(_ zh: String, _ en: String) -> String { model.t(zh, en) }
+    // Shared StarPass slate/blue language; native semantic text and Dynamic Type remain intact.
+    private var primaryAccent: Color { Color(red: 0.14, green: 0.39, blue: 0.74) }
+    private var brandAccent: Color {
+        model.darkAppearance ? Color(red: 0.48, green: 0.70, blue: 1.0) : primaryAccent
+    }
+    private var pageSurface: Color {
+        model.darkAppearance ? Color(red: 0.06, green: 0.09, blue: 0.13) : Color(red: 0.95, green: 0.97, blue: 0.99)
+    }
+    private var cardSurface: Color {
+        model.darkAppearance ? Color(red: 0.11, green: 0.15, blue: 0.20) : Color(.secondarySystemGroupedBackground)
+    }
     private var running: Bool { model.state == .running }
     private var transitioning: Bool { model.state == .starting || model.state == .stopping }
     private var canControlNodes: Bool { running && !model.nodeBusy }
@@ -66,7 +78,7 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showLicenses) { LicensesView(model: model) }
-        .tint(.blue)
+        .tint(brandAccent)
         .preferredColorScheme(model.darkAppearance ? .dark : .light)
         .onReceive(refresh) { _ in model.refreshStatus() }
         .onChange(of: model.confirmOwnHotspot) { _ in model.networkChanged(network.snapshot) }
@@ -95,7 +107,7 @@ struct ContentView: View {
                     .font(.subheadline.weight(.medium)).padding(.horizontal, 12).padding(.vertical, 9)
                     .background(Color(.tertiarySystemFill), in: Capsule())
             }.accessibilityLabel(t("切换语言", "Change language")).accessibilityIdentifier("languageMenu")
-        }.padding(.horizontal, 20).padding(.vertical, 12).background(Color(.systemGroupedBackground))
+        }.padding(.horizontal, 20).padding(.vertical, 12).background(pageSurface)
     }
 
     private func page<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -103,67 +115,43 @@ struct ContentView: View {
             LazyVStack(alignment: .leading, spacing: 16, content: content)
                 .frame(maxWidth: 660).padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 30)
                 .frame(maxWidth: .infinity)
-        }.background(Color(.systemGroupedBackground)).scrollDismissesKeyboard(.interactively)
+        }.background(pageSurface).scrollDismissesKeyboard(.interactively)
     }
 
     private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 16, content: content)
             .frame(maxWidth: .infinity, alignment: .leading).padding(20)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
-            .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.primary.opacity(0.045), lineWidth: 1))
+            .background(cardSurface, in: RoundedRectangle(cornerRadius: 20))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.primary.opacity(0.08), lineWidth: 1))
     }
 
     private func sectionTitle(_ title: String, detail: String? = nil) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title).font(.headline)
-            Spacer()
-            if let detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
-        }
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(title).font(.headline).fixedSize()
+                Spacer()
+                if let detail { Text(detail).font(.caption).foregroundStyle(.secondary).fixedSize() }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.headline)
+                if let detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
+            }
+        }.accessibilityAddTraits(.isHeader)
     }
 
     private var sharingPage: some View {
         page {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(t("从这里，开始连接", "Start your connection"))
+                    .font(.title2.bold()).accessibilityAddTraits(.isHeader)
+                Text(t("游戏模式 · 设备共享", "Game mode · Device sharing"))
+                    .font(.subheadline.weight(.medium)).accessibilityIdentifier("availableProductMode")
+                Text(networkTitle).font(.caption).foregroundStyle(.secondary)
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 4)
             card {
-                HStack {
-                    Label(t("游戏模式 · 设备共享", "Game mode · Device sharing"), systemImage: "gamecontroller")
-                        .font(.subheadline.weight(.medium)).accessibilityIdentifier("availableProductMode")
-                    Spacer()
-                    Label(networkTitle, systemImage: network.snapshot.uplink == .cellular ? "antenna.radiowaves.left.and.right" : "wifi")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                HStack(spacing: 14) {
-                    Image(systemName: running ? "wifi" : "power")
-                        .font(.system(size: 24, weight: .semibold)).foregroundStyle(running ? Color.green : Color.blue)
-                        .frame(width: 56, height: 56)
-                        .background((running ? Color.green : Color.blue).opacity(0.12), in: RoundedRectangle(cornerRadius: 18))
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(model.statusTitle).font(.title3.bold()).fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("sharingStatusTitle")
-                        Text(model.localizedMessage).font(.caption).foregroundStyle(.secondary)
-                            .accessibilityIdentifier("proxyStatus")
-                    }
-                    if transitioning { Spacer(minLength: 0); ProgressView() }
-                }
-                Text(t("启动共享 → 设备设置手动代理 → 在设备上验证访问。监听就绪或有连接，不代表外网访问已成功。仅 HTTP/TCP，不接管游戏 UDP；默认保持前台。", "Start sharing → set the device’s manual proxy → verify access on the device. A ready listener or a connection does not prove Internet access. HTTP/TCP only, not game UDP; foreground by default."))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .accessibilityIdentifier("gameSetupGuide")
-                Divider()
-                HStack {
-                    metric(t("接入设备", "Devices"), value: model.activeDevices)
-                    Spacer()
-                    metric(t("活动连接", "Connections"), value: model.activeConnections)
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 5) {
-                        Label(model.hasBackgroundGrant ? t("限时后台已授权", "Timed background granted") : t("前台共享", "Foreground"), systemImage: "iphone")
-                            .font(.caption.weight(.medium)).foregroundStyle(.secondary)
-                        Text("HTTP · TCP").font(.caption2.monospaced()).foregroundStyle(.secondary)
-                    }
-                }
-            }
-            card {
-                sectionTitle(t("订阅", "Subscription"), detail: t("仅需一个链接", "Just one link"))
+                sectionTitle(t("订阅与启动", "Subscription & start"), detail: "HTTPS")
                 HStack(spacing: 10) {
-                    Image(systemName: "link").foregroundStyle(.blue)
+                    Image(systemName: "link").foregroundStyle(brandAccent)
                     SecureField(t("粘贴 HTTPS 订阅链接", "Paste HTTPS subscription URL"), text: $model.settings.subscriptionURL)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                         .privacySensitive().focused($subscriptionFocused).disabled(!model.canEdit)
@@ -208,13 +196,49 @@ struct ContentView: View {
                             .font(.headline)
                         Spacer(minLength: 0)
                     }.padding(.vertical, 8).frame(maxWidth: .infinity)
-                }.buttonStyle(.borderedProminent).tint(model.canStop ? Color.red : Color.blue)
+                }.buttonStyle(.borderedProminent).tint(model.canStop ? Color.red : primaryAccent)
                     .controlSize(.large)
                     .disabled(model.state == .stopping || (!model.canStop && (!model.canStart || model.settings.subscriptionURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)))
                     .accessibilityIdentifier(model.canStop ? "stopProxy" : "quickStartProxy")
+                Text(t("下一步：按下方地址设置游戏设备的手动代理，再在设备上验证访问。", "Next: set your game device's manual proxy using the address below, then verify access on that device."))
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("setupNextStep")
                 if model.subscriptionInfo == nil {
                     Text(t("启动后读取订阅用量与到期信息；链接仅保留在本次会话。", "Usage and expiry appear after starting. The link stays in this session only."))
                         .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            card {
+                sectionTitle(t("服务状态", "Service status"))
+                HStack(spacing: 14) {
+                    Image(systemName: running ? "wifi" : "power")
+                        .font(.system(size: 24, weight: .semibold)).foregroundStyle(running ? Color.green : Color.blue)
+                        .frame(width: 56, height: 56)
+                        .background((running ? Color.green : Color.blue).opacity(0.12), in: RoundedRectangle(cornerRadius: 18))
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(model.statusTitle).font(.title3.bold()).fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("sharingStatusTitle")
+                        Text(model.localizedMessage).font(.caption).foregroundStyle(.secondary)
+                            .accessibilityIdentifier("proxyStatus")
+                    }
+                    if transitioning { Spacer(minLength: 0); ProgressView() }
+                }
+                Text(t("监听就绪或有连接，不代表外网访问已成功。仅 HTTP/TCP，不接管游戏 UDP；默认保持前台。", "A ready listener or a connection does not prove Internet access. HTTP/TCP only, not game UDP; foreground by default."))
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("gameSetupGuide")
+                Divider()
+                (dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
+                    : AnyLayout(HStackLayout(spacing: 12))) {
+                    metric(t("接入设备", "Devices"), value: model.activeDevices)
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer() }
+                    metric(t("活动连接", "Connections"), value: model.activeConnections)
+                    if !dynamicTypeSize.isAccessibilitySize { Spacer() }
+                    VStack(alignment: .trailing, spacing: 5) {
+                        Label(model.hasBackgroundGrant ? t("限时后台已授权", "Timed background granted") : t("前台共享", "Foreground"), systemImage: "iphone")
+                            .font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                        Text("HTTP · TCP").font(.caption2.monospaced()).foregroundStyle(.secondary)
+                    }
                 }
             }
             if network.snapshot.uplink == .cellular {

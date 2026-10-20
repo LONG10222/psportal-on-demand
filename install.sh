@@ -59,6 +59,9 @@ if [ -d "$ROOT/usr/lib/lua/luci" ]; then
     mkdir -p "$ROOT/usr/lib/lua/luci/controller" "$ROOT/usr/lib/lua/luci/model/cbi"
     cp "$BASE/luci/controller/portalproxy.lua" "$ROOT/usr/lib/lua/luci/controller/portalproxy.lua"
     cp "$BASE/luci/model/cbi/portalproxy.lua" "$ROOT/usr/lib/lua/luci/model/cbi/portalproxy.lua"
+    mkdir -p "$ROOT/usr/lib/lua/luci/view/portalproxy"
+    cp "$BASE/luci/view/portalproxy/onboarding.htm" "$ROOT/usr/lib/lua/luci/view/portalproxy/onboarding.htm"
+    chmod 644 "$ROOT/usr/lib/lua/luci/view/portalproxy/onboarding.htm"
     chmod 644 "$ROOT/usr/lib/lua/luci/controller/portalproxy.lua" "$ROOT/usr/lib/lua/luci/model/cbi/portalproxy.lua"
 fi
 
