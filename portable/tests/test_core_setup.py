@@ -13,13 +13,14 @@ from portalproxy import core_setup as setup
 class CoreSetupTests(unittest.TestCase):
     def test_discovery_prefers_configured_then_managed_then_stable_clash(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            # Simulate Windows without inheriting macOS's /var system alias.
+            root = Path(tmp).resolve()
             config = root / 'config.json'
             stable = root / 'Clash Verge' / 'verge-mihomo.exe'
             stable.parent.mkdir(); stable.write_bytes(b'stable')
             (stable.parent / 'verge-mihomo-alpha.exe').write_bytes(b'alpha')
             with patch.object(setup.sys, 'platform', 'win32'), patch.dict(os.environ,
-                    {'ProgramW6432':tmp, 'ProgramFiles':tmp, 'LOCALAPPDATA':tmp}):
+                    {'ProgramW6432':str(root), 'ProgramFiles':str(root), 'LOCALAPPDATA':str(root)}):
                 self.assertEqual(setup.discover_core(config), str(stable))
                 managed = setup.managed_path(config)
                 managed.parent.mkdir(parents=True); managed.write_bytes(b'managed')
@@ -37,7 +38,7 @@ class CoreSetupTests(unittest.TestCase):
 
     def test_frozen_default_is_preferred_to_an_installed_client_core(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
+            root = Path(tmp).resolve()
             bundle = root / 'package'; bundle.mkdir()
             core = bundle / 'mihomo.exe'; core.write_bytes(b'fixture default')
             stable = root / 'Clash Verge' / 'verge-mihomo.exe'
@@ -45,7 +46,7 @@ class CoreSetupTests(unittest.TestCase):
             with patch.object(setup.sys, 'platform', 'win32'), \
                     patch.object(setup.sys, 'frozen', True, create=True), \
                     patch.object(setup.sys, 'executable', str(bundle / 'PSPortalProxy.exe')), \
-                    patch.dict(os.environ, {'ProgramW6432':tmp, 'ProgramFiles':tmp, 'LOCALAPPDATA':tmp}):
+                    patch.dict(os.environ, {'ProgramW6432':str(root), 'ProgramFiles':str(root), 'LOCALAPPDATA':str(root)}):
                 self.assertEqual(setup.discover_core(root / 'config.json'), str(core))
 
     def test_install_checks_hash_and_extracts_bytes_without_archive_paths(self):
