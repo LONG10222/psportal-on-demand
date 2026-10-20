@@ -153,7 +153,7 @@ class CompiledManifestTests(unittest.TestCase):
                              'assets/licenses/PROJECT-MIT.txt', 'classes.dex', 'AndroidManifest.xml'):
                     archive.writestr(name, b'fixture')
                 notices = pathlib.Path(__file__).resolve().parents[2] / 'THIRD_PARTY_NOTICES.md'
-                archive.writestr('assets/licenses/NATIVE-NOTICES.txt', notices.read_bytes())
+                archive.writestr('assets/licenses/NATIVE-NOTICES.txt', notices.read_bytes().replace(b'\r\n', b'\n'))
                 archive.writestr('lib/arm64-v8a/libgojni.so', elf)
             badging = "package: name='org.psportal.host'\nminSdkVersion:'26'\ntargetSdkVersion:'36'\nlaunchable-activity: name='org.psportal.host.MainActivity'\n"
             dump = aapt2_fixture().replace('N: android=', 'N: unknown=') + '\n星渡构建诊断\n'

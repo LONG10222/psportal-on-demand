@@ -738,8 +738,11 @@ public final class MainActivity extends Activity {
         // Phone routing may be stopped independently while LAN sharing continues.
         // Turning it back on requires a new stopped-session Start and consent check.
         boolean otherVpnActive = editable && PhoneVpnService.hasVpnConflict(this);
-        for (ProductMode mode : ProductMode.values())
-            productModes.findViewById(productModeIds[mode.ordinal()]).setEnabled(editable && mode.available(otherVpnActive));
+        for (ProductMode mode : ProductMode.values()) {
+            View choice = productModes.findViewById(productModeIds[mode.ordinal()]);
+            boolean enabled = editable && mode.available(otherVpnActive);
+            choice.setEnabled(enabled); choice.setAlpha(enabled ? 1f : 0.45f);
+        }
         phoneApps.setEnabled(editable && !otherVpnActive || snapshot.phase == SessionController.Phase.RUNNING && phoneApps.isChecked());
         if (otherVpnActive) productModeDescription.append(t("\n检测到其他 VPN：混合 / Clash 不可用。可选择游戏模式；本应用不会联动或控制其他 Clash。断开其他 VPN 后可重新选择。", "\nAnother VPN is active: Mixed / Clash are unavailable. Game remains available; this app does not link to or control another Clash client. Disconnect the other VPN to choose phone routing."));
         boolean hasSelectedTraffic = lanSharing.isChecked() || phoneApps.isChecked();

@@ -21,7 +21,7 @@ with zipfile.ZipFile(a.apk) as apk:
         assert apk.getinfo(asset).file_size > 0, asset
     # The short bundled notice must describe the same patched core as this source.
     native_notices = pathlib.Path(__file__).resolve().parents[2] / 'THIRD_PARTY_NOTICES.md'
-    assert apk.read('assets/licenses/NATIVE-NOTICES.txt') == native_notices.read_bytes(), 'Stale or missing native source/patch notice'
+    assert apk.read('assets/licenses/NATIVE-NOTICES.txt').decode('utf-8').replace('\r\n', '\n') == native_notices.read_text(encoding='utf-8'), 'Stale or missing native source/patch notice'
     expected_native = {f'lib/{abi}/libgojni.so' for abi in a.abis}
     assert {name for name in apk.namelist() if name.startswith('lib/')} == expected_native, 'Unexpected or missing native ABI payload'
     for abi in a.abis:

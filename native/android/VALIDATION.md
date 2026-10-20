@@ -8,6 +8,10 @@ Apple or router implementation is modified by this Android change.
 - Reproduced Chinese Windows `UnicodeDecodeError` in `check_project.py` with
   default GBK decoding. Explicit UTF-8 reads/writes, Java compiler encoding and a
   PowerShell host runner remove the failure without changing the host locale.
+  The APK auditor now locates Windows SDK executables, decodes UTF-8 output and
+  accepts equivalent LF/CRLF notice text without masking stale notice content.
+  The existing baseline APK was independently audited using real Windows SDK
+  Build Tools 35.0.0; both ABIs and 16 KiB alignment passed.
 - 369 JVM assertions pass locally: 241 host/controller, 105 runtime/product/
   accounting, 8 background and 15 phone state; XML/source guards and 17 compiled
   manifest/notice helper tests pass. These are host tests, not device execution.
