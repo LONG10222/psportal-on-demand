@@ -1,3 +1,12 @@
+## 2026-10-20 — Desktop visual clarity (draft)
+
+- Refine shared Windows/macOS/Linux desktop colors, spacing and hierarchy with a restrained navy/slate dark theme and a legible light theme.
+- Prefer available Chinese-capable UI fonts per host; keep the approved character artwork unchanged.
+- Label the private HTTPS subscription field, emphasize the primary start action, and separate optional client/core tools from the main path.
+- Give service status and the next action a distinct heading; preserve all preparation, connection, failure and capability messages.
+- Theme the scrollbar and verify compact 1040×740 Chinese/light and English/dark windows alongside the existing runtime screenshots.
+- No engine, subscription, system proxy, firewall, game UDP, routing or native Apple behavior changes. Screenshots use offline fixture data, not live network measurements.
+
 ## 2026-10-20 · 新手引导与统一游戏模式说明
 
 - 桌面首页新增只读“使用前检查”和可信核心选择入口，解释首次订阅/核心缺失；不开网络、不改配置、不下载核心。

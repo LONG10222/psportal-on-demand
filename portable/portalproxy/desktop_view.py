@@ -1,6 +1,7 @@
 """Clash-inspired local desktop layout. No networking or lifecycle ownership."""
 from __future__ import annotations
 import tkinter as tk
+from tkinter import font as tkfont
 from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
 from . import i18n, product_modes
@@ -73,9 +74,9 @@ class DesktopView:
         root.protocol('WM_DELETE_WINDOW', app.close)
         root.columnconfigure(1, weight=1)
         root.rowconfigure(0, weight=1)
-        sidebar = ttk.Frame(root, style='Portal.Side.TFrame', padding=(24, 30))
+        sidebar = ttk.Frame(root, style='Portal.Side.TFrame', padding=(22, 28))
         sidebar.grid(row=0, column=0, sticky='nsew')
-        self.brand_avatar = load_avatar(root, size=64)
+        self.brand_avatar = load_avatar(root, size=56)
         if self.brand_avatar is not None:
             ttk.Label(sidebar, image=self.brand_avatar, style='Portal.SideNote.TLabel').pack(anchor='w', pady=(0, 10))
         ttk.Label(sidebar, text='StarPass', style='Portal.Brand.TLabel').pack(anchor='w')
@@ -94,7 +95,7 @@ class DesktopView:
         self.label(sidebar, 'No system proxy, DNS, VPN or firewall settings are changed.',
                    style='Portal.SideNote.TLabel', wraplength=170, justify='left').pack(anchor='w', pady=(30, 0))
 
-        content = ttk.Frame(root, padding=(30, 24), style='Portal.Page.TFrame')
+        content = ttk.Frame(root, padding=(28, 26), style='Portal.Page.TFrame')
         content.grid(row=0, column=1, sticky='nsew')
         content.columnconfigure(0, weight=1)
         content.rowconfigure(2, weight=1)
@@ -273,38 +274,48 @@ class DesktopView:
     def _styles(self):
         dark = self.theme == 'dark'
         self.palette = c = dict(
-            page='#1e202a' if dark else '#f5f7fb',
-            side='#2c2f3b' if dark else '#edf1f8',
-            card='#262935' if dark else '#ffffff',
-            text='#edf0f7' if dark else '#172541',
-            note='#a7afc2' if dark else '#65748c',
-            entry='#232632' if dark else '#f7f9fd',
-            edge='#454b60' if dark else '#dce3ef',
-            selected='#304f7d' if dark else '#dde8ff',
-            hover='#373e52' if dark else '#e0e8f8',
-            button='#323747' if dark else '#e9eef8',
-            accent='#3189fa')
+            page='#101722' if dark else '#f3f6fa',
+            side='#151e2b' if dark else '#eaf0f6',
+            card='#1a2534' if dark else '#ffffff',
+            text='#f1f5fa' if dark else '#172b43',
+            note='#a9b8cb' if dark else '#52667e',
+            entry='#111c2a' if dark else '#f5f8fc',
+            edge='#35485f' if dark else '#d7e1ed',
+            selected='#243f5e' if dark else '#dbeaf8',
+            hover='#2a3e56' if dark else '#dce8f4',
+            button='#243347' if dark else '#eaf0f7',
+            accent='#216bc8',
+            status='#8ac2ff' if dark else '#205fae',
+            accent_hover='#185bb0',
+            scroll='#657d9b' if dark else '#7d8da2')
+        families = set(tkfont.families(self.root))
+        self.font_family = next((name for name in ('Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', 'Segoe UI', 'Helvetica Neue', 'DejaVu Sans') if name in families), 'TkDefaultFont')
+        face = self.font_family
         style = ttk.Style(self.root)
         style.theme_use('clam')
-        style.configure('.', font=('Helvetica Neue', 12), background=c['card'], foreground=c['text'])
+        style.configure('.', font=(face, 11), background=c['card'], foreground=c['text'])
         for name, bg in (('Page', 'page'), ('Side', 'side'), ('Card', 'card')):
             style.configure('Portal.' + name + '.TFrame', background=c[bg])
-        style.configure('Portal.Title.TLabel', background=c['page'], foreground=c['text'], font=('Helvetica Neue', 25, 'bold'))
-        style.configure('Portal.Brand.TLabel', background=c['side'], foreground=c['accent'], font=('Helvetica Neue', 18, 'bold'))
-        style.configure('Portal.SideNote.TLabel', background=c['side'], foreground=c['note'], font=('Helvetica Neue', 11))
+        style.configure('Portal.Title.TLabel', background=c['page'], foreground=c['text'], font=(face, 24, 'bold'))
+        style.configure('Portal.Brand.TLabel', background=c['side'], foreground=c['text'], font=(face, 18, 'bold'))
+        style.configure('Portal.SideNote.TLabel', background=c['side'], foreground=c['note'], font=(face, 10))
         style.configure('Portal.Note.TLabel', background=c['page'], foreground=c['note'])
         style.configure('Portal.Card.TLabel', background=c['card'], foreground=c['text'])
-        style.configure('Portal.CardTitle.TLabel', background=c['card'], foreground=c['text'], font=('Helvetica Neue', 14, 'bold'))
-        style.configure('Portal.CardNote.TLabel', background=c['card'], foreground=c['note'], font=('Helvetica Neue', 11))
-        style.configure('Portal.Metric.TLabel', background=c['card'], foreground=c['text'], font=('Helvetica Neue', 19, 'bold'))
-        style.configure('Portal.Status.TLabel', background=c['page'], foreground=c['accent'])
+        style.configure('Portal.CardTitle.TLabel', background=c['card'], foreground=c['text'], font=(face, 15, 'bold'))
+        style.configure('Portal.CardNote.TLabel', background=c['card'], foreground=c['note'], font=(face, 10))
+        style.configure('Portal.Metric.TLabel', background=c['card'], foreground=c['text'], font=(face, 19, 'bold'))
+        style.configure('Portal.Status.TLabel', background=c['page'], foreground=c['status'])
         for name, bg, fg in (('Nav', 'side', 'note'), ('Selected', 'selected', 'text')):
-            style.configure('Portal.' + name + '.TButton', background=c[bg], foreground=c[fg], borderwidth=0, anchor='w', padding=(14, 6))
+            style.configure('Portal.' + name + '.TButton', background=c[bg], foreground=c[fg], borderwidth=0, anchor='w', padding=(14, 9))
             style.map('Portal.' + name + '.TButton', background=[('active', c['hover'])])
         style.configure('TButton', background=c['button'], foreground=c['text'], borderwidth=0, padding=(12, 9))
         style.map('TButton', background=[('active', c['hover'])], foreground=[('disabled', c['note'])])
-        style.configure('Portal.Accent.TButton', background=c['accent'], foreground='white', padding=(18, 10))
-        style.map('Portal.Accent.TButton', background=[('active', '#2477e5'), ('disabled', c['button'])], foreground=[('disabled', c['note'])])
+        style.configure('Portal.Accent.TButton', background=c['accent'], foreground='white', padding=(22, 12), font=(face, 11, 'bold'))
+        style.map('Portal.Accent.TButton', background=[('active', c['accent_hover']), ('disabled', c['button'])], foreground=[('disabled', c['note'])])
+        style.configure('Vertical.TScrollbar', background=c['scroll'], troughcolor=c['page'], arrowcolor=c['note'], borderwidth=0, arrowsize=11, lightcolor=c['page'], darkcolor=c['page'])
+        style.map('Vertical.TScrollbar', background=[('active', c['note'])])
+        style.configure('Portal.Divider.TFrame', background=c['edge'])
+        style.configure('Portal.Section.TLabel', background=c['card'], foreground=c['note'], font=(face, 10, 'bold'))
         style.configure('TEntry', padding=(9, 7), fieldbackground=c['entry'], foreground=c['text'], insertcolor=c['text'], bordercolor=c['edge'], lightcolor=c['edge'], darkcolor=c['edge'])
         style.map('TEntry', fieldbackground=[('disabled', c['card'])], foreground=[('disabled', c['note'])])
         style.configure('TCombobox', padding=(7, 6), background=c['button'], fieldbackground=c['entry'], foreground=c['text'], arrowcolor=c['text'], bordercolor=c['edge'], lightcolor=c['edge'], darkcolor=c['edge'])
@@ -389,7 +400,7 @@ class DesktopView:
         card = ttk.Frame(parent, padding=padding, style='Portal.Card.TFrame')
         card.grid(sticky='new', row=row, column=0, pady=(0, 16))
         card.columnconfigure(1, weight=1)
-        self.label(card, title, style='Portal.CardTitle.TLabel').grid(row=0, column=0, columnspan=3, sticky='w', pady=(0, 20))
+        self.label(card, title, style='Portal.CardTitle.TLabel').grid(row=0, column=0, columnspan=3, sticky='w', pady=(0, 16))
         return card
 
     def fields(self, parent, names):
@@ -424,7 +435,7 @@ class DesktopView:
 
     def _overview(self):
         page = self.scroll_page(self.frames['Overview'], 'Overview')
-        quick = self.card(page, 'Paste your subscription to get started.')
+        quick = self.card(page, 'Connect at your own pace', padding=(24, 20))
         product = ttk.Frame(quick, style='Portal.Card.TFrame')
         product.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(0, 10))
         self.label(product, 'Product mode').pack(side='left', padx=(0, 12))
@@ -438,28 +449,31 @@ class DesktopView:
         ttk.Label(quick, textvariable=self.product_mode_note, wraplength=680,
                   style='Portal.CardNote.TLabel', justify='left').grid(
                       row=2, column=0, columnspan=3, sticky='w', pady=(0, 16))
-        entry = ttk.Entry(quick, textvariable=self.app.vars['subscription_url'], show='•')
-        entry.grid(row=3, column=0, columnspan=2, sticky='ew', padx=(0, 12))
+        self.label(quick, 'HTTPS subscription link', style='Portal.Section.TLabel').grid(row=3, column=0, columnspan=3, sticky='w', pady=(0, 8))
+        entry = self.subscription_entry = ttk.Entry(quick, textvariable=self.app.vars['subscription_url'], show='•')
+        entry.grid(row=4, column=0, columnspan=2, sticky='ew', padx=(0, 12))
         quick.columnconfigure(0, weight=1)
         self.app.inputs.append((entry, 'normal'))
         self.quick_button = self.button(quick, 'Prepare & start', command=self.app.quick_start, style='Portal.Accent.TButton')
-        self.quick_button.grid(row=3, column=2, sticky='e')
+        self.quick_button.grid(row=4, column=2, sticky='e')
         self.quick_note_var = tk.StringVar()
         ttk.Label(quick, textvariable=self.quick_note_var, style='Portal.CardNote.TLabel', wraplength=680,
-                  justify='left').grid(row=4, column=0, columnspan=3, sticky='w', pady=(12, 0))
+                  justify='left').grid(row=5, column=0, columnspan=3, sticky='w', pady=(10, 0))
         self.subscription_var = tk.StringVar()
-        ttk.Label(quick, textvariable=self.subscription_var, style='Portal.Card.TLabel', wraplength=680,
-                  justify='left').grid(row=5, column=0, columnspan=3, sticky='w', pady=(14, 0))
+        ttk.Label(quick, textvariable=self.subscription_var, style='Portal.CardNote.TLabel', wraplength=680,
+                  justify='left').grid(row=6, column=0, columnspan=3, sticky='w', pady=(14, 0))
         self.quota_bar = ttk.Progressbar(quick, style='Portal.Horizontal.TProgressbar', maximum=100)
-        self.quota_bar.grid(row=6, column=0, columnspan=3, sticky='ew', pady=(10, 0))
+        self.quota_bar.grid(row=7, column=0, columnspan=3, sticky='ew', pady=(10, 0))
+        ttk.Frame(quick, height=1, style='Portal.Divider.TFrame').grid(row=8, column=0, columnspan=3, sticky='ew', pady=(18, 14))
+        self.label(quick, 'Already have Clash? Or need help?', style='Portal.Section.TLabel').grid(row=9, column=0, columnspan=3, sticky='w', pady=(0, 10))
         link = ttk.Frame(quick, style='Portal.Card.TFrame')
-        link.grid(row=7, column=0, columnspan=3, sticky='ew', pady=(16, 0))
+        link.grid(row=10, column=0, columnspan=3, sticky='ew', pady=(0, 0))
         self.link_button = self.button(link, 'Share existing Clash / system proxy', command=self.app.use_existing_proxy)
         self.link_button.pack(side='left')
         self.link_var = tk.StringVar()
         ttk.Label(link, textvariable=self.link_var, style='Portal.CardNote.TLabel', wraplength=350).pack(side='left', padx=12)
         help_row = ttk.Frame(quick, style='Portal.Card.TFrame')
-        help_row.grid(row=8, column=0, columnspan=3, sticky='w', pady=(12, 0))
+        help_row.grid(row=11, column=0, columnspan=3, sticky='w', pady=(12, 0))
         self.preflight_button = self.button(help_row, 'Before you start', command=self.app.check_preparation)
         self.preflight_button.pack(side='left')
         self.core_setup_button = self.button(help_row, 'Choose trusted Mihomo…', command=self.app.choose_core)
@@ -476,14 +490,15 @@ class DesktopView:
             var = tk.StringVar(); self.metric_vars[key] = var
             ttk.Label(frame, textvariable=var, style='Portal.Metric.TLabel', wraplength=200).pack(anchor='w', pady=(14, 0))
         metrics.grid_remove()
-        hero = ttk.Frame(page, padding=18, style='Portal.Card.TFrame')
+        hero = ttk.Frame(page, padding=(24, 20), style='Portal.Card.TFrame')
         hero.grid(row=1, column=0, sticky='ew')
+        self.label(hero, 'Service status · next step', style='Portal.Section.TLabel').pack(anchor='w', pady=(0, 10))
         self.hero_var = tk.StringVar()
         self.hero_note_var = tk.StringVar()
         ttk.Label(hero, textvariable=self.hero_var, style='Portal.Metric.TLabel', wraplength=690).pack(anchor='w')
         ttk.Label(hero, textvariable=self.hero_note_var, style='Portal.CardNote.TLabel', wraplength=690,
                   justify='left').pack(anchor='w', pady=(8, 0))
-        panel = self.runtime_panel = ttk.Frame(page, padding=18, style='Portal.Card.TFrame')
+        panel = self.runtime_panel = ttk.Frame(page, padding=(24, 20), style='Portal.Card.TFrame')
         panel.grid(row=2, column=0, sticky='ew', pady=18)
         panel.columnconfigure(0, weight=1)
         self.label(panel, 'Connection address', style='Portal.CardNote.TLabel').grid(row=0, column=0, sticky='w')

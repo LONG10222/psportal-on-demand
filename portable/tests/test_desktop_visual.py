@@ -56,13 +56,24 @@ class DesktopVisualEvidenceTests(unittest.TestCase):
                     root.update_idletasks()
                     # Overview is scrollable so subscription details and live
                     # runtime controls remain reachable at compact sizes.
-                    if app.view.page == 'Overview':
-                        for canvas in app.view.scroll_canvases:
-                            if canvas.winfo_viewable():
-                                bottom = widget.winfo_rooty() + widget.winfo_height()
-                                if bottom > canvas.winfo_rooty() + canvas.winfo_height():
-                                    canvas.yview_moveto(1.0)
-                                    root.update_idletasks()
+                    canvas = widget.master
+                    while canvas is not None and not isinstance(canvas, tk.Canvas):
+                        canvas = getattr(canvas, 'master', None)
+                    if canvas is not None:
+                        top = widget.winfo_rooty()
+                        bottom = top + widget.winfo_height()
+                        viewport_top = canvas.winfo_rooty()
+                        if top < viewport_top or bottom > viewport_top + canvas.winfo_height():
+                            bounds = canvas.bbox('all')
+                            target = canvas.canvasy(0) + top - viewport_top - 8
+                            canvas.yview_moveto(max(0, target) / max(1, bounds[3]))
+                            root.update_idletasks()
+                        self.assertGreaterEqual(widget.winfo_rooty(), canvas.winfo_rooty())
+                        self.assertGreaterEqual(widget.winfo_rootx(), canvas.winfo_rootx())
+                        self.assertLessEqual(widget.winfo_rooty() + widget.winfo_height(),
+                                             canvas.winfo_rooty() + canvas.winfo_height())
+                        self.assertLessEqual(widget.winfo_rootx() + widget.winfo_width(),
+                                             canvas.winfo_rootx() + canvas.winfo_width())
                     self.assertTrue(widget.winfo_viewable(), str(widget))
                     self.assertGreater(widget.winfo_width(), 2)
                     self.assertGreaterEqual(widget.winfo_rootx(), root.winfo_rootx())
@@ -88,7 +99,31 @@ class DesktopVisualEvidenceTests(unittest.TestCase):
                 app.view.observe('Core: starting')
                 self.assertIn(app._t('starting'), app.view.hero_note_var.get())
                 app.view.observe('Core: stopped')
+                for canvas in app.view.scroll_canvases:
+                    canvas.yview_moveto(0)
                 save('simple-home-zh-dark')
+                # Real compact-window evidence: primary controls must stay
+                # reachable in both translations and themes, with no network.
+                original = app.collect()
+                for language, theme in (('zh', 'light'), ('en', 'dark')):
+                    root.geometry('1040x740+0+0')
+                    app.set_language(language); app.set_theme(theme)
+                    root.update()
+                    self.assertEqual((root.winfo_width(), root.winfo_height()), (1040, 740))
+                    for canvas in app.view.scroll_canvases:
+                        canvas.yview_moveto(0)
+                    visible(app.view.subscription_entry)
+                    visible(app.view.product_mode_combo)
+                    visible(app.view.quick_button)
+                    visible(app.view.preflight_button)
+                    visible(app.view.core_setup_button)
+                    self.assertEqual(app.collect(), original)
+                    self.assertIsNone(app.backend.process)
+                    for canvas in app.view.scroll_canvases:
+                        canvas.yview_moveto(0)
+                    save('compact-home-' + language + '-' + theme)
+                root.geometry('1120x800+0+0')
+                app.set_language('zh'); app.set_theme('dark')
                 provider = folder / 'synthetic-provider.json'
                 provider.write_text(json.dumps({'proxies': [
                     {'name': 'HK Offline fixture', 'type': 'ss', 'server': 'example.invalid', 'port': 443},
