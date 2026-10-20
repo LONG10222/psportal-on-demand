@@ -93,6 +93,9 @@ local function run(spec)
     end
     function methods:send(data)
         assert(not self.closed, 'send on closed fake socket')
+        if self.spec.send_interrupts and self.spec.send_interrupts>0 then
+            self.spec.send_interrupts=self.spec.send_interrupts-1; return nil, constants.EINTR
+        end
         if self.spec.send_error then return nil, self.spec.send_error end
         if self.send_after and w.time < self.send_after then return nil, constants.EAGAIN end
         if self.spec.never_writable then return nil, constants.EAGAIN end
@@ -114,6 +117,9 @@ local function run(spec)
     end
     function methods:recv(limit)
         assert(not self.closed, 'recv on closed fake socket')
+        if self.spec.recv_interrupts and self.spec.recv_interrupts>0 then
+            self.spec.recv_interrupts=self.spec.recv_interrupts-1; return nil, constants.EINTR
+        end
         if self.spec.recv_error then return nil, self.spec.recv_error end
         if not readable(self) then return nil, constants.EAGAIN end
         local data = self.kind=='client' and self.spec.data or (self.spec.response or response)
@@ -562,4 +568,52 @@ equal(linked_fake.clients[1].sent,response,'public fake-IP name is sent to OpenC
 check(linked_fake.connections[1].ip=='127.0.0.1','synthetic IP is never dialed')
 for _,i in ipairs({2,3}) do check(linked_fake.clients[i].sent:find('403 Forbidden',1,true),'fake literal/local name stays forbidden') end
 
+
+for _,linked_mode in ipairs({false,true}) do
+    for _,side in ipairs({'client','backend','local'}) do
+        local is_local=side=='local'
+        local request=is_local and local_request or external('interrupted-payload')
+        local spec={name='EINTR resumes '..side..' linked='..tostring(linked_mode),linked=linked_mode,
+            until_time=12,jobs=is_local and {} or {{delay=0.5}},
+            clients={{at=0,data=request,eof=true}},
+            backend_connections={{expected_bytes=#request}}}
+        if side=='client' then
+            spec.clients[1].recv_interrupts=2; spec.clients[1].send_interrupts=2
+        elseif side=='backend' then
+            spec.backend_connections[1].recv_interrupts=2; spec.backend_connections[1].send_interrupts=2
+        else spec.local_connections={{recv_interrupts=2,send_interrupts=2}} end
+        local resumed=run(spec)
+        equal(resumed.clients[1].sent,response,'temporary signals do not truncate '..side..' response')
+        equal(resumed.fork_attempts,is_local and 0 or 1,'temporary signals do not duplicate readiness')
+        if not is_local then equal(resumed.connections[1].sent,request,'temporary signals preserve exact request bytes') end
+    end
+end
+local linked_failed=run{name='failed linked readiness is not an active session',linked=true,until_time=15,
+    jobs={{delay=0.5,success=false}},clients={{at=0,data=external()}}}
+check(linked_failed.clients[1].sent:find('503 Service Unavailable',1,true),'failed linked readiness returns 503')
+for _,status in ipairs(linked_failed.statuses) do
+    equal(status.session_active,false,'failed linked activation never reports active')
+    equal(status.counters.idle_stops,0,'failed linked activation is not counted as idle stop')
+end
+
+
+local linked_retry=run{name='linked failed readiness retries cleanly',linked=true,until_time=20,
+    jobs={{delay=0.5,success=false},{delay=0.5}},clients={{at=0,data=external()},{at=3,data=external()}}}
+equal(linked_retry.fork_attempts,2,'failed linked activation can retry')
+equal(linked_retry.clients[2].sent,response,'linked retry succeeds')
+local linked_overlap=run{name='failed linked retry preserves earlier session cleanup',linked=true,until_time=25,
+    jobs={{delay=0.5},{delay=0.5,success=false}},
+    backend_connections={{no_response=true},{connect_error=111}},
+    clients={{at=0,data=external()},{at=2,data=external()},{at=4,data=external()}}}
+check(linked_overlap.clients[2].sent:find('503 Service Unavailable',1,true),'second backend refusal is visible')
+check(linked_overlap.clients[3].sent:find('503 Service Unavailable',1,true),'failed readiness retry is visible')
+check(linked_overlap.connections[1].closed,'older linked session still receives idle cleanup')
+check(linked_overlap.core_running,'overlapping failure never stops OpenClash')
+for _,side in ipairs({'client','local'}) do
+    local spec={name='zero write closes '..side,until_time=5,jobs={},clients={{at=0,data=local_request}}}
+    if side=='client' then spec.clients[1].send_limit=0 else spec.local_connections={{send_limit=0}} end
+    local zero=run(spec)
+    check(zero.clients[1].closed,'zero-byte write releases client slot')
+    check(zero.connections[1].closed,'zero-byte write releases upstream socket')
+end
 print('Passed '..assertions..' listener assertions across '..scenarios..' mocked scenarios')
