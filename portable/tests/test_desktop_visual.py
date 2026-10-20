@@ -104,7 +104,7 @@ class DesktopVisualEvidenceTests(unittest.TestCase):
                 save('simple-home-zh-dark')
                 # Real compact-window evidence: primary controls must stay
                 # reachable in both translations and themes, with no network.
-                original = app.collect()
+                original = {key: value.get() for key, value in app.vars.items()}
                 for language, theme in (('zh', 'light'), ('en', 'dark')):
                     root.geometry('1040x740+0+0')
                     app.set_language(language); app.set_theme(theme)
@@ -117,7 +117,7 @@ class DesktopVisualEvidenceTests(unittest.TestCase):
                     visible(app.view.quick_button)
                     visible(app.view.preflight_button)
                     visible(app.view.core_setup_button)
-                    self.assertEqual(app.collect(), original)
+                    self.assertEqual({key: value.get() for key, value in app.vars.items()}, original)
                     self.assertIsNone(app.backend.process)
                     for canvas in app.view.scroll_canvases:
                         canvas.yview_moveto(0)
