@@ -1,6 +1,7 @@
 """Clash-inspired local desktop layout. No networking or lifecycle ownership."""
 from __future__ import annotations
 import tkinter as tk
+import sys
 from tkinter import font as tkfont
 from tkinter import ttk
 from tkinter.scrolledtext import ScrolledText
@@ -18,6 +19,20 @@ SUBTITLES = dict(zip(PAGES, (
     'Original diagnostics, with sensitive values redacted.',
     'Devices using this proxy, grouped by source IP.',
 )))
+
+
+def core_readiness_note(engine_mode, executable):
+    """Describe only the selected engine and this platform's supported setup."""
+    from pathlib import Path
+    from .core_setup import can_install
+    if executable and Path(executable).is_file():
+        return ('Experimental embedded engine is available.' if engine_mode == 'embedded'
+                else 'Selected Mihomo core is available.')
+    if engine_mode == 'embedded':
+        return 'Select a matching native engine in Advanced settings, or switch to external Mihomo.'
+    if can_install():
+        return 'The default core will be prepared when you click Start sharing.'
+    return 'Choose your verified Mihomo executable in Advanced settings, or reuse an existing Clash client.'
 
 
 def probe_note(runtime, language):
@@ -68,8 +83,10 @@ class DesktopView:
         self._styles()
         root.title(BRAND_NAME)
         apply_window_icon(root)
-        root.geometry('1120x800')
-        root.minsize(1040, 740)
+        width = min(1120, max(640, root.winfo_screenwidth() - 64))
+        height = min(800, max(480, root.winfo_screenheight() - 100))
+        root.geometry(f'{width}x{height}+{max(0, (root.winfo_screenwidth()-width)//2)}+{max(0, (root.winfo_screenheight()-height)//2-25)}')
+        root.minsize(min(960, width), min(640, height))
         root.configure(background=self.palette['page'])
         root.protocol('WM_DELETE_WINDOW', app.close)
         root.columnconfigure(1, weight=1)
@@ -221,8 +238,10 @@ class DesktopView:
                    wraplength=680, style='Portal.CardNote.TLabel').grid(row=6, column=0, columnspan=3, sticky='w', pady=15)
         row = ttk.Frame(share, style='Portal.Card.TFrame')
         row.grid(row=7, column=0, columnspan=3, sticky='w')
-        self.button(row, 'Copy address', command=app.copy_address).pack(side='left')
-        self.button(row, 'Export connection guide…', command=app.export_guide).pack(side='left', padx=8)
+        self.guide_copy_button = self.button(row, 'Copy address', command=app.copy_address)
+        self.guide_copy_button.pack(side='left')
+        self.guide_export_button = self.button(row, 'Export connection guide…', command=app.export_guide)
+        self.guide_export_button.pack(side='left', padx=8)
         self.button(row, 'Export Clash client…', command=app.export_client).pack(side='left')
 
         settings = self.card(self.frames['Settings'], 'Engine configuration')
@@ -260,7 +279,10 @@ class DesktopView:
         footer.grid(row=3, column=0, sticky='ew', pady=(18, 0))
         app.save_button = self.button(footer, 'Save / validate', command=app.save)
         app.save_button.pack(side='left')
-        app.start_button = self.button(footer, 'Start listener', command=app.start, style='Portal.Accent.TButton')
+        self.start_var = tk.StringVar()
+        app.start_button = ttk.Button(footer, textvariable=self.start_var,
+            command=lambda: app.start() if self.advanced else app.quick_start(), style='Portal.Accent.TButton')
+        self.quick_button = app.start_button
         app.start_button.pack(side='left', padx=10)
         self.stop_var = tk.StringVar()
         app.stop_button = ttk.Button(footer, textvariable=self.stop_var, command=app.stop, state='disabled')
@@ -310,6 +332,9 @@ class DesktopView:
             style.map('Portal.' + name + '.TButton', background=[('active', c['hover'])])
         style.configure('TButton', background=c['button'], foreground=c['text'], borderwidth=0, padding=(12, 9))
         style.map('TButton', background=[('active', c['hover'])], foreground=[('disabled', c['note'])])
+        style.configure('Portal.Mode.TRadiobutton', background=c['card'], foreground=c['text'], padding=(0, 6))
+        style.map('Portal.Mode.TRadiobutton', foreground=[('disabled', 'selected', c['text']), ('disabled', '#777b89')],
+            background=[('active', c['card']), ('disabled', c['card'])])
         style.configure('Portal.Accent.TButton', background=c['accent'], foreground='white', padding=(22, 12), font=(face, 11, 'bold'))
         style.map('Portal.Accent.TButton', background=[('active', c['accent_hover']), ('disabled', c['button'])], foreground=[('disabled', c['note'])])
         style.configure('Vertical.TScrollbar', background=c['scroll'], troughcolor=c['page'], arrowcolor=c['note'], borderwidth=0, arrowsize=11, lightcolor=c['page'], darkcolor=c['page'])
@@ -421,6 +446,11 @@ class DesktopView:
                 normal = 'normal'
             entry.grid(row=row, column=1, columnspan=1 if key in ('core_path', 'native_path', 'subscription_file', 'profile_file') else 2, sticky='ew')
             self.app.inputs.append((entry, normal))
+            if key == 'engine_mode':
+                self.engine_mode_widget = entry
+            if key == 'subscription_url':
+                entry.bind('<<Paste>>', self.app.paste_subscription)
+                entry.bind('<Return>', lambda _: self.app.import_subscription())
             if key in ('selection_mode', 'preferred_node', 'switch_threshold_ms'):
                 self.app.profile_selection_inputs.append((entry, normal))
             if key in ('core_path', 'native_path', 'backend_port', 'api_port'):
@@ -436,7 +466,7 @@ class DesktopView:
 
     def _overview(self):
         page = self.scroll_page(self.frames['Overview'], 'Overview')
-        quick = self.card(page, None, padding=(24, 20))
+        quick = self.import_card = self.card(page, None, padding=(24, 20))
         # The approved character remains a local asset. Decoration never owns
         # input focus, network activity, timers, or connection state.
         self.navigator_avatar = load_avatar(self.root, size=128)
@@ -449,10 +479,12 @@ class DesktopView:
         self.label(product, 'Product mode').pack(side='left', padx=(0, 12))
         variable = self.app.vars['product_mode'] = tk.StringVar(value='game')
         variable.trace_add('write', self.app._changed)
-        self.product_mode_combo = ttk.Combobox(product, state='readonly', width=22)
-        self.product_mode_combo.pack(side='left')
-        self.product_mode_combo.bind('<<ComboboxSelected>>', self._product_mode_selected)
-        self.app.inputs.append((self.product_mode_combo, 'readonly'))
+        self.product_mode_buttons = {}
+        for mode in product_modes.MODES:
+            button = ttk.Radiobutton(product, text=self.tr(product_modes.LABELS[mode]),
+                variable=variable, value=mode, style='Portal.Mode.TRadiobutton', command=lambda value=mode: self.app.set_product_mode(value))
+            button.pack(side='left', padx=(0, 12))
+            self.product_mode_buttons[mode] = button
         self.product_mode_note = tk.StringVar()
         ttk.Label(quick, textvariable=self.product_mode_note, wraplength=680,
                   style='Portal.CardNote.TLabel', justify='left').grid(
@@ -462,26 +494,42 @@ class DesktopView:
         entry.grid(row=4, column=0, columnspan=2, sticky='ew', padx=(0, 12))
         quick.columnconfigure(0, weight=1)
         self.app.inputs.append((entry, 'normal'))
-        self.quick_button = self.button(quick, 'Prepare & start', command=self.app.quick_start, style='Portal.Accent.TButton')
-        self.quick_button.grid(row=4, column=2, sticky='e')
+        entry.bind('<<Paste>>', self.app.paste_subscription)
+        entry.bind('<Return>', lambda _: self.app.import_subscription())
+        self.paste_button = self.button(quick, 'Paste link', command=self.app.paste_subscription)
+        self.paste_button.grid(row=4, column=2, sticky='e')
+        self.app.inputs.append((self.paste_button, 'normal'))
+        self.import_note_var = tk.StringVar()
+        ttk.Label(quick, textvariable=self.import_note_var, style='Portal.CardNote.TLabel',
+            wraplength=680, justify='left').grid(row=5, column=0, columnspan=3, sticky='w', pady=(10, 0))
+        actions = ttk.Frame(quick, style='Portal.Card.TFrame')
+        actions.grid(row=6, column=0, columnspan=3, sticky='ew', pady=(12, 0))
+        self.refresh_button = self.button(actions, 'Refresh subscription', command=lambda: self.app.import_subscription(force=True))
+        self.refresh_button.pack(side='left')
+        self.auto_core_button = self.button(actions, 'Set up automatically', command=self.app.setup_core)
+        self.core_note_var = tk.StringVar()
+        ttk.Label(actions, textvariable=self.core_note_var, style='Portal.CardNote.TLabel',
+            wraplength=310).pack(side='left', padx=(4, 0))
         self.quick_note_var = tk.StringVar()
         ttk.Label(quick, textvariable=self.quick_note_var, style='Portal.CardNote.TLabel', wraplength=680,
-                  justify='left').grid(row=5, column=0, columnspan=3, sticky='w', pady=(10, 0))
+                  justify='left').grid(row=13, column=0, columnspan=3, sticky='w', pady=(10, 0))
         self.subscription_var = tk.StringVar()
         ttk.Label(quick, textvariable=self.subscription_var, style='Portal.CardNote.TLabel', wraplength=680,
-                  justify='left').grid(row=6, column=0, columnspan=3, sticky='w', pady=(14, 0))
+                  justify='left').grid(row=7, column=0, columnspan=3, sticky='w', pady=(14, 0))
         self.quota_bar = ttk.Progressbar(quick, style='Portal.Horizontal.TProgressbar', maximum=100)
-        self.quota_bar.grid(row=7, column=0, columnspan=3, sticky='ew', pady=(10, 0))
-        ttk.Frame(quick, height=1, style='Portal.Divider.TFrame').grid(row=8, column=0, columnspan=3, sticky='ew', pady=(18, 14))
-        self.label(quick, 'Already have Clash? Or need help?', style='Portal.Section.TLabel').grid(row=9, column=0, columnspan=3, sticky='w', pady=(0, 10))
+        self.quota_bar.grid(row=8, column=0, columnspan=3, sticky='ew', pady=(10, 0))
+        ttk.Frame(quick, height=1, style='Portal.Divider.TFrame').grid(row=9, column=0, columnspan=3, sticky='ew', pady=(18, 14))
+        self.label(quick, 'Already have Clash? Or need help?', style='Portal.Section.TLabel').grid(row=10, column=0, columnspan=3, sticky='w', pady=(0, 10))
         link = ttk.Frame(quick, style='Portal.Card.TFrame')
-        link.grid(row=10, column=0, columnspan=3, sticky='ew', pady=(0, 0))
+        link.grid(row=11, column=0, columnspan=3, sticky='ew', pady=(0, 0))
         self.link_button = self.button(link, 'Share existing Clash / system proxy', command=self.app.use_existing_proxy)
         self.link_button.pack(side='left')
         self.link_var = tk.StringVar()
         ttk.Label(link, textvariable=self.link_var, style='Portal.CardNote.TLabel', wraplength=350).pack(side='left', padx=12)
         help_row = ttk.Frame(quick, style='Portal.Card.TFrame')
-        help_row.grid(row=11, column=0, columnspan=3, sticky='w', pady=(12, 0))
+        help_row.grid(row=12, column=0, columnspan=3, sticky='w', pady=(12, 0))
+        self.unlink_button = self.button(help_row, 'Use independent core', command=self.app.unlink_proxy)
+        self.unlink_button.pack(side='left', padx=(0, 8))
         self.preflight_button = self.button(help_row, 'Before you start', command=self.app.check_preparation)
         self.preflight_button.pack(side='left')
         self.core_setup_button = self.button(help_row, 'Choose trusted Mihomo…', command=self.app.choose_core)
@@ -499,7 +547,7 @@ class DesktopView:
             ttk.Label(frame, textvariable=var, style='Portal.Metric.TLabel', wraplength=200).pack(anchor='w', pady=(14, 0))
         metrics.grid_remove()
         hero = ttk.Frame(page, padding=(24, 20), style='Portal.Card.TFrame')
-        hero.grid(row=1, column=0, sticky='ew')
+        hero.grid(row=2, column=0, sticky='ew')
         self.label(hero, 'Service status · next step', style='Portal.Section.TLabel').pack(anchor='w', pady=(0, 10))
         self.hero_var = tk.StringVar()
         self.hero_note_var = tk.StringVar()
@@ -507,7 +555,7 @@ class DesktopView:
         ttk.Label(hero, textvariable=self.hero_note_var, style='Portal.CardNote.TLabel', wraplength=690,
                   justify='left').pack(anchor='w', pady=(8, 0))
         panel = self.runtime_panel = ttk.Frame(page, padding=(24, 20), style='Portal.Card.TFrame')
-        panel.grid(row=2, column=0, sticky='ew', pady=18)
+        panel.grid(row=3, column=0, sticky='ew', pady=18)
         panel.columnconfigure(0, weight=1)
         self.label(panel, 'Connection address', style='Portal.CardNote.TLabel').grid(row=0, column=0, sticky='w')
         self.address_var = tk.StringVar()
@@ -527,6 +575,14 @@ class DesktopView:
         self.label(note, 'Stop the listener before editing configuration. Language and navigation stay available.',
                    style='Portal.CardNote.TLabel', wraplength=680).pack(anchor='w', pady=(10, 0))
         panel.grid_remove()
+        self.clash_card = ttk.Frame(page, padding=18, style='Portal.Card.TFrame')
+        self.clash_card.grid(row=1, column=0, sticky='ew', pady=(0, 12))
+        self.clash_var = tk.StringVar()
+        ttk.Label(self.clash_card, textvariable=self.clash_var, style='Portal.Card.TLabel',
+            wraplength=680, justify='left').pack(anchor='w')
+        self.button(self.clash_card, 'Open Clash', command=self.app.open_clash).pack(anchor='w', pady=(10, 0))
+        ttk.Label(panel, textvariable=self.subscription_var, style='Portal.CardNote.TLabel',
+            wraplength=680, justify='left').grid(row=4, column=0, columnspan=2, sticky='w', pady=(12, 0))
         note.grid_remove()
 
     def _draw_navigator(self):
@@ -568,11 +624,6 @@ class DesktopView:
         if int(canvas.cget('height')) != height:
             canvas.configure(height=height)
 
-    def _product_mode_selected(self, _=None):
-        index = self.product_mode_combo.current()
-        if 0 <= index < len(product_modes.MODES):
-            self.app.set_product_mode(product_modes.MODES[index])
-
     def set_advanced(self, enabled):
         self.advanced = bool(enabled)
         for name, button in self.nav.items():
@@ -581,10 +632,9 @@ class DesktopView:
                 button.pack(fill='x', pady=3, ipady=2, before=self.advanced_button)
         for section in self.advanced_sections:
             section.grid() if self.advanced else section.grid_remove()
-        for button in (self.app.save_button, self.app.start_button):
-            button.pack_forget()
-            if self.advanced:
-                button.pack(side='left', padx=(0, 10), before=self.app.stop_button)
+        self.app.save_button.pack_forget()
+        if self.advanced:
+            self.app.save_button.pack(side='left', padx=(0, 10), before=self.app.start_button)
         if not self.advanced and self.page not in ('Overview', 'Proxies', 'Devices', 'LAN sharing'):
             self.show('Overview')
         self.refresh()
@@ -765,10 +815,38 @@ class DesktopView:
                     self.rule_table.insert('', 'end', values=(rule,))
             self._preview_rendered = self.preview
         product_mode = self.app.product_mode()
-        self.product_mode_combo.configure(values=tuple(self.tr(product_modes.LABELS[mode]) for mode in product_modes.MODES))
-        if product_mode in product_modes.MODES:
-            self.product_mode_combo.current(product_modes.MODES.index(product_mode))
-            self.product_mode_note.set(self.tr(product_modes.NOTES[product_mode]))
+        linked = bool(self.app.raw.get('existing_proxy_port'))
+        idle = not self.app.importing and not self.app.setting_up and self.app.backend.process is None
+        for mode, button in self.product_mode_buttons.items():
+            button.configure(text=self.tr(product_modes.LABELS[mode]),
+                state='normal' if idle and (not linked or mode == 'game') else 'disabled')
+        self.product_mode_note.set(self.tr('Linked proxy supports game mode only. Other modes remain in the existing Clash client.'
+            if linked else product_modes.NOTES.get(product_mode, product_modes.NOTES['game'])))
+        self.start_var.set(self.tr('Start listener' if self.advanced else 'Start sharing'))
+        self.import_note_var.set(self.tr(self.app.subscription_message or
+            'Paste once to import and save. Sharing starts only when you click Start sharing.'))
+        from pathlib import Path
+        executable = self.app.vars['native_path' if self.app.vars['engine_mode'].get() == 'embedded' else 'core_path'].get().strip()
+        self.core_note_var.set(self.tr('Existing proxy selected; nodes and core are managed in Clash.') if linked else
+            self.tr(self.app.core_message) if self.app.core_message else
+            self.tr(core_readiness_note(self.app.vars['engine_mode'].get(), executable)))
+        auto_link = bool(self.app.existing_proxy and not self.app.vars['subscription_url'].get().strip()
+            and not self.app.vars['profile_file'].get().strip() and not self.app.vars['subscription_file'].get().strip())
+        from .core_setup import can_install
+        ready = self.app.subscription_ready() and (executable and Path(executable).is_file()
+            or self.app.vars['engine_mode'].get() == 'external' and can_install())
+        can_start = self.advanced or ready or ((linked or auto_link) and not self.app.vars['subscription_url'].get().strip())
+        self.quick_button.configure(state='normal' if idle and can_start else 'disabled')
+        self.refresh_button.configure(state='normal' if idle and self.app.vars['subscription_url'].get().strip() else 'disabled')
+        self.auto_core_button.configure(state='normal' if idle and not linked and self.app.vars['engine_mode'].get() == 'external' else 'disabled')
+        self.auto_core_button.pack(side='left', padx=8) if self.advanced else self.auto_core_button.pack_forget()
+        self.unlink_button.configure(state='normal' if idle and linked else 'disabled')
+        self.engine_mode_widget.configure(state='readonly' if idle and not linked else 'disabled')
+        self.core_setup_button.configure(state='normal' if idle and not linked else 'disabled')
+        sharing = self.app.backend.ready and self.app.backend.stopping_since is None
+        for button in (self.guide_copy_button, self.guide_export_button):
+            button.configure(state='normal' if sharing else 'disabled')
+        self.import_card.grid()
         self.advanced_var.set(self.tr('Simple view' if self.advanced else 'Advanced settings…'))
         self.stop_var.set(self.tr('Cancel preparation' if self.app.importing else 'Stop'))
         from .subscription_info import display, usage_percent
@@ -780,6 +858,14 @@ class DesktopView:
             self.quota_bar.configure(value=percent)
             self.quota_bar.grid()
         existing = self.app.existing_proxy
+        if existing or linked:
+            self.clash_card.grid()
+            self.clash_var.set(self.tr('Existing proxy selected; nodes and core are managed in Clash.' if linked else
+                'Local proxy detected. Start sharing to reuse it without importing a subscription or choosing a core.') +
+                '\n\n' + (display(self.app.clash_info, self.language) if self.app.clash_info else self.tr(
+                'Clash quota is unavailable. Open Clash to update its subscription; cached details refresh every 10 seconds.')))
+        else:
+            self.clash_card.grid_remove()
         self.link_var.set(self.tr('Detected local HTTP proxy: {host}:{port}', **existing) if existing else self.tr('No local HTTP system proxy detected.'))
         self.quick_note_var.set(self.tr('Configure apps manually with the local address below. System proxy and VPN settings stay unchanged.'
             if product_mode == 'clash' else 'Detect the current LAN for quick setup. Manual device lists are kept; automatic lists follow the subnet. Advanced Start keeps your manual address.') +
@@ -796,7 +882,7 @@ class DesktopView:
         self.metric_vars['Listener'].set(self.tr(self.status))
         self.metric_vars['Upstream core'].set(self.tr(self.core_state))
         mode = self.app.vars.get('engine_mode')
-        if mode and mode.get() == 'embedded':
+        if not self.advanced or mode and mode.get() == 'embedded':
             self.core_setup_button.pack_forget()
         else:
             self.core_setup_button.pack(side='left', padx=8)
@@ -809,13 +895,13 @@ class DesktopView:
         address = f'{effective_host}:{port.get()}' if effective_host and port and port.get() else self.tr('Not configured')
         self.address_var.set(address)
         self._refresh_runtime(address)
-        if effective_host and port and port.get():
+        if self.app.backend.ready and effective_host and port and port.get():
             self.runtime_panel.grid()
         else:
             self.runtime_panel.grid_remove()
         self._refresh_nodes()
         self.guide_var.set(self.tr('Server: {host}\nPort: {port}', host=effective_host, port=port.get())
-                           if effective_host and port and port.get() else self.tr('Prepare the subscription on Overview first.'))
+                           if self.app.backend.ready and effective_host and port and port.get() else self.tr('Start sharing to see the connection address.'))
         self.guide_instructions_var.set(self.tr('Configure apps manually with the local address below. System proxy and VPN settings stay unchanged.'
             if product_mode == 'clash' else 'Join the same Wi-Fi. In the device Wi-Fi settings choose HTTP Proxy → Manual, enter the server and port above, and leave authentication off.'))
         self.guide_instructions_var.set(self.guide_instructions_var.get() + '\n\n' + self.tr(

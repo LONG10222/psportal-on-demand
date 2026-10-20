@@ -307,7 +307,7 @@ def main(argv=None):
         item['mode'] = (app / path).stat().st_mode & 0o777
     require(all(files[path]['mode'] & 0o100 for path in (APP_EXECUTABLE, NATIVE_EXECUTABLE)), 'Packaged executables have lost execute permission')
     validation = json.loads((ROOT / 'release/VALIDATION.json').read_text(encoding='utf-8'))
-    require(report['source_commit'] == validation['source_commit'] == os.environ['GITHUB_SHA'], 'Evidence came from another commit')
+    require(report['source_commit'] == validation['source_commit'] == os.environ.get('PSPORTAL_SOURCE_COMMIT', os.environ.get('GITHUB_SHA', '')), 'Evidence came from another commit')
     require(validation['system'] == 'darwin' and validation['architecture'] == 'arm64', 'Unreviewed platform')
     require(validation['tests_run'] >= 149 and all(validation.get(key) is True for key in (
         'exact_cpython_runtime_notices', 'actual_external_core_tested', 'native_platform_frozen_window_smoke_tested',

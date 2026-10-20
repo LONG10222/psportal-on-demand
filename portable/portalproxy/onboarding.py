@@ -35,23 +35,30 @@ def engine_ready(values):
 
 def preparation_notes(values):
     """Fixed messages only: never echo a secret URL, path or exception."""
+    from .core_setup import can_install
     if values.get('existing_proxy_port'):
         return ['Sharing an existing client: keep that client running with its proxy enabled. StarPass does not need a separate subscription or core; verify access on the connected device.']
     notes = []
     if not source_ready(values):
         notes.append('Paste a valid HTTPS subscription, or select a local configuration in Advanced settings.')
     if not engine_ready(values):
-        notes.append('Select your trusted Mihomo executable, or use Share existing Clash. StarPass does not download a core automatically.'
-                     if values.get('engine_mode') != 'embedded' else
-                     'Select a matching native engine in Advanced settings, or switch to external Mihomo.')
+        if values.get('engine_mode') == 'embedded':
+            notes.append('Select a matching native engine in Advanced settings, or switch to external Mihomo.')
+        elif can_install():
+            notes.append('Mihomo is selected automatically. Start sharing prepares a missing default core; Share existing Clash reuses the running client.')
+        else:
+            notes.append('Select your trusted Mihomo executable, or use Share existing Clash. StarPass does not download a core automatically.')
     if not notes:
-        notes.append('Subscription and engine paths are present. Prepare & start will validate the contents and choose an available port; Internet access is not verified yet.')
+        notes.append('Import the subscription first, then click Start sharing. Starting validates the contents and chooses an available port; Internet access is not verified yet.')
     return notes
 
 
 def next_step(mode, ready, devices, errors=0):
     if not ready:
-        return '1. Prepare the service: paste a subscription and click Prepare & start. First use also needs a trusted core or an existing Clash client.'
+        from .core_setup import can_install
+        return ('1. Paste once to import and save, then click Start sharing. The default Mihomo core is prepared automatically, or reuse an existing Clash client.'
+                if can_install() else
+                '1. Paste once to import and save, then click Start sharing. First use also needs a trusted core or an existing Clash client.')
     if type(devices) is int and devices > 0:
         if type(errors) is int and errors > 0:
             return '3. A device connected, but request errors were recorded. Check its proxy settings and the selected node. A connection is not proof of Internet access.'

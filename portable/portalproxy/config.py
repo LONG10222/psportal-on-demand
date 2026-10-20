@@ -50,6 +50,8 @@ def validate(raw, path):
             raise ValueError('Existing proxy must use a distinct unprivileged loopback port')
         if cfg['engine_mode'] != 'external':
             raise ValueError('Existing proxy sharing requires external mode')
+        if cfg.get('product_mode', 'game') != 'game':
+            raise ValueError('Linked proxy supports game mode only. Other modes remain in the existing Clash client.')
     if cfg['engine_mode'] not in ('external', 'embedded'):
         raise ValueError('engine_mode must be external or embedded')
     profile = cfg.get('profile_file')

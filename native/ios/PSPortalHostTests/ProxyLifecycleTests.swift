@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import XCTest
 import UIKit
+import Combine
 @testable import PSPortalHost
 
 /// These mocks test orchestration only. They do not prove transport works.
@@ -92,13 +93,19 @@ final class ProxyLifecycleTests: XCTestCase {
     func testAccountingSnapshotIsTimestampedAndForgottenWithSettings() async {
         let harness = LifecycleHarness()
         defer { harness.removeFiles() }
+        let snapshot = expectation(description: "Accounting snapshot is published")
+        let observation = harness.model.$subscriptionInfoUpdatedAt
+            .compactMap { $0 }.first().sink { _ in snapshot.fulfill() }
+        defer { observation.cancel() }
         harness.model.start()
-        for _ in 0..<100 {
-            if harness.model.subscriptionInfoUpdatedAt != nil { break }
-            try? await Task.sleep(nanoseconds: 20_000_000)
-        }
+        // Assert the asynchronous result, not a two-second scheduler deadline.
+        await fulfillment(of: [snapshot], timeout: 10)
+        XCTAssertEqual(harness.model.state, .running)
         XCTAssertNotNil(harness.model.subscriptionInfo)
         XCTAssertNotNil(harness.model.subscriptionInfoUpdatedAt)
+        XCTAssertEqual(harness.model.subscriptionInfo?.upload, 1)
+        XCTAssertEqual(harness.model.subscriptionInfo?.download, 2)
+        XCTAssertEqual(harness.model.subscriptionInfo?.total, 100)
         harness.model.stop()
         await harness.waitUntilStopped()
         harness.model.forgetSettings()
@@ -198,7 +205,10 @@ private final class LifecycleHarness {
     let model: ProxyModel
 
     init(background: BackgroundSharingDriver? = nil) {
-        model = ProxyModel(engine: EngineController(driver: driver), store: PrivateSettingsStore(directory: directory), backgroundDriver: background)
+        // Like EngineControllerTests, isolate orchestration from hosted
+        // simulator utility-QoS throttling. Production scheduling is unchanged.
+        let metadataQueue = DispatchQueue(label: "test.lifecycle-metadata", qos: .userInitiated)
+        model = ProxyModel(engine: EngineController(driver: driver, infoQueue: metadataQueue), store: PrivateSettingsStore(directory: directory), backgroundDriver: background)
         model.settings = validSettings()
         model.scenePhaseChanged(.active)
     }

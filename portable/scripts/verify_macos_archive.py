@@ -114,7 +114,7 @@ def verify_archive(archive, output, evidence, bundle_seal):
         raise ValueError('Archive verification requires a new or empty real extraction directory')
     if evidence.is_relative_to(output):
         raise ValueError('Evidence must remain outside the extracted archive')
-    report = dict(schema_version=1, passed=False, source_commit=os.environ.get('GITHUB_SHA', ''),
+    report = dict(schema_version=1, passed=False, source_commit=os.environ.get('PSPORTAL_SOURCE_COMMIT', os.environ.get('GITHUB_SHA', '')),
                   archive=str(archive), archive_sha256=sha256(archive),
                   bundle_seal_sha256=sha256(bundle_seal), commands=[],
                   extracted_deep_strict_verified=False, launchservices_window_verified=False)

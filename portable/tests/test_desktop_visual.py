@@ -103,7 +103,7 @@ class DesktopVisualEvidenceTests(unittest.TestCase):
                 self.assertFalse(app.view.node_controls.winfo_ismapped())
                 visible(app.view.quick_button)
                 visible(app.view.preflight_button)
-                visible(app.view.core_setup_button)
+                self.assertFalse(app.view.core_setup_button.winfo_ismapped())
                 with patch('tkinter.messagebox.showinfo') as help_dialog:
                     app.view.preflight_button.invoke()
                 self.assertIn('首次使用', help_dialog.call_args.args[1])
@@ -128,10 +128,10 @@ class DesktopVisualEvidenceTests(unittest.TestCase):
                     for canvas in app.view.scroll_canvases:
                         canvas.yview_moveto(0)
                     visible(app.view.subscription_entry)
-                    visible(app.view.product_mode_combo)
+                    [visible(button) for button in app.view.product_mode_buttons.values()]
                     visible(app.view.quick_button)
                     visible(app.view.preflight_button)
-                    visible(app.view.core_setup_button)
+                    self.assertFalse(app.view.core_setup_button.winfo_ismapped())
                     self.assertEqual({key: value.get() for key, value in app.vars.items()}, original)
                     self.assertIsNone(app.backend.process)
                     for canvas in app.view.scroll_canvases:
@@ -151,7 +151,7 @@ class DesktopVisualEvidenceTests(unittest.TestCase):
                 app.inspect_provider()
                 for mode in ('game', 'mixed', 'clash'):
                     app.set_product_mode(mode)
-                    visible(app.view.product_mode_combo)
+                    [visible(button) for button in app.view.product_mode_buttons.values()]
                     save('product-' + mode + '-zh-dark')
                 app.set_product_mode('game')
                 fake_process = SimpleNamespace(poll=lambda: None)

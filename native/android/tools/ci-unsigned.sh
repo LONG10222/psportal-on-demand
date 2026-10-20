@@ -36,13 +36,19 @@ python3 "$NATIVE/scripts/verify_mihomo_patch.py"
 (cd "$NATIVE" && go test -race -tags=no_easytier,no_zerotier,no_tailscale,with_gvisor ./androidcore ./androidmobile)
 (cd "$NATIVE/scripts" && python3 -m unittest test_licenses test_source_release test_mihomo_patch)
 (cd "$NATIVE" && ./scripts/mobile.sh tools && ./scripts/mobile.sh android)
-./gradlew --no-daemon --max-workers=2 :app:assembleRelease :app:lintRelease
+./gradlew --no-daemon --max-workers=2 :app:assembleRelease :app:assembleDebug :app:lintRelease :app:lintDebug
 python3 tools/audit-apk.py app/build/outputs/apk/release/app-release-unsigned.apk \
   --sdk "$ANDROID_HOME" --report build/reports/apk-audit.json
+python3 tools/audit-apk.py app/build/outputs/apk/debug/app-debug-unsigned.apk \
+  --sdk "$ANDROID_HOME" --report build/reports/debug/apk-audit.json
 python3 "$NATIVE/scripts/source_release.py"
 OUT="$NATIVE/dist/android-unsigned"
 mkdir -p "$OUT"
 cp app/build/outputs/apk/release/app-release-unsigned.apk "$OUT/psportal-android-unsigned.apk"
+cp app/build/outputs/apk/debug/app-debug-unsigned.apk "$OUT/psportal-android-debug-unsigned.apk"
+cp build/reports/debug/apk-audit.json "$OUT/debug-apk-audit.json"
+cp build/reports/debug/compiled-manifest.txt "$OUT/debug-compiled-manifest.txt"
+cp app/build/reports/lint-results-debug.* "$OUT/"
 cp "$NATIVE/dist/psportal-native-corresponding-source.tar.gz" "$OUT/"
 cp build/reports/apk-audit.json README.md VALIDATION.md FULL-CORE.md BACKGROUND.md PHONE-VPN.md "$OUT/"
 cp "$NATIVE/LICENSE" "$NATIVE/THIRD_PARTY_NOTICES.md" "$OUT/"

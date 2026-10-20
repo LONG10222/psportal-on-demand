@@ -6,6 +6,8 @@
   "evidence_artifact_sha256": "3fa5d89fdd70379d97e0964d7b0cfd892b142f6f24bbe55ba4c4195f3dcb6b09",
   "scope": "Unmodified Windows x64 CPython runtime files from the audited official Python installation; app/native outputs are verified against this build separately.",
   "runtime_files": {
+    "_internal/VCRUNTIME140.dll": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7",
+    "_internal/VCRUNTIME140_1.dll": "a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e",
     "_internal/_asyncio.pyd": "6654dfbf4cc92609801f35022acaddd3fc19e6c777b7771b0f0a68f5813889a8",
     "_internal/_bz2.pyd": "6da4d453852346299e983b458f3ec2f0db3b5f765998ba3f45c91b4a1549037b",
     "_internal/_ctypes.pyd": "5bcddf4c374c4d247e1e4a61f3347159c36c5785fe43bdae11a4e6c9ea2c0166",
@@ -18,6 +20,7 @@
     "_internal/_socket.pyd": "c5936292083189e0675a96ddd0e38235726f1c58195cec64eb0085b9c479ddce",
     "_internal/_ssl.pyd": "30ff82a3ea0c675ddc99e6b14f71ca750f06e77d6653e2da3d7d35b7ef0fc2ed",
     "_internal/_tkinter.pyd": "426c1761322019d382da2b7154786809ee39f7680b130ea405294b8adcc89baf",
+    "_internal/_wmi.pyd": "f88c322f871aef92de562278bd25c34c6e758642669d5512a22ed972840317b1",
     "_internal/libcrypto-3.dll": "75495fe0e079ab00d49be740d3c710a0b94e3f74f9648cb7cc9f768fc7f52319",
     "_internal/libffi-8.dll": "eff52743773eb550fcc6ce3efc37c85724502233b6b002a35496d828bd7b280a",
     "_internal/libssl-3.dll": "8957182a9c385bfd9f3f790921de2ddc614cf91f99edbed4e9e5446a46504e32",
@@ -27,7 +30,21 @@
     "_internal/tcl86t.dll": "a308beae8555cff5ac2aff7eaf0aef40b5fe173f047e246dc49da9a4d3ef62f9",
     "_internal/tk86t.dll": "20f4876506bce7f89e53570e64fd1dce30a64548326b45f372871c7019560df4",
     "_internal/unicodedata.pyd": "d113047658f92d893bf4ee2da81ffbd624ec5c485733c02e116fac1b9a1b964c",
-    "_internal/VCRUNTIME140.dll": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7",
     "_internal/zlib1.dll": "1dd27f0411ebb31bd148a61589cee254410915f1e6c37aa3ffa52fac71a5426c"
+  },
+  "additional_runtime_review": {
+    "evidence_run": "https://github.com/LONG10222/psportal-on-demand/actions/runs/39450611022",
+    "evidence_artifact": 12278322405,
+    "evidence_artifact_sha256": "72082a3e9ccda7c273b3d80f40f1e71b2409e9c17d4432f4c9a0d317b60cfb0c",
+    "files": [
+      "_internal/_wmi.pyd",
+      "_internal/VCRUNTIME140_1.dll"
+    ],
+    "reason": "platform imports CPython _wmi on Windows; _wmi imports VCRUNTIME140_1.dll. Both are byte-identical to the selected official Python 3.13.16 x64 installation. All earlier 23 hashes are unchanged.",
+    "licenses": {
+      "_internal/_wmi.pyd": "PSF Python license; retained installed Python-LICENSE.txt",
+      "_internal/VCRUNTIME140_1.dll": "Microsoft Distributable Code, not PSF-licensed; Additional Conditions in retained installed Python-LICENSE.txt"
+    },
+    "installed_python_license_sha256": "62bec384df47b0328307db41455ff6ea2559e5546b394ac69148561b21703120"
   }
 }

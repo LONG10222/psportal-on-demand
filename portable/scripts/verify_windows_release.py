@@ -32,7 +32,7 @@ def within_windows(path, root):
                 PureWindowsPath(path).is_relative_to(PureWindowsPath(root)))
 
 
-def verify_inventory(report, reviewed, system_root):
+def verify_inventory(report, reviewed, system_root, *, require_default_mihomo=False):
     require(report.get('inventory_complete') is True and not report.get('issues'), 'Runtime inventory has unresolved issues')
     try:
         from .pyyaml_runtime import verify_python_inventory
@@ -41,19 +41,34 @@ def verify_inventory(report, reviewed, system_root):
     yaml_review, yaml_extension = verify_python_inventory(report, 'win32')
     yaml_path = '_internal/' + yaml_review['extension_path']
     binaries = report.get('binaries', [])
-    require(len(binaries) == 26 and len({b['path'] for b in binaries}) == 26 and
+    expected = set(reviewed['runtime_files']) | {yaml_path, 'PSPortalProxy.exe', 'native/psportal-native.exe'}
+    has_mihomo = any(b['path'] == 'mihomo.exe' for b in binaries)
+    require(has_mihomo or not require_default_mihomo, 'Required pinned default Mihomo is missing')
+    if has_mihomo:
+        expected.add('mihomo.exe')
+    require(len(binaries) == len(expected) and {b['path'] for b in binaries} == expected and
             all(b.get('origin_hash_verified') is True for b in binaries),
-            'Expected exactly 23 CPython + 1 PyYAML + 2 application/native verified binary origins')
+            'Expected exact reviewed Windows runtime, PyYAML, application/native and pinned optional core origins; '
+            'missing=' + str(sorted(expected - {b['path'] for b in binaries})) +
+            ', unexpected=' + str(sorted({b['path'] for b in binaries} - expected)))
     files = {item['path']: item['sha256'] for item in report.get('files', [])}
     require(len(files) == len(report.get('files', [])), 'Duplicate inventoried file path')
     require(all(files.get(binary['path']) == binary['sha256'] for binary in binaries), 'Binary hashes disagree with archive file inventory')
     internal = {b['path']: b['sha256'] for b in binaries if b['path'].startswith('_internal/') and b['path'] != yaml_path}
     require(internal == reviewed['runtime_files'], 'Windows runtime differs from the individually reviewed files')
-    require({b['path'] for b in binaries} == set(internal) | {yaml_path, 'PSPortalProxy.exe', 'native/psportal-native.exe'}, 'Unexpected executable in Windows package')
     require(report['runtime']['pyinstaller'] == reviewed['pyinstaller_version'], 'PyInstaller version requires new review')
     prefix = report['runtime']['base_prefix']
     system = str(PureWindowsPath(system_root) / 'System32')
     for binary in binaries:
+        if binary['path'] == 'mihomo.exe':
+            try:
+                from .default_mihomo import BINARY_SHA256, VERSION
+            except ImportError:
+                from default_mihomo import BINARY_SHA256, VERSION
+            require(binary['sha256'] == BINARY_SHA256 and any(
+                c.get('type') == 'PINNED_OFFICIAL_MIHOMO' and c.get('sha256') == BINARY_SHA256 and
+                c.get('source') == 'https://github.com/MetaCubeX/mihomo/releases/tag/' + VERSION
+                for c in binary.get('origin_candidates', [])), 'Default Mihomo differs from pinned official release')
         if binary['path'] == yaml_path:
             require(binary['sha256'] == yaml_review['extension_sha256'] and
                     any(c.get('source') == yaml_extension['source'] and c.get('sha256') == binary['sha256'] and
@@ -81,6 +96,21 @@ def verify_archive(archive, files):
             require(digest(stream.read(item)) == expected[item.filename], 'Archive content changed: ' + item.filename)
 
 
+def verify_default_core(app, validation):
+    try:
+        from .default_mihomo import verify, verify_complete_source, VERSION
+    except ImportError:
+        from default_mihomo import verify, verify_complete_source, VERSION
+    notices = app / 'licenses' / ('mihomo-' + VERSION)
+    source = notices / ('mihomo-' + VERSION + '-source.zip')
+    license_text = verify(app / 'mihomo.exe', source)
+    require((notices / 'LICENSE.txt').read_bytes() == license_text, 'Default Mihomo full license differs from pinned source')
+    complete_sha = verify_complete_source(notices / 'corresponding-source.tar.gz', source)
+    require(validation.get('default_mihomo_bundled') is True and
+            validation.get('default_mihomo_complete_source_sha256') == complete_sha,
+            'Default Mihomo corresponding source differs from build/test evidence')
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--inventory', type=Path, default=ROOT / 'runtime-inventory/runtime-inventory.json')
@@ -88,7 +118,7 @@ def main(argv=None):
     require(sys.platform == 'win32', 'The Windows release gate must run on the actual Windows host')
     report = json.loads(args.inventory.read_text(encoding='utf-8'))
     reviewed = json.loads((ROOT / 'notices/windows-cpython-3.13.16-runtime.json').read_text(encoding='utf-8'))
-    binaries = verify_inventory(report, reviewed, os.environ['SystemRoot'])
+    binaries = verify_inventory(report, reviewed, os.environ['SystemRoot'], require_default_mihomo=True)
     for binary in binaries:
         for item in binary.get('imports', []):
             if item['name'].lower().startswith('api-ms-win-'):
@@ -98,12 +128,14 @@ def main(argv=None):
     verify_retained_notices(app / 'licenses/pyyaml-6.0.3', report['runtime']['pyyaml'])
     require(app.resolve() == (ROOT / 'dist/PSPortalProxy').resolve(), 'Unexpected app inventory path')
     validation = json.loads((ROOT / 'release/VALIDATION.json').read_text(encoding='utf-8'))
-    require(report['source_commit'] == validation['source_commit'] == os.environ['GITHUB_SHA'], 'Evidence came from a different commit')
+    verify_default_core(app, validation)
+    require(report['source_commit'] == validation['source_commit'] == os.environ.get('PSPORTAL_SOURCE_COMMIT', os.environ.get('GITHUB_SHA', '')), 'Evidence came from a different commit')
     require(validation['system'] == 'windows' and validation['architecture'] == 'amd64', 'Unreviewed platform')
     require(validation['tests_run'] >= 132 and all(validation.get(key) is True for key in (
         'exact_cpython_runtime_notices', 'actual_external_core_tested', 'native_platform_frozen_window_smoke_tested',
         'source_tk_gui_both_modes_tested', 'matching_bundled_native_discovery_tested')), 'Required tested/runtime-notice evidence is missing')
-    from retain_cpython_notices import verified_supplement_files, WINDOWS_INSTALLED_LICENSE_SHA256, WINDOWS_VCRUNTIME_SHA256
+    from retain_cpython_notices import (verified_supplement_files, WINDOWS_INSTALLED_LICENSE_SHA256,
+                                       WINDOWS_VCRUNTIME_SHA256, WINDOWS_VCRUNTIME_1_SHA256)
     source = ROOT / 'notices/cpython-3.13.16'
     retained = app / 'licenses/cpython-3.13.16'
     for path in verified_supplement_files(source):
@@ -113,6 +145,8 @@ def main(argv=None):
     require(scope['installed_python_license_sha256'] == WINDOWS_INSTALLED_LICENSE_SHA256 and
             digest((app / 'licenses/Python-LICENSE.txt').read_bytes()) == WINDOWS_INSTALLED_LICENSE_SHA256, 'Installed license differs from reviewed distribution')
     require(scope['microsoft_runtime']['sha256'] == WINDOWS_VCRUNTIME_SHA256, 'Microsoft runtime scope does not match review')
+    require(scope.get('microsoft_runtime_additional', {}).get('sha256') == WINDOWS_VCRUNTIME_1_SHA256,
+            'Additional Microsoft runtime scope does not match review')
     for name in ('licenses/PyInstaller-COPYING.txt', 'licenses/PSPortal-OnDemand-LICENSE.txt',
                  'native/LICENSE', 'native/THIRD_PARTY_NOTICES.md', 'native/SOURCE.md', 'native/licenses/ENGINE-NOTICES.txt'):
         require((app / name).stat().st_size > 100, 'Required full notice is missing: ' + name)

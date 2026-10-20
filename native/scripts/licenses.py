@@ -5,7 +5,7 @@ import verify_mihomo_patch
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 
 # Registry DNS/transport failures are retryable, but source/integrity failures are not.
-TRANSIENT = ('i/o timeout', 'no such host', 'temporary failure in name resolution',
+TRANSIENT = ('i/o timeout', 'connect: operation timed out', 'no such host', 'temporary failure in name resolution',
              'connection reset', 'connection refused', 'tls handshake timeout',
              'network is unreachable', '502 bad gateway', '503 service unavailable',
              '504 gateway timeout')
@@ -50,7 +50,9 @@ def network_output(args, *, attempts=3, timeout=120, env=None):
    # Inspect full output before truncation; fatal failures always take priority.
    full_stdout=stdout.lower()
    fatal=any(x in message or x in full_stdout for x in FATAL)
-   if attempt+1==attempts or fatal or not any(x in message for x in TRANSIENT):
+   transient = (any(x in message for x in TRANSIENT) or
+                ('stream error:' in message and 'internal_error; received from peer' in message))
+   if attempt+1==attempts or fatal or not transient:
     raise
   except subprocess.TimeoutExpired:
    if attempt+1==attempts:raise

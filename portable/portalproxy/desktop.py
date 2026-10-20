@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import atexit
 import json
 import os
@@ -66,8 +67,8 @@ def read_config(path: Path) -> dict:
     return result
 
 
-def save_config(path: Path, values: dict) -> None:
-    """Validate and atomically replace a private file; never leave partial JSON."""
+def _write_config(path: Path, values: dict, *, validate=False) -> None:
+    """Atomically save a private draft, optionally validating a runnable config."""
     path = path.expanduser().absolute()
     if path.is_symlink():
         raise ValueError('Choose a regular configuration file, not a symbolic link')
@@ -78,10 +79,15 @@ def save_config(path: Path, values: dict) -> None:
         with os.fdopen(fd, 'w', encoding='utf-8', newline='\n') as stream:
             json.dump(values, stream, ensure_ascii=False, indent=2)
             stream.write('\n')
-        config.load(temporary)  # Field-only validation messages; no network or execution.
+        if validate:
+            config.load(temporary)  # Field validation only; no network or execution.
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def save_config(path: Path, values: dict) -> None:
+    _write_config(path, values, validate=True)
 
 
 def reusable_source(values: dict, source: str, url: str) -> bool:
@@ -351,6 +357,13 @@ class DesktopApp:
         self.closing = False
         self.importing = False
         self.quick_start_pending = False
+        self.subscription_message = ''
+        self.core_message = ''
+        self.setting_up = False
+        self.setup_events = queue.Queue()
+        self.discovery_events = queue.Queue()
+        self._discovery_pending = False
+        self._next_discovery = 0
         self.import_events = queue.Queue()
         self.command_id = 0
         self.pending_command = None
@@ -377,7 +390,12 @@ class DesktopApp:
     def _changed(self, *_):
         if not self.loading:
             if _ and 'subscription_url' in self.vars and str(self.vars['subscription_url']) == _[0]:
-                self.view.subscription_info = None
+                if self.subscription_ready():
+                    self.subscription_message = 'Subscription imported. Start sharing when ready.'
+                    self._read_source_accounting()
+                else:
+                    self.view.subscription_info = None
+                    self.subscription_message = 'Link changed. Press Enter or paste to import before starting.'
             if _ and any(key in self.vars and str(self.vars[key]) == _[0]
                          for key in ('listen_host', 'allowed_clients')):
                 self._lan_automatic = False
@@ -501,17 +519,54 @@ class DesktopApp:
 
     def set_product_mode(self, mode):
         if (mode not in product_modes.MODES or self.closing or self.importing
-                or self.backend.process is not None):
+                or getattr(self, 'setting_up', False) or self.backend.process is not None
+                or self.raw.get('existing_proxy_port') and mode != 'game'):
+            if self.raw.get('existing_proxy_port'):
+                self.vars['product_mode'].set('game')
             self.view.refresh()
             return
         self.vars['product_mode'].set(mode)
+
+    def unlink_proxy(self):
+        if self.closing or self.importing or self.setting_up or self.backend.process is not None:
+            return
+        self.raw.pop('existing_proxy_port', None)
+        self.raw.pop('source_provenance', None)
+        previous = self.raw.pop('linked_previous_source', None)
+        if isinstance(previous, dict):
+            for key in ('profile_file', 'subscription_file', 'subscription_url', 'engine_mode', 'product_mode'):
+                value = previous.get(key)
+                if not isinstance(value, str) or key not in self.vars:
+                    continue
+                if key == 'engine_mode' and value not in ('external', 'embedded'):
+                    continue
+                if key == 'product_mode' and value not in product_modes.MODES:
+                    continue
+                self.vars[key].set(value)
+            for key in ('source_provenance', 'node_policies', 'host_profile_overlay'):
+                if key in previous:
+                    self.raw[key] = copy.deepcopy(previous[key])
+            self.raw['product_mode'] = self.product_mode()
+            self.raw['engine_mode'] = self.vars['engine_mode'].get()
+        self.view.subscription_info = None
+        self.subscription_message = ('Subscription imported. Start sharing when ready.' if self.subscription_ready() else
+            'Independent core selected. Paste a subscription or choose a local configuration.')
+        if self.subscription_ready():
+            self._read_source_accounting()
+        try:
+            self._persist_import()
+        except (OSError, ValueError):
+            self.subscription_message = 'Client unlinked for this session. Could not save; check file permissions.'
+        self.engine_controls()
+        self.view.refresh()
 
     def product_mode(self):
         variable = getattr(self, 'vars', {}).get('product_mode')
         return variable.get() if variable else product_modes.infer_mode(getattr(self, 'raw', {}))
 
     def engine_controls(self):
-        running = (self.backend.process is not None and self.backend.process.poll() is None) or self.importing
+        running = ((self.backend.process is not None and self.backend.process.poll() is None)
+                   or self.importing or getattr(self, 'setting_up', False))
         mode = self.vars['engine_mode'].get() if 'engine_mode' in self.vars else 'external'
         for key, widgets in self.engine_inputs.items():
             active = mode == ('embedded' if key == 'native_path' else 'external')
@@ -539,9 +594,29 @@ class DesktopApp:
         defaults = dict(config.DEFAULTS, listen_host='', allowed_clients=[], core_path='', subscription_url='',
                         native_path=str(config.bundled_native_path() or ''))
         defaults.update(self.raw)
+        # An empty saved field means bundled discovery, just as it does in
+        # config.validate. Keep the visible field/readiness check consistent;
+        # never replace a nonempty explicit path, even when it needs repair.
+        if not defaults.get('native_path'):
+            defaults['native_path'] = str(config.bundled_native_path() or '')
         defaults.update(product_modes.editable_config(defaults))
+        if self.raw.get('existing_proxy_port'):
+            defaults['product_mode'] = 'game'
+        from .core_setup import discover_core
+        discovered = discover_core(self.path, defaults.get('core_path', ''))
+        if discovered:
+            defaults['core_path'] = discovered
+        self._auto_core_path = discovered if not self.raw.get('core_path') else None
+        self.core_message = ''
+        self.subscription_message = ''
         self._lan_automatic = product_modes.infer_automatic(self.raw)
         source = self.raw.get('profile_file') or self.raw.get('subscription_file')
+        # Recognize source snapshots accepted by the earlier Windows PR only
+        # when its saved URL fingerprint still matches; edited URLs must import.
+        url = self.raw.get('subscription_url', '')
+        if (source and not self.raw.get('source_provenance') and isinstance(url, str)
+                and self.raw.get('desktop_import_url_sha256') == hashlib.sha256(url.encode('utf-8')).hexdigest()):
+            self.raw['source_provenance'] = dict(kind='subscription', path=source, url=url)
         if source:
             try:
                 metadata = Path(source).with_suffix(Path(source).suffix + '.info.json')
@@ -549,7 +624,7 @@ class DesktopApp:
                     self.view.subscription_info = read_config(metadata)
             except (ValueError, OSError):
                 pass
-        elif self.raw.get('existing_proxy_port') or not self.raw.get('subscription_url'):
+        elif self.raw.get('existing_proxy_port'):
             self.view.subscription_info = self.clash_info
         self.loading = True
         for key, variable in self.vars.items():
@@ -559,6 +634,8 @@ class DesktopApp:
             variable.set(str(value))
         self.loading = False
         self.dirty = False
+        if source and not self.subscription_ready():
+            self.view.subscription_info = None
         self.view.switch_threshold_var.set(str(defaults.get('switch_threshold_ms', 50)))
         self.view.selection_group_var.set('')
         self.path_var.set(str(self.path))
@@ -568,6 +645,159 @@ class DesktopApp:
         self.view.set_theme(load_theme(self.path))
         self.engine_controls()
         self.view.refresh()
+
+    def subscription_ready(self):
+        source = next((self.vars[key].get().strip() for key in ('profile_file', 'subscription_file')
+                       if self.vars.get(key) and self.vars[key].get().strip()), '')
+        url = self.vars['subscription_url'].get().strip() if 'subscription_url' in self.vars else ''
+        return bool(source and Path(source).is_file() and reusable_source(self.raw, source, url))
+
+    def _read_source_accounting(self):
+        source = self.vars['profile_file'].get() or self.vars['subscription_file'].get()
+        try:
+            path = Path(source).with_suffix(Path(source).suffix + '.info.json')
+            self.view.subscription_info = read_config(path) if path.is_file() and path.stat().st_size <= 8192 else None
+        except (OSError, ValueError):
+            self.view.subscription_info = None
+
+    def paste_subscription(self, event=None):
+        if self.closing or self.importing or self.setting_up or self.backend.process is not None:
+            return 'break'
+        try:
+            value = self.root.clipboard_get().strip()
+        except Exception:
+            self.subscription_message = 'The clipboard has no text. Paste an HTTPS subscription link.'
+            self.view.refresh()
+            return 'break'
+        if self.vars['subscription_url'].get().strip() != value:
+            self.vars['subscription_url'].set(value)
+        self.import_subscription()
+        return 'break'
+
+    def _persist_import(self):
+        """Save only accepted source fields; keep unrelated form edits unsaved."""
+        values = dict(self.raw)
+        for key in ('profile_file', 'subscription_file', 'subscription_url'):
+            values[key] = self.vars[key].get().strip()
+        if getattr(self, '_auto_core_path', None) and self.vars['core_path'].get() == self._auto_core_path:
+            values['core_path'] = self._auto_core_path
+        _write_config(self.path, values)
+        self.raw = values
+        defaults = dict(config.DEFAULTS, listen_host='', allowed_clients=[], core_path='',
+                        native_path=str(config.bundled_native_path() or ''), subscription_url='')
+        defaults.update(values)
+        defaults.update(product_modes.editable_config(defaults))
+        self.dirty = False
+        for key, variable in self.vars.items():
+            expected = defaults.get(key, '')
+            if key == 'allowed_clients':
+                expected = ', '.join(str(item) for item in expected) if isinstance(expected, list) else ''
+            if variable.get().strip() != str(expected):
+                self.dirty = True
+                break
+        from .i18n import save_language, save_theme
+        try:
+            save_language(self.path, self.view.language)
+            save_theme(self.path, self.view.theme)
+        except (OSError, ValueError):
+            self.backend.log('Preferences could not be saved.')
+
+    def setup_core(self, start_after=False):
+        """Reuse one stable core, or explicitly download a verified Windows core."""
+        if self.closing or self.importing or self.setting_up or self.backend.process is not None:
+            return
+        self._start_after_setup = start_after
+        from .core_setup import discover_core, can_install, install_core, RELEASES
+        found = discover_core(self.path)
+        if found:
+            self.vars['core_path'].set(found)
+            self.core_message = 'Core selected automatically. Start sharing when ready.'
+            self.view.refresh()
+            self._resume_after_core_setup()
+            return
+        if not can_install():
+            self._start_after_setup = False
+            self.core_message = 'The default core is unavailable. Use the build for this system or check Advanced settings.'
+            self.view.refresh()
+            return
+        self.setting_up = True
+        self.core_message = 'Downloading and verifying Mihomo…'
+        self.running_controls(True)
+        self.stop_button.configure(state='disabled')
+        path = self.path
+        def worker():
+            try:
+                result = install_core(path)
+            except Exception:
+                self.setup_events.put((path, None))
+            else:
+                self.setup_events.put((path, result))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _resume_after_core_setup(self):
+        action = getattr(self, '_start_after_setup', False)
+        self._start_after_setup = False
+        if action and not self.closing:
+            self.start() if action == 'manual' else self.quick_start()
+
+
+    def open_clash(self):
+        from .core_setup import discover_clash
+        executable = discover_clash()
+        if executable:
+            try:
+                subprocess.Popen([str(executable)], creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            except OSError:
+                self.core_message = 'Could not open Clash. Open it manually and enable its system proxy.'
+                self.view.refresh()
+        else:
+            import webbrowser
+            webbrowser.open('https://github.com/clash-verge-rev/clash-verge-rev/releases')
+
+
+    def _poll_setup(self):
+        try:
+            path, result = self.setup_events.get_nowait()
+        except queue.Empty:
+            return
+        self.setting_up = False
+        if path == self.path:
+            if result:
+                self.vars['core_path'].set(result)
+                self.core_message = 'Core selected automatically. Start sharing when ready.'
+            else:
+                self._start_after_setup = False
+                self.core_message = 'Default core preparation failed. Check the network and click Start sharing to retry.'
+        self.running_controls(False)
+        if result and path == self.path:
+            self._resume_after_core_setup()
+
+
+    def _poll_discovery(self):
+        """Refresh cached Clash accounting off the Tk thread; never call its controller."""
+        try:
+            proxy, info = self.discovery_events.get_nowait()
+        except queue.Empty:
+            pass
+        else:
+            self._discovery_pending = False
+            self.existing_proxy, self.clash_info = proxy, info
+            if self.raw.get('existing_proxy_port'):
+                self.view.subscription_info = info
+            self.view.refresh()
+        if not self.closing and not self._discovery_pending and time.monotonic() >= self._next_discovery:
+            self._discovery_pending = True
+            self._next_discovery = time.monotonic() + 10
+            def worker():
+                from .existing_proxy import detect_system_proxy, read_clash_accounting
+                try:
+                    proxy = detect_system_proxy()
+                    info = read_clash_accounting() if proxy else None
+                except Exception:
+                    proxy, info = None, None
+                self.discovery_events.put((proxy, info))
+            threading.Thread(target=worker, daemon=True).start()
+
 
     def choose_config(self):
         from tkinter import filedialog, messagebox
@@ -582,6 +812,7 @@ class DesktopApp:
         from tkinter import filedialog
         name = filedialog.askopenfilename(title=self._t('Choose your verified Mihomo executable'), parent=self.root)
         if name:
+            self.core_message = ''
             self.vars['core_path'].set(name)
 
     def choose_provider(self):
@@ -620,6 +851,8 @@ class DesktopApp:
             self.raw['source_provenance'] = dict(kind='local', path=str(path.absolute()))
             if origin_url is not None:
                 self.raw['source_provenance'].update(kind='subscription', url=origin_url)
+            else:
+                self.vars['subscription_url'].set('')
             try:
                 metadata = path.with_suffix(path.suffix + '.info.json')
                 self.view.subscription_info = read_config(metadata) if metadata.is_file() and metadata.stat().st_size <= 8192 else None
@@ -641,11 +874,24 @@ class DesktopApp:
             '\n\n'.join(self._t(note) for note in preparation_notes(values)), parent=self.root)
 
     def quick_start(self):
-        if self.importing or self.backend.process is not None:
+        if self.importing or getattr(self, 'setting_up', False) or self.backend.process is not None:
             return
-        # Keep the previous linked proxy and manual network settings intact
-        # until a validated import is accepted by _poll_import. A failed URL,
-        # download or cancelled preparation must not change sharing modes.
+        current_url = self.vars['subscription_url'].get().strip()
+        if self.raw.get('existing_proxy_port') and not current_url:
+            self.use_existing_proxy()
+            return
+        if not self.subscription_ready():
+            source = any(self.vars.get(key) and self.vars[key].get().strip()
+                         for key in ('profile_file', 'subscription_file'))
+            if not current_url and not source and getattr(self, 'existing_proxy', None):
+                self.use_existing_proxy()
+                return
+            self.subscription_message = 'Paste a subscription first. Importing never starts sharing.'
+            self.view.refresh()
+            return
+        if self.vars['engine_mode'].get() == 'external' and not Path(self.vars['core_path'].get()).is_file():
+            self.setup_core(start_after='quick')
+            return
         plan = self._configure_lan(commit=False)
         if not plan:
             return
@@ -677,10 +923,6 @@ class DesktopApp:
                 return
             self.view.show('Overview' if self.product_mode() == 'clash' else 'LAN sharing')
             return
-        self.quick_start_pending = True
-        self.import_subscription()
-        if not self.importing:
-            self.quick_start_pending = False
 
     def _configure_lan(self, reserved=(), *, commit=True):
         from tkinter import messagebox
@@ -743,7 +985,7 @@ class DesktopApp:
         self.view.refresh()
 
     def use_existing_proxy(self):
-        if self.importing or self.backend.process is not None: return
+        if self.importing or getattr(self, 'setting_up', False) or self.backend.process is not None: return
         from .existing_proxy import detect_system_proxy, read_clash_accounting
         self.existing_proxy = detect_system_proxy()
         if not self.existing_proxy:
@@ -751,17 +993,42 @@ class DesktopApp:
             messagebox.showinfo(self._t('Existing proxy'), self._t('No active loopback HTTP system proxy was detected.'), parent=self.root)
             return
         port = self.existing_proxy['port']
-        if not self._configure_lan((port,)): return
+        try:
+            snapshot = self._quick_snapshot(None)
+        except (OSError, ValueError):
+            from tkinter import messagebox
+            messagebox.showerror(self._t('Cannot save configuration'), self._t('The configuration could not be saved. Choose a writable location and check file permissions.'), parent=self.root)
+            return
+        previous_mode = self.vars['product_mode'].get() if 'product_mode' in self.vars else None
+        if previous_mode is not None:
+            self.vars['product_mode'].set('game')
+        plan = self._configure_lan((port,), commit=False)
+        if not plan:
+            if previous_mode is not None:
+                self.vars['product_mode'].set(previous_mode)
+            return
+        self._quick_rollback = snapshot
+        self._apply_lan(plan)
+        if not self.raw.get('existing_proxy_port'):
+            previous = {key: variable.get() for key, variable in self.vars.items()
+                        if key in ('profile_file', 'subscription_file', 'subscription_url', 'engine_mode')}
+            previous['product_mode'] = previous_mode or 'game'
+            previous.update({key: copy.deepcopy(self.raw[key]) for key in
+                             ('source_provenance', 'node_policies', 'host_profile_overlay') if key in self.raw})
+            self.raw['linked_previous_source'] = previous
         self.vars['engine_mode'].set('external')
         self.vars['profile_file'].set('')
         self.vars['subscription_file'].set('')
+        self.vars['subscription_url'].set('')
         self.vars['selection_mode'].set('auto')
         self.vars['preferred_node'].set('')
         self.raw['existing_proxy_port'] = port
         self.clash_info = read_clash_accounting()
         self.view.subscription_info = self.clash_info
         self.view.refresh()
-        self.start()
+        if self.start() is False:
+            self._rollback_quick_start()
+            return
         self.view.show('Overview' if self.product_mode() == 'clash' else 'LAN sharing')
 
     def inspect_provider(self):
@@ -776,19 +1043,27 @@ class DesktopApp:
         except (OSError, ValueError) as error:
             messagebox.showerror(self._t('Cannot inspect provider'), self._t(str(error)), parent=self.root)
 
-    def import_subscription(self):
-        if self.closing or self.importing or self.backend.process is not None:
+    def import_subscription(self, force=False):
+        if self.closing or self.importing or getattr(self, 'setting_up', False) or self.backend.process is not None:
             return
         from tkinter import messagebox
         from urllib.parse import urlsplit
         url = self.vars['subscription_url'].get().strip()
+        if not force and self.subscription_ready():
+            self.subscription_message = 'Already imported. Start sharing or refresh explicitly.'
+            self.view.refresh()
+            return
         try:
             parsed = urlsplit(url)
             if (parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password or parsed.fragment
+                    or len(url) > 8192 or not parsed.hostname.isascii()
+                    or any(c in parsed.netloc for c in '\\%')
+                    or parsed.port is not None and not 1 <= parsed.port <= 65535
                     or any(ord(c) <= 32 for c in url)):
                 raise ValueError()
         except ValueError:
-            messagebox.showerror(self._t('Check configuration'), self._t('Enter a valid HTTPS subscription URL.'), parent=self.root)
+            self.subscription_message = 'Enter a valid HTTPS subscription URL.'
+            self.view.refresh()
             return
         self.importing = True
         self._import_generation += 1
@@ -856,6 +1131,7 @@ class DesktopApp:
         self._active_import = None
         self.importing = False
         self.quick_start_pending = False
+        self.subscription_message = 'Import cancelled. Paste again to retry.'
         self.running_controls(False)
         self._set_status('Stopped')
         self.backend.log(self._t('Preparation cancelled.'))
@@ -876,28 +1152,15 @@ class DesktopApp:
         self._active_import = None
         self.importing = False
         self.running_controls(self.backend.process is not None)
-        pending, self.quick_start_pending = self.quick_start_pending, False
+        self.quick_start_pending = False
         if error:
             self._set_status('Stopped with error')
-            messagebox.showerror(self._t('Cannot inspect provider'), self._t(error), parent=self.root)
+            self.subscription_message = ('Refresh failed. Previous import is still available.'
+                                         if self.subscription_ready() else error)
+            self.view.refresh()
         else:
             self._set_status('Stopped')
-            # Connectivity/ports can change during the download. Stage their
-            # final validation before accepting the provider or changing modes.
-            plan = self._configure_lan(commit=False) if pending else None
-            if pending and not plan:
-                self._discard_import(path)
-                return
-            rollback = None
-            if pending and 'product_mode' in getattr(self, 'vars', {}):
-                try:
-                    rollback = self._quick_snapshot(path)
-                except (OSError, ValueError):
-                    self._discard_import(path)
-                    self._set_status('Stopped with error')
-                    messagebox.showerror(self._t('Cannot save configuration'),
-                        self._t('The configuration could not be saved. Choose a writable location and check file permissions.'), parent=self.root)
-                    return
+            # Import is independent of network setup and never starts a listener.
             # Refreshing the same URL must not discard its saved node choices
             # merely because the downloader uses a new private filename.
             previous_policies = copy.deepcopy(getattr(self, 'raw', {}).get('node_policies'))
@@ -912,16 +1175,12 @@ class DesktopApp:
                 return
             if same_source and previous_policies is not None:
                 self.raw['node_policies'] = previous_policies
-            if pending:
-                self._quick_rollback = rollback
-                self._apply_lan(plan)
-                if self.start() is False:
-                    self._rollback_quick_start()
-                    return
-                if self.view.navigation_generation == active[3]:
-                    self.view.show('Overview' if self.product_mode() == 'clash' else 'LAN sharing')
-            elif self.backend.process is None:
-                self._set_status('Stopped')
+            self.subscription_message = 'Subscription imported. Start sharing when ready.'
+            try:
+                self._persist_import()
+            except (OSError, ValueError):
+                self.subscription_message = 'Imported for this session. Could not save; check file permissions.'
+            self.view.refresh()
 
     def _quick_snapshot(self, imported_path):
         previous = None
@@ -1028,6 +1287,8 @@ class DesktopApp:
         if values.get('engine_mode') == 'external' and not values.get('existing_proxy_port'):
             values['live_node_controls'] = True
         if 'product_mode' in self.vars:
+            if values.get('existing_proxy_port') and values.get('product_mode') != 'game':
+                raise ValueError('Linked proxy supports game mode only. Other modes remain in the existing Clash client.')
             values['product_lan_automatic'] = getattr(self, '_lan_automatic', product_modes.infer_automatic(self.raw))
             values = product_modes.effective_config(values)
         return values
@@ -1064,9 +1325,17 @@ class DesktopApp:
 
     def start(self):
         from tkinter import messagebox
-        if self.closing or self.importing:
+        if self.closing or self.importing or getattr(self, 'setting_up', False):
             return False
         if self.backend.process is not None and self.backend.process.poll() is None:
+            return False
+        if self.vars['subscription_url'].get().strip() and not self.subscription_ready():
+            self.subscription_message = 'Link changed. Press Enter or paste to import before starting.'
+            self.view.refresh()
+            return False
+        if (self.vars.get('engine_mode') and self.vars['engine_mode'].get() == 'external'
+                and not self.raw.get('existing_proxy_port') and not Path(self.vars['core_path'].get()).is_file()):
+            self.setup_core(start_after='manual')
             return False
         if not self.save():
             return False
@@ -1154,6 +1423,8 @@ class DesktopApp:
         self.view.refresh()
 
     def poll(self):
+        self._poll_setup()
+        self._poll_discovery()
         self._poll_import()
         self._poll_updates()
         self._poll_runtime()

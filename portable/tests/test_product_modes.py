@@ -128,7 +128,7 @@ class ProductModeDesktopTests(unittest.TestCase):
         app.closing = app.importing = app.loading = app.dirty = app.quick_start_pending = False
         app.backend = SimpleNamespace(process=None, start=Mock(), log=Mock(), secrets=())
         app.view = SimpleNamespace(refresh=Mock(), preview=None, subscription_info=None, setup_network='',
-                                   navigation_generation=0, show=Mock(), node_message='')
+                                   navigation_generation=0, show=Mock(), node_message='', language='en', theme='dark')
         app._t = lambda key: key
         app.running_controls, app._set_status, app.engine_controls = Mock(), Mock(), Mock()
         return app
@@ -272,7 +272,7 @@ class ProductModeDesktopTests(unittest.TestCase):
             with patch('portalproxy.setup.available_port', side_effect=[10101, 10102, 10103]):
                 app.quick_start()
             app.start.assert_not_called()
-            app.import_subscription.assert_called_once()
+            app.import_subscription.assert_not_called()
 
     def test_unknown_provenance_does_not_reuse_a_provider_with_edited_url(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -315,7 +315,7 @@ class ProductModeDesktopTests(unittest.TestCase):
                 app.quick_start_pending = False
                 app._poll_import()
                 self.assertEqual(app.vars['subscription_file'].get(), str(imported))
-                self.assertEqual(app.raw['subscription_file'], saved_source)
+                self.assertEqual(app.raw['subscription_file'], str(imported))
                 self.assertEqual(app.raw['source_provenance'],
                                  dict(kind='subscription', path=str(imported), url=accepted_url))
                 self.assertEqual(app.raw['node_policies'], policies)
@@ -329,49 +329,41 @@ class ProductModeDesktopTests(unittest.TestCase):
         app._active_import = (1, threading.Event(), app.path, 0, app.raw['subscription_url'])
         app.import_events.put((1, imported, None))
 
-    def test_cancelled_or_failed_quick_start_restores_saved_source_and_node_preferences(self):
-        for failure in ('cancel', 'spawn', 'before-ready'):
+    def test_failed_start_restores_network_but_retains_accepted_import(self):
+        for failure in ('spawn', 'before-ready'):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
                 app = self.app(Path(directory) / 'config.json')
-                save_config(app.path, app.collect())
-                original_bytes = app.path.read_bytes()
-                original_raw = copy.deepcopy(app.raw)
-                original_vars = {key: var.get() for key, var in app.vars.items()}
-                imported = app.path.parent / 'import.json'
-                imported.write_text('{"proxies": []}')
-                self.prepare_import(app, imported)
-                if failure == 'cancel':
-                    app.cancel_preparation()
-                else:
-                    if failure == 'spawn':
-                        app.backend.start.side_effect = OSError('controlled failure')
-                    with patch('portalproxy.setup.discover_lan', return_value=dict(host='192.168.50.2', clients=['192.168.50.30'], subnet='192.168.50.0/24')), \
-                         patch('portalproxy.setup.available_port', side_effect=[10101, 10102, 10103]), \
-                         patch('tkinter.messagebox.showerror'):
-                        app._poll_import()
-                    if failure == 'before-ready':
-                        self.assertEqual(app.raw['node_policies'], original_raw['node_policies'])
-                        self.assertIsNotNone(app._quick_rollback)
-                        app._rollback_quick_start()
-                self.assertEqual(app.path.read_bytes(), original_bytes)
-                self.assertEqual(app.raw, original_raw)
-                self.assertEqual({key: var.get() for key, var in app.vars.items()}, original_vars)
-                self.assertFalse(imported.exists())
+                provider = app.path.parent / 'accepted.json'
+                provider.write_text('{"proxies": []}')
+                app._use_imported_file(provider, origin_url=app.vars['subscription_url'].get())
+                app._persist_import()
+                accepted = app.path.read_bytes()
+                before = copy.deepcopy(app.raw)
+                original_lan = app.vars['listen_host'].get(), app.vars['allowed_clients'].get()
+                if failure == 'spawn':
+                    app.backend.start.side_effect = OSError('controlled failure')
+                with patch('portalproxy.setup.discover_lan', return_value=dict(host='192.168.60.2', clients=['192.168.60.3'], subnet='192.168.60.0/24')), \
+                     patch('portalproxy.setup.available_port', side_effect=[10101, 10102, 10103]), \
+                     patch('tkinter.messagebox.showerror'):
+                    app.quick_start()
+                if failure == 'before-ready':
+                    app._rollback_quick_start()
+                self.assertEqual(app.path.read_bytes(), accepted)
+                self.assertEqual(app.raw, before)
+                self.assertTrue(provider.exists())
+                self.assertEqual((app.vars['listen_host'].get(), app.vars['allowed_clients'].get()), original_lan)
     def test_failed_start_does_not_overwrite_configuration_edited_outside_app(self):
         with tempfile.TemporaryDirectory() as directory:
             app = self.app(Path(directory) / 'config.json')
             save_config(app.path, app.collect())
-            imported = app.path.parent / 'import.json'
-            imported.write_text('{"proxies": []}')
-            self.prepare_import(app, imported)
-            with patch('portalproxy.setup.discover_lan', return_value=dict(host='192.168.50.2', clients=['192.168.50.30'], subnet='192.168.50.0/24')), \
+            with patch('portalproxy.setup.discover_lan', return_value=dict(host='192.168.60.2', clients=['192.168.60.3'], subnet='192.168.60.0/24')), \
                  patch('portalproxy.setup.available_port', side_effect=[10101, 10102, 10103]):
-                app._poll_import()
+                app.quick_start()
             changed = b'{"external_edit": true}\n'
             app.path.write_bytes(changed)
             app._rollback_quick_start()
             self.assertEqual(app.path.read_bytes(), changed)
-            self.assertTrue(imported.exists(), 'Keep the source if disk rollback did not complete')
+            self.assertTrue(Path(app.raw['subscription_file']).exists())
             self.assertIn('could not be restored', app.backend.log.call_args.args[0])
 
     def test_close_after_failed_child_exit_finishes_rollback_before_destroy(self):
@@ -380,12 +372,9 @@ class ProductModeDesktopTests(unittest.TestCase):
             app.root = Mock()
             save_config(app.path, app.collect())
             old = app.path.read_bytes()
-            imported = app.path.parent / 'import.json'
-            imported.write_text('{"proxies": []}')
-            self.prepare_import(app, imported)
-            with patch('portalproxy.setup.discover_lan', return_value=dict(host='192.168.50.2', clients=['192.168.50.30'], subnet='192.168.50.0/24')), \
+            with patch('portalproxy.setup.discover_lan', return_value=dict(host='192.168.60.2', clients=['192.168.60.3'], subnet='192.168.60.0/24')), \
                  patch('portalproxy.setup.available_port', side_effect=[10101, 10102, 10103]):
-                app._poll_import()
+                app.quick_start()
             self.assertIsNotNone(app._quick_rollback)
             app.backend.process = SimpleNamespace(poll=lambda: 1)
             app.backend.ready = False
@@ -394,7 +383,7 @@ class ProductModeDesktopTests(unittest.TestCase):
                 app.close()
             self.assertIsNone(app._quick_rollback)
             self.assertEqual(app.path.read_bytes(), old)
-            self.assertFalse(imported.exists())
+            self.assertTrue(Path(app.raw['subscription_file']).exists())
             app.backend.poll.assert_called_once()
             app.root.destroy.assert_called_once()
 
@@ -504,19 +493,18 @@ class ProductModeWindowTests(unittest.TestCase):
                 old = path.read_bytes()
                 preserved = {key: var.get() for key, var in app.vars.items() if key != 'product_mode'}
                 self.assertEqual(root.title(), '星渡 StarPass')
-                self.assertTrue(app.view.product_mode_combo.winfo_viewable())
+                self.assertTrue(all(button.winfo_viewable() for button in app.view.product_mode_buttons.values()))
                 self.assertTrue(app.view.quick_button.winfo_viewable())
                 for _ in range(3):
                     for index, mode in enumerate(product_modes.MODES):
-                        app.view.product_mode_combo.current(index)
-                        app.view.product_mode_combo.event_generate('<<ComboboxSelected>>')
+                        app.view.product_mode_buttons[mode].invoke()
                         root.update()
                         self.assertEqual(app.product_mode(), mode)
                         self.assertEqual(app.collect()['listen_host'], '127.0.0.1' if mode == 'clash' else values['listen_host'])
                         for language in ('zh', 'en'):
                             app.set_language(language)
                             root.update()
-                            self.assertIn(app._t(product_modes.LABELS[mode]), app.view.product_mode_combo.get())
+                            self.assertEqual(app._t(product_modes.LABELS[mode]), app.view.product_mode_buttons[mode].cget('text'))
                         self.assertEqual({key: var.get() for key, var in app.vars.items() if key != 'product_mode'}, preserved)
                         self.assertEqual(path.read_bytes(), old)
                 app.dirty = False

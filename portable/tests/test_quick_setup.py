@@ -68,11 +68,17 @@ class QuickSetupWindowTests(unittest.TestCase):
                     return {'upload':1000000000,'download':2000000000,'total':10000000000,'expire':2000000000}
                 with (patch('portalproxy.setup.discover_lan', side_effect=AssertionError('Clash mode must not discover LAN')),
                       patch('portalproxy.core.download_subscription', side_effect=download)):
+                    app.import_subscription()
+                    end = time.monotonic()+10
+                    while app.importing and time.monotonic()<end:
+                        root.update(); time.sleep(.02)
+                    self.assertIsNone(app.backend.process)
                     app.view.quick_button.invoke()
                     end = time.monotonic()+15
                     while time.monotonic()<end and not app.backend.ready:
                         root.update(); time.sleep(.02)
                     self.assertTrue(app.backend.ready, app.log_widget.get('1.0','end'))
+                    app.view.refresh(); root.update()
                     self.assertEqual(app.collect()['listen_host'], '127.0.0.1')
                     self.assertEqual(app.vars['listen_host'].get(), '')
                     self.assertEqual(app.vars['listen_port'].get(), str(listen))

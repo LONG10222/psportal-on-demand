@@ -22,6 +22,6 @@ PY
 find "$ROOT/app/src/main/java" "$ROOT/app/src/androidTest/java" "$MOBILE_JAVA" "$OUT/generated" -name '*.java' -print > "$OUT/sources.list"
 # The installed runtime may include jdk.compiler without the javac launcher.
 # This uses actual Android SDK APIs and real generated bindings; no fake native API.
-java -m jdk.compiler/com.sun.tools.javac.Main -source 17 -target 17 -classpath "$ANDROID_JAR" \
+java -m jdk.compiler/com.sun.tools.javac.Main -encoding UTF-8 -source 17 -target 17 -classpath "$ANDROID_JAR" \
   -d "$OUT/classes" @"$OUT/sources.list"
 echo 'PASS: Android main/test Java source compile, real generated bindings and aapt2 resource link (not APK/runtime validation)'
