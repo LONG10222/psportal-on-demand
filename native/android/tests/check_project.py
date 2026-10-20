@@ -102,7 +102,9 @@ vpn_start = vpn.split('@Override public int onStartCommand(', 1)[1].split('priva
 assert '!inputsMatch(config, requestedLan, requestedPhone)' in proxy_start
 assert 'ProductMode.matchesSessionInputs(lan, phone, json.opt("lan_enabled"), json.opt("phone_vpn"))' in service_source
 assert proxy_start.index('!inputsMatch(') < proxy_start.index('startForeground(')
-assert 'mode.available(otherVpnActive)' in activity and '(!phoneApps.isChecked() || !otherVpnActive)' in activity
+assert 'showVpnConflict()' in activity and 'Settings.ACTION_VPN_SETTINGS' in activity
+assert 'ProxyService.ACTION_REPAIR' in activity and 'session.repair(' in service_source
+assert 'Native cleanup failed. Use Repair app network' in session
 assert '(requestedPhone && (android.net.VpnService.prepare(this) != null || PhoneVpnService.hasVpnConflict(this)))' in proxy_start
 # Framework start IDs change on ignored duplicate commands. Startup identity is
 # fenced by SessionController, while service cleanup must use the newest ID.
@@ -142,7 +144,7 @@ assert 'getBoolean("lan_enabled", true)' in activity
 assert 'phoneApps.setChecked(PhoneVpnService.isRequested())' in activity
 assert '.putBoolean("phone_vpn"' not in activity, 'Never save consent intent as a standing opt-in'
 assert 'boolean hasSelectedTraffic = lanSharing.isChecked() || phoneApps.isChecked();' in activity
-assert 'start.setEnabled(canStartSelected)' in activity
+assert 'start.setEnabled(editable && hasSelectedTraffic)' in activity
 assert 'if (!lanSharing.isChecked()) { configureStart(null); return; }' in activity
 assert 'pendingConfig.lanEnabled && Permissions.requiresLocalNetwork' in activity
 assert 'requested.lanEnabled && !NetworkAddresses.isAssigned' in activity

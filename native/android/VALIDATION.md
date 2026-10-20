@@ -12,18 +12,23 @@ Apple or router implementation is modified by this Android change.
   accepts equivalent LF/CRLF notice text without masking stale notice content.
   The existing baseline APK was independently audited using real Windows SDK
   Build Tools 35.0.0; both ABIs and 16 KiB alignment passed.
-- 369 JVM assertions pass locally: 241 host/controller, 105 runtime/product/
+- 378 JVM assertions pass locally: 256 host/controller, 99 runtime/product/
   accounting, 8 background and 15 phone state; XML/source guards and 17 compiled
   manifest/notice helper tests pass. These are host tests, not device execution.
 - New cases cover all service/native topology pairs, missing/non-boolean flags
-  and Game-only availability with another VPN. Services reject mismatched inputs
+  and explicit cleanup recovery. Services reject mismatched inputs
   before native Start; phone consent/conflict gates remain independent.
-- UI disables Mixed/Clash and phone opt-in when another VPN is present, blocks
-  Start for a stale phone selection, and leaves Game selectable. Disconnecting
-  that VPN restores choices. Android has no external-Clash association feature.
+- Android keeps all stopped-session modes selectable. A VPN conflict at Start
+  shows a clear warning and opens system VPN Settings only on explicit user tap.
+  It does not take over a second VPN or apply Windows external-client constraints.
+- Repair app network stops this app's proxy/tunnel without reconnecting, retries
+  failed native cleanup and permits Start only after successful recovery. Tests
+  cover repeated repair, queued-start cancellation, failed repair, idle repair
+  and restart gating. Android has no external-Clash association feature.
 - adb platform tools were downloaded locally; `adb devices -l` returned no
-  device. No install, logcat, Android instrumentation, real VPN/TUN, hotspot,
-  OEM/background or actual game test was performed. No phone data was changed.
+  device. Physical-device install, logcat, Android instrumentation, real VPN/TUN, hotspot,
+  OEM/background or actual game tests have not been performed. Emulator execution
+  is checked separately. No existing phone data was changed.
 - CI now builds/lints and audits both unsigned release and debug APKs using the
   same real AAR; matching corresponding source, notices and checksums accompany
   them. Inspect this change's exact-revision CI result, not a prior green run.

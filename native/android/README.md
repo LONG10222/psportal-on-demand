@@ -25,12 +25,18 @@ Windows external-client mode does not imply an Android counterpart. Game mode
 while another VPN is active still runs the embedded LAN engine; that VPN may
 affect upstream connections according to Android/network policy.
 
-When another VPN is detected, only Game remains selectable. Mixed, Clash and
-phone-app opt-in are disabled; a previously selected phone mode cannot Start.
-Disconnect the other VPN to restore those choices. This app never disconnects
-another VPN. Start and both services recheck conflict/consent independently of
-the UI. The service rejects missing, non-boolean or mismatched LAN/phone flags
-between its command and native JSON before starting foreground/native work.
+Android has one active VPN per user/profile. Mode selection remains available;
+starting Mixed/Clash while another VPN is active instead shows a clear conflict
+message and an explicit link to system VPN Settings. The app does not replace or
+disconnect another VPN. Start and both services recheck conflict/consent.
+Repair app network stops this app's proxy/tunnel and retries native cleanup,
+including after failed cleanup, without reconnecting or changing system DNS,
+Wi-Fi, another VPN or user data. A successful cleanup restores the stopped state;
+failed repair remains blocked and suggests force-stop. Network loss already stops
+this app's tunnel automatically. LAN devices must disable their manual HTTP proxy
+when sharing stops. No core selection or developer tooling appears in normal use.
+The service rejects missing, non-boolean or mismatched LAN/phone flags between its
+command and native JSON before starting foreground/native work.
 Editing/pasting the masked subscription field never imports or starts a session;
 only the explicit Start controls do so. Repeated Start is guarded during setup,
 permission requests, native startup and an active session.

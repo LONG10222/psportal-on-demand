@@ -79,7 +79,7 @@ public final class MainActivity extends Activity {
     private TextView productModeDescription;
     private TextView status, network, metrics, address, accounting, engine, nodeSummary, phoneVpnStatus, profileWarning;
     private ProgressBar usage;
-    private Button start, manualStart, stop, advancedToggle, loadNodes, testNodes, chooseNode, chooseGroup, fastest;
+    private Button start, manualStart, stop, repair, advancedToggle, loadNodes, testNodes, chooseNode, chooseGroup, fastest;
     private AlertDialog nodeDialog;
     private long nodeDialogSession, nodeUiGeneration;
     private Switch appearance, backgroundSharing, phoneApps, lanSharing;
@@ -202,7 +202,7 @@ public final class MainActivity extends Activity {
         lanSharing.setOnCheckedChangeListener((view, checked) -> { prefs().edit().putBoolean("lan_enabled", checked).apply(); refreshNetwork(); render(); });
         phoneApps.setOnCheckedChangeListener((view, checked) -> {
             if (!checked && PhoneVpnService.isRequested()) PhoneVpnService.stop(this);
-            else if (checked && (!session.snapshot().canStart() || PhoneVpnService.isActive() || PhoneVpnService.hasVpnConflict(this))) {
+            else if (checked && (!session.snapshot().canStart() || PhoneVpnService.isActive())) {
                 phoneApps.setChecked(false); return;
             }
             render();
@@ -211,7 +211,6 @@ public final class MainActivity extends Activity {
             if (updatingProductMode) return;
             if (!canChangeProductMode()) { syncProductMode(); return; }
             for (ProductMode mode : ProductMode.values()) if (productModeIds[mode.ordinal()] == checkedId) {
-                if (!mode.available(PhoneVpnService.hasVpnConflict(this))) { syncProductMode(); render(); return; }
                 // Presets only update the next session's inputs. The existing
                 // Start path still owns every permission and VPN consent check.
                 updatingProductMode = true; vpnConsentGranted = false; resumeAfterVpnConsent = false;
@@ -232,6 +231,8 @@ public final class MainActivity extends Activity {
         phoneVpnStatus = text(stateCard, "", "", 13, false, true);
         profileWarning = text(stateCard, "", "", 12, false, true);
         stop = button(stateCard, "停止全部代理", "Stop all proxying", false, v -> stopRequested());
+        repair = button(stateCard, "修复本应用网络", "Repair app network", false, v -> repairRequested());
+        text(stateCard, "遇到断网或残留连接时，一键停止本应用代理、清理隧道并重新检测网络；不会自动重连。其他 VPN 请在系统设置中关闭。局域网设备还需自行关闭手动 HTTP 代理。", "If connectivity fails, stop this app’s proxy, clean up its tunnel and check the network again. This does not reconnect automatically. Close other VPNs in Settings. LAN devices also need their manual HTTP proxy turned off.", 12, false, true);
         backgroundSharing = new Switch(this); backgroundSharing.setTag("background_sharing");
         bind(backgroundSharing, "允许后台运行", "Allow background operation");
         backgroundSharing.setChecked(prefs().getBoolean(BackgroundPolicy.PREFERENCE_KEY, BackgroundPolicy.DEFAULT_ALLOW_BACKGROUND));
@@ -450,11 +451,28 @@ public final class MainActivity extends Activity {
         new AlertDialog.Builder(dialogContext()).setTitle(t("选择本机地址", "Choose local address"))
                 .setItems(addresses.toArray(new String[0]), (dialog, item) -> phone.setText(addresses.get(item))).show();
     }
+    private void showVpnConflict() {
+        new AlertDialog.Builder(dialogContext())
+                .setTitle(t("请先关闭其他 VPN", "Close the other VPN first"))
+                .setMessage(t("Android 同一用户通常只能运行一个 VPN。请先在系统设置中关闭已有 VPN，再返回点击启动。本次没有启动；修复本应用网络只清理本应用。", "Android permits one active VPN per user/profile. Close the existing VPN in Settings, return and press Start. Nothing started. Repair app network cleans up this app only."))
+                .setPositiveButton(t("打开 VPN 设置", "Open VPN settings"), (dialog, which) -> {
+                    try { startActivity(new Intent(android.provider.Settings.ACTION_VPN_SETTINGS)); }
+                    catch (RuntimeException unavailable) { message(t("请手动打开系统设置 → VPN。", "Open system Settings → VPN manually.")); }
+                }).setNegativeButton(t("取消", "Cancel"), null).show();
+    }
+    private void repairRequested() {
+        nodeUiGeneration++; dismissNodeDialog(); cancelPending();
+        phoneApps.setChecked(false); PhoneVpnService.stop(this);
+        launchRequested = false;
+        try { startService(new Intent(this, ProxyService.class).setAction(ProxyService.ACTION_REPAIR)); }
+        catch (RuntimeException denied) { message(t("无法请求清理，请在系统设置中强行停止本应用后重试。", "Cleanup could not be requested. Force stop this app in Settings and retry.")); }
+        refreshNetwork(); render();
+    }
     private void beginStart(boolean automatic) {
         if (preparing || launchRequested || pendingConfig != null || addressChoiceOpen || PhoneVpnService.isActive() || !session.snapshot().canStart()) return;
         if (!lanSharing.isChecked() && !phoneApps.isChecked()) return;
         if (phoneApps.isChecked() && PhoneVpnService.hasVpnConflict(this)) {
-            message(t("检测到其他 VPN。请先手动断开，或关闭“同时代理本机应用”后重试。", "Another VPN is active. Disconnect it yourself, or turn off phone-app proxying before retrying.")); return;
+            showVpnConflict(); return;
         }
         vpnConsentGranted = false;
         if (!lanSharing.isChecked()) { configureStart(null); return; }
@@ -514,7 +532,7 @@ public final class MainActivity extends Activity {
         }
         if (phoneApps.isChecked()) {
             if (PhoneVpnService.hasVpnConflict(this)) {
-                cancelPending(); message(t("其他 VPN 已连接，本次启动已取消。请先断开其他 VPN。", "Another VPN connected. Start was canceled; disconnect that VPN first.")); return;
+                cancelPending(); showVpnConflict(); return;
             }
             if (!vpnConsentGranted) {
                 try {
@@ -737,17 +755,10 @@ public final class MainActivity extends Activity {
         for (View view : configurationViews) view.setEnabled(editable);
         // Phone routing may be stopped independently while LAN sharing continues.
         // Turning it back on requires a new stopped-session Start and consent check.
-        boolean otherVpnActive = editable && PhoneVpnService.hasVpnConflict(this);
-        for (ProductMode mode : ProductMode.values()) {
-            View choice = productModes.findViewById(productModeIds[mode.ordinal()]);
-            boolean enabled = editable && mode.available(otherVpnActive);
-            choice.setEnabled(enabled); choice.setAlpha(enabled ? 1f : 0.45f);
-        }
-        phoneApps.setEnabled(editable && !otherVpnActive || snapshot.phase == SessionController.Phase.RUNNING && phoneApps.isChecked());
-        if (otherVpnActive) productModeDescription.append(t("\n检测到其他 VPN：混合 / Clash 不可用。可选择游戏模式；本应用不会联动或控制其他 Clash。断开其他 VPN 后可重新选择。", "\nAnother VPN is active: Mixed / Clash are unavailable. Game remains available; this app does not link to or control another Clash client. Disconnect the other VPN to choose phone routing."));
+        phoneApps.setEnabled(editable || snapshot.phase == SessionController.Phase.RUNNING && phoneApps.isChecked());
         boolean hasSelectedTraffic = lanSharing.isChecked() || phoneApps.isChecked();
-        boolean canStartSelected = editable && hasSelectedTraffic && (!phoneApps.isChecked() || !otherVpnActive);
-        start.setEnabled(canStartSelected); manualStart.setEnabled(canStartSelected);
+        start.setEnabled(editable && hasSelectedTraffic); manualStart.setEnabled(editable && hasSelectedTraffic);
+        repair.setEnabled(snapshot.phase != SessionController.Phase.STOPPING);
         stop.setEnabled(preparing || pendingConfig != null || launchRequested || PhoneVpnService.isActive() || snapshot.isActive() && snapshot.phase != SessionController.Phase.STOPPING);
         JSONObject nativeState;
         try { nativeState = new JSONObject(snapshot.nativeStatus); } catch (org.json.JSONException invalid) { nativeState = new JSONObject(); }

@@ -201,6 +201,36 @@ public final class HostTests {
         Fixture stopped = new Fixture(); stopped.session.stop(stopped.done); stopped.callbacks.drain();
         check(stopped.completed == 1 && stopped.engine.calls.isEmpty(), "Stop without start is idempotent");
     }
+    private static void repairTests() {
+        Fixture f = new Fixture();
+        f.session.start("{}", f.done); f.work.drain(); f.callbacks.drain();
+        f.engine.failStop = true; f.session.stop(f.done); f.work.drain(); f.callbacks.drain();
+        check(f.session.snapshot().phase == SessionController.Phase.FAULTED, "Cleanup failure blocks restart");
+        f.engine.failStop = false;
+        f.session.repair(f.done); f.session.repair(f.done);
+        check(f.session.snapshot().phase == SessionController.Phase.STOPPING, "Repair uses the stopping gate");
+        check(!f.session.start("{}", f.done), "Repair cannot race a new Start");
+        check(f.work.tasks.size() == 1, "Repeated Repair shares one native cleanup");
+        f.work.drain(); f.callbacks.drain();
+        check(f.session.snapshot().phase == SessionController.Phase.STOPPED, "Successful repair clears faulted state");
+        check(f.completed == 4, "Both repair waiters complete");
+        check(f.engine.calls.equals(java.util.Arrays.asList("start", "stop", "stop")), "Repair stops native resources without reconnecting");
+        check(f.session.start("{}", f.done), "A new explicit Start is allowed after repair");
+
+        Fixture failure = new Fixture(); failure.engine.failStop = true;
+        failure.session.repair(failure.done); failure.work.drain(); failure.callbacks.drain();
+        check(failure.session.snapshot().phase == SessionController.Phase.FAULTED, "Failed repair stays fail-closed");
+        check(!failure.session.start("{}", failure.done), "Failed repair never claims a reusable engine");
+        check(!failure.session.snapshot().error.contains("secret"), "Repair does not reveal engine exception text");
+        check(failure.completed == 1, "Failed repair still completes its waiter");
+
+        Fixture canceled = new Fixture(); canceled.session.start("{}", canceled.done);
+        canceled.session.repair(canceled.done); canceled.work.drain(); canceled.callbacks.drain();
+        check(canceled.engine.calls.equals(java.util.Arrays.asList("stop")), "Repair cancels queued startup without opening a listener");
+        check(canceled.completed == 1, "Repair fences the obsolete startup callback");
+        Fixture idle = new Fixture(); idle.session.repair(idle.done); idle.work.drain(); idle.callbacks.drain();
+        check(idle.engine.calls.equals(java.util.Arrays.asList("stop")), "Idle repair still retries resource cleanup");
+    }
     private static void nodeControlTests() {
         Engine engine = new Engine(); Queue owner = new Queue(), probes = new Queue(), callbacks = new Queue();
         SessionController session = new SessionController(engine, owner, callbacks, probes);
@@ -369,6 +399,6 @@ public final class HostTests {
         check(fixture.session.snapshot().nativeStatus.equals("{}"), "Null status stays unavailable");
     }
     public static void main(String[] args) {
-        configTests(); lifecycleTests(); startCompletionIdentityTests(); simpleHomeTests(); nodeControlTests(); groupControlTests(); statusSizeTests(); System.out.println("PASS: " + assertions + " Android host config/lifecycle/presentation assertions (JVM only)");
+        configTests(); lifecycleTests(); repairTests(); startCompletionIdentityTests(); simpleHomeTests(); nodeControlTests(); groupControlTests(); statusSizeTests(); System.out.println("PASS: " + assertions + " Android host config/lifecycle/presentation assertions (JVM only)");
     }
 }

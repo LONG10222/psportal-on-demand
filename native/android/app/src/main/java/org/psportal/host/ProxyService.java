@@ -19,6 +19,7 @@ import android.os.Looper;
 /** Explicit user-started connected-device service. Never sticky and never boot-started. */
 public final class ProxyService extends Service {
     static final String ACTION_START = "org.psportal.host.START";
+    static final String ACTION_REPAIR = "org.psportal.host.REPAIR";
     static final String ACTION_STOP = "org.psportal.host.STOP";
     static final String EXTRA_CONFIG = "config";
     static final String EXTRA_ADDRESS = "address";
@@ -92,6 +93,11 @@ public final class ProxyService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         latestStartId = startId;
         taskRemovedSinceCommand = false;
+        if (intent != null && ACTION_REPAIR.equals(intent.getAction())) {
+            phoneRequested = false; PhoneVpnService.stop(this); main.removeCallbacks(statusTick);
+            session.repair(() -> { if (!destroyed) finishStop(startId); });
+            return START_NOT_STICKY;
+        }
         if (intent == null || ACTION_STOP.equals(intent.getAction())) {
             requestStop(startId);
             return START_NOT_STICKY;

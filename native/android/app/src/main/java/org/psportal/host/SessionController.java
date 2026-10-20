@@ -138,7 +138,7 @@ public final class SessionController {
                 synchronized (this) {
                     if (token == generation) snapshot = new Snapshot(cleaned ? Phase.ERROR : Phase.FAULTED, "{}",
                             cleaned ? "Start failed. Check the LAN address, available proxy port, public HTTPS subscription (port 443), and bundled engine." :
-                            "Native cleanup failed. Force stop this app before trying again.");
+                            "Native cleanup failed. Use Repair app network or force stop this app before trying again.");
                 }
             }
             callbacks.execute(() -> {
@@ -153,8 +153,11 @@ public final class SessionController {
         return true;
     }
 
-    public synchronized void stop(Runnable completion) {
-        if (!snapshot.isActive()) { callbacks.execute(completion); return; }
+    public synchronized void stop(Runnable completion) { stopInternal(completion, false); }
+    /** Explicit recovery retries native cleanup even after a failed or idle session. */
+    public synchronized void repair(Runnable completion) { stopInternal(completion, true); }
+    private void stopInternal(Runnable completion, boolean repair) {
+        if (!snapshot.isActive() && !repair) { callbacks.execute(completion); return; }
         stopCallbacks.add(completion);
         if (snapshot.phase == Phase.STOPPING) return;
         ++generation;
@@ -173,7 +176,7 @@ public final class SessionController {
     private void finishTeardownIfReady() {
         if (snapshot.phase != Phase.STOPPING || !teardownFinished || commandPending) return;
         snapshot = new Snapshot(teardownSucceeded ? Phase.STOPPED : Phase.FAULTED, "{}",
-                teardownSucceeded ? "" : "Native cleanup failed. Force stop this app before trying again.");
+                teardownSucceeded ? "" : "Native cleanup failed. Use Repair app network or force stop this app before trying again.");
         List<Runnable> completions = new ArrayList<>(stopCallbacks); stopCallbacks.clear();
         for (Runnable callback : completions) callbacks.execute(callback);
     }

@@ -50,8 +50,6 @@ public final class RuntimeNodePresentationTests {
             check(!mode.description(true).isEmpty() && !mode.description(false).isEmpty(), "Product boundaries are bilingual");
         }
         for (ProductMode mode : ProductMode.values()) {
-            check(mode.available(false), "Every mode is available without another VPN");
-            check(mode.available(true) == (mode == ProductMode.GAME), "Another VPN permits only LAN game mode");
             for (ProductMode envelope : ProductMode.values())
                 check(ProductMode.matchesSessionInputs(envelope.lanEnabled, envelope.phoneVpn, mode.lanEnabled, mode.phoneVpn)
                         == (mode == envelope), "Service flags must match native inputs exactly");
