@@ -1,12 +1,18 @@
 # Optional legacy LuCI interface
 
-The installer copies `controller/portalproxy.lua` and
-`model/cbi/portalproxy.lua` into the matching `/usr/lib/lua/luci/`
+The installer copies `controller/portalproxy.lua`,
+`model/cbi/portalproxy.lua` and `view/portalproxy/onboarding.htm` into the matching `/usr/lib/lua/luci/`
 directories when LuCI is present. The interface requires the legacy Lua
 CBI runtime (`luci-compat` on LuCI versions that provide it). The CLI is
 independent of this optional page.
 
 Open **Services → PS Portal** in a root-authenticated LuCI session.
+
+The responsive StarPass introduction uses the same restrained slate/blue hierarchy
+as the desktop and phone apps. Three read-only cards separate preparation,
+explicit service application and device-side verification. The cards follow the
+browser's light/dark preference without changing the router theme. No form action,
+polling, configuration value or subscription secret is added to this template.
 
 - Viewing/reloading the page reads only `/tmp/portalproxy/nodes.json` and
   UCI settings. It does not contact the core, send probes, or reset idle time.

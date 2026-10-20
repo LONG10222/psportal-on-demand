@@ -86,7 +86,7 @@ class PackagingTests(unittest.TestCase):
                     self.assertEqual(hashlib.sha256(archive.extractfile('starpass-router-source/' + name).read()).hexdigest(), expected)
 
     def test_optional_luci_sources_and_commands(self):
-        for relative in ('controller/portalproxy.lua', 'model/cbi/portalproxy.lua'):
+        for relative in ('controller/portalproxy.lua', 'model/cbi/portalproxy.lua', 'view/portalproxy/onboarding.htm'):
             self.assertTrue((ROOT / 'luci' / relative).is_file())
             self.assertIn(relative, (ROOT / 'install.sh').read_text())
             self.assertIn(relative, (ROOT / 'uninstall.sh').read_text())
@@ -94,6 +94,25 @@ class PackagingTests(unittest.TestCase):
         for command in ('nodes)', 'nodes-refresh)', 'prefer)', 'subscription-update)', 'apply)'):
             self.assertIn(command, shell)
         self.assertNotIn('subscription_url', (ROOT / 'src/nodes.lua').read_text())
+
+    def test_luci_onboarding_installs_and_stays_read_only(self):
+        template = (ROOT / 'luci/view/portalproxy/onboarding.htm').read_text()
+        self.assertIn('class="starpass-guide"', template)
+        self.assertIn('prefers-color-scheme:dark', template)
+        self.assertIn('max-width:480px', template)
+        for forbidden in ('<script', '<form', 'onclick=', 'fetch(', '<%=', 'subscription_url'):
+            self.assertNotIn(forbidden, template)
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / 'root'
+            (target / 'usr/lib/lua/luci').mkdir(parents=True)
+            subprocess.run(['sh', str(ROOT / 'install.sh'), '--root', str(target), '--openclash'], check=True, stdout=subprocess.PIPE)
+            installed = target / 'usr/lib/lua/luci/view/portalproxy/onboarding.htm'
+            self.assertEqual(installed.read_text(), template)
+            self.assertEqual(installed.stat().st_mode & 0o777, 0o644)
+            self.assertFalse((target / 'etc/rc.d').exists())
+            subprocess.run(['sh', str(ROOT / 'uninstall.sh'), '--root', str(target)], check=True, stdout=subprocess.PIPE)
+            self.assertFalse(installed.exists())
+            self.assertTrue((target / 'etc/config/portalproxy').exists())
 
     def assert_no_runtime_payload(self, path, root):
         forbidden = {'.env', 'api-header', 'api-secret', 'status.json', 'policy.json', 'config.yaml'}

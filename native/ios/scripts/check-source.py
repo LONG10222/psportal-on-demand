@@ -21,6 +21,21 @@ class SourceGuardrails(unittest.TestCase):
         self.assertIn("HTTP/TCP only, not game UDP; foreground by default", home)
         self.assertIn("Turn the device's HTTP proxy off when finished", view)
 
+    def test_beginner_visual_hierarchy_preserves_controls_and_privacy(self):
+        view = (APP / "ContentView.swift").read_text()
+        home = view.split("private var sharingPage", 1)[1].split("private var", 1)[0]
+        self.assertLess(home.index('"Subscription & start"'), home.index('"Service status"'))
+        self.assertLess(home.index('"quickStartProxy"'), home.index('"sharingStatusTitle"'))
+        self.assertIn('accessibilityIdentifier("setupNextStep")', home)
+        self.assertIn('SecureField(', home)
+        self.assertIn('.privacySensitive()', home)
+        self.assertIn('if model.canStop { model.stop() } else { model.quickStart() }', home)
+        self.assertIn('dynamicTypeSize.isAccessibilitySize', home)
+        self.assertIn('ViewThatFits(in: .horizontal)', view)
+        self.assertIn('.tint(model.canStop ? Color.red : primaryAccent)', home)
+        self.assertIn('Image("StarPassMark")', view)
+        self.assertIn('if !model.isActive', view)
+
     def test_required_reason_manifest_matches_reviewed_uses(self):
         manifest = plistlib.loads((APP / "PrivacyInfo.xcprivacy").read_bytes())
         entries = manifest["NSPrivacyAccessedAPITypes"]

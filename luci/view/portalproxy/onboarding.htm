@@ -1,0 +1,31 @@
+<%-- Read-only presentation. Never interpolate configuration or subscription values. --%>
+<style>
+.starpass-guide { color:#172536; background:#f4f7fb; border:1px solid #d3dfed; border-radius:14px; padding:22px; margin:12px 0 24px; line-height:1.6; }
+.starpass-guide * { box-sizing:border-box; }
+.starpass-guide .starpass-kicker { color:#1e5ca5; font-size:.85em; font-weight:700; letter-spacing:.03em; margin:0 0 6px; }
+.starpass-guide h3 { color:inherit; font-size:1.35em; margin:0 0 8px; padding:0; border:0; }
+.starpass-guide p { margin:0 0 14px; }
+.starpass-guide ol { display:flex; flex-wrap:wrap; gap:12px; list-style:none; margin:16px 0; padding:0; counter-reset:starpass-step; }
+.starpass-guide li { flex:1 1 180px; min-width:0; padding:14px; border:1px solid #d3dfed; border-radius:10px; background:#fff; }
+.starpass-guide li::before { counter-increment:starpass-step; content:counter(starpass-step); color:#fff; background:#2367b8; width:26px; height:26px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; margin-bottom:8px; font-weight:700; }
+.starpass-guide strong { display:block; color:inherit; margin-bottom:5px; }
+.starpass-guide .starpass-limit { padding-top:14px; border-top:1px solid #d3dfed; color:#455b73; margin-bottom:0; font-size:.92em; }
+@media (prefers-color-scheme:dark) {
+ .starpass-guide { color:#edf3fa; background:#172333; border-color:#3b5068; }
+ .starpass-guide .starpass-kicker { color:#9bc6ff; }
+ .starpass-guide li { background:#1e2d40; border-color:#3b5068; }
+ .starpass-guide .starpass-limit { color:#bdccde; border-color:#3b5068; }
+}
+@media (max-width:480px) { .starpass-guide { padding:16px; } .starpass-guide li { flex-basis:100%; } }
+</style>
+<section class="starpass-guide" aria-labelledby="starpass-guide-title">
+ <p class="starpass-kicker">StarPass · 星渡</p>
+ <h3 id="starpass-guide-title"><%:Game mode / 游戏模式%></h3>
+ <p><%:三步接入游戏设备。打开页面只读取本地快照，不会启动服务或测速。 / Three steps to connect. Viewing reads a local snapshot only; no service start or probes.%></p>
+ <ol>
+  <li><strong><%:Prepare settings / 准备配置%></strong><%:先选择核心模式并保存配置。联动模式的订阅和节点在 OpenClash 中管理。 / Choose a core mode and save. Linked subscriptions and nodes stay in OpenClash.%></li>
+  <li><strong><%:Start sharing / 启动共享%></strong><%:确认可以中断现有连接后，再应用已保存的设置。不会重启 OpenClash 本身。 / Apply saved settings when interruption is acceptable. OpenClash itself is never restarted.%></li>
+  <li><strong><%:Connect and verify / 接入并验证%></strong><%:在允许接入的设备上手动填写路由器地址和代理端口，先验证网页，再测试目标游戏功能。 / Set the allowed device’s manual HTTP proxy. Verify a webpage, then the intended game feature.%></li>
+ </ol>
+ <p class="starpass-limit"><%:监听就绪或设备已连接不等于外网访问成功。仅 HTTP/TCP 共享，不提供游戏 UDP 或全设备路由；用完请关闭设备的 HTTP 代理。 / Listener ready is not proof of Internet access. No game UDP or whole-device routing; disable the device proxy when finished.%></p>
+</section>
