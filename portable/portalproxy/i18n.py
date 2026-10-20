@@ -24,6 +24,9 @@ ZH = {
     '2. Connect the game device to the same reachable LAN, then follow LAN sharing to enter the displayed HTTP proxy address.': '第 2 步：让游戏设备接入同一可互通局域网，按“局域网共享”页面填写显示的 HTTP 代理地址。',
     'When finished, turn off the proxy setting on the device before stopping StarPass. Do not disable firewall or certificate protection.': '结束使用时，先关闭设备上的代理设置，再停止星渡。不要关闭防火墙或证书安全保护。',
 
+    'Your star-sea navigator': '你的星海领航员',
+    'Prepare. Connect. Explore.': '准备就绪，连接你的下一站。',
+
     'The saved provider is now a full profile. Import it again before starting.': '已保存的节点文件现在包含完整配置，请重新导入后再启动。',
     'Using your selected local file. Import subscription explicitly to replace this override.': '正在使用手动选择的本地文件；如需替换，请点击“导入订阅”。',
     'LAN listener IPv4 (saved for Game / Mixed)': '局域网监听 IPv4（游戏 / 混合模式）',

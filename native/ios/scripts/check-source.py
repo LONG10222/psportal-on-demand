@@ -36,6 +36,25 @@ class SourceGuardrails(unittest.TestCase):
         self.assertIn('Image("StarPassMark")', view)
         self.assertIn('if !model.isActive', view)
 
+    def test_anime_hero_is_static_decorative_and_accessible(self):
+        view = (APP / "ContentView.swift").read_text()
+        hero = view.split("private var navigatorHero", 1)[1].split("private var sharingPage", 1)[0]
+        home = view.split("private var sharingPage", 1)[1].split("private var", 1)[0]
+        self.assertIn("navigatorHero", home)
+        self.assertIn('Image("StarPassMark")', hero)
+        self.assertIn("dynamicTypeSize.isAccessibilitySize", hero)
+        self.assertIn(".fixedSize(horizontal: false, vertical: true)", hero)
+        self.assertIn(".allowsHitTesting(false).accessibilityHidden(true)", hero)
+        self.assertIn('accessibilityIdentifier("animeNavigatorHero")', hero)
+        self.assertNotIn("Button", hero)
+        self.assertNotIn(".onAppear", hero)
+        self.assertNotIn(".animation", hero)
+        self.assertNotIn("Timer", hero)
+        decoration = view.split("private struct NavigatorStarfield", 1)[1].split("private struct LicensesView", 1)[0]
+        self.assertIn("Canvas", decoration)
+        for expression in ["TimelineView", "Timer", "URLSession", "AsyncImage"]:
+            self.assertNotIn(expression, decoration)
+
     def test_required_reason_manifest_matches_reviewed_uses(self):
         manifest = plistlib.loads((APP / "PrivacyInfo.xcprivacy").read_bytes())
         entries = manifest["NSPrivacyAccessedAPITypes"]

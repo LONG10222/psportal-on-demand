@@ -11,6 +11,12 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.RectF;
+import android.graphics.ColorFilter;
+import android.graphics.PixelFormat;
+import android.graphics.drawable.Drawable;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.ConnectivityManager;
@@ -133,17 +139,12 @@ public final class MainActivity extends Activity {
         setContentView(scroll);
         LinearLayout heading = new LinearLayout(this);
         heading.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        ImageView mark = new ImageView(this);
-        mark.setImageResource(R.mipmap.ic_launcher);
-        mark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LinearLayout.LayoutParams markLayout = new LinearLayout.LayoutParams(dp(40), dp(40));
-        markLayout.setMarginEnd(dp(12)); heading.addView(mark, markLayout);
         TextView title = text(heading, "星渡 StarPass", "星渡 StarPass", 25, true, false);
         title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
         Button language = button(heading, "English", "中文", false, v -> switchLanguage());
         language.setLayoutParams(new LinearLayout.LayoutParams(-2, dp(48)));
         layout.addView(heading);
-        text(layout, "游戏设备与日常联网 · 按需代理", "On-demand proxy for game devices and everyday apps", 14, false, true);
+        navigatorHero(layout);
 
         section(layout, "当前网络", "Current network");
         network = text(card(layout), "正在识别网络", "Detecting network", 16, false, false);
@@ -279,6 +280,64 @@ public final class MainActivity extends Activity {
         refreshNetwork(); renderAccounting(); applyTheme(scroll); applySystemBars(); render();
     }
 
+    /** Static decorative artwork only: never polls, animates or handles input. */
+    private final class NavigatorBackdrop extends Drawable {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        @Override public void draw(Canvas canvas) {
+            RectF bounds = new RectF(getBounds());
+            paint.setShader(new android.graphics.LinearGradient(bounds.left, bounds.top, bounds.right, bounds.bottom,
+                    new int[]{Color.rgb(26, 28, 64), Color.rgb(40, 43, 87), Color.rgb(29, 61, 83)},
+                    null, android.graphics.Shader.TileMode.CLAMP));
+            canvas.drawRoundRect(bounds, dp(22), dp(22), paint); paint.setShader(null);
+            int saved = canvas.save();
+            android.graphics.Path clip = new android.graphics.Path();
+            clip.addRoundRect(bounds, dp(22), dp(22), android.graphics.Path.Direction.CW);
+            canvas.clipPath(clip);
+            paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(dp(1));
+            paint.setColor(Color.rgb(82, 88, 134));
+            float cx = bounds.right - dp(48), cy = bounds.centerY();
+            canvas.drawCircle(cx, cy, dp(82), paint); canvas.drawCircle(cx, cy, dp(116), paint);
+            paint.setStyle(Paint.Style.FILL); paint.setColor(Color.rgb(178, 197, 230));
+            // Deterministic stars avoid motion and never cover the text's left region.
+            float[][] stars = {{.71f,.13f},{.94f,.24f},{.89f,.83f},{.65f,.91f},{.54f,.09f}};
+            for (float[] star : stars) canvas.drawCircle(bounds.left + bounds.width() * star[0],
+                    bounds.top + bounds.height() * star[1], dp(1), paint);
+            canvas.restoreToCount(saved);
+        }
+        @Override public void setAlpha(int alpha) { /* Opaque, static decorative surface. */ }
+        @Override public void setColorFilter(ColorFilter filter) { /* No runtime image treatment. */ }
+        @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+    }
+    private void navigatorHero(LinearLayout parent) {
+        LinearLayout hero = new LinearLayout(this); hero.setTag("navigator_hero");
+        hero.setGravity(android.view.Gravity.CENTER_VERTICAL); hero.setPadding(dp(18), dp(16), dp(18), dp(16));
+        hero.setBackground(new NavigatorBackdrop());
+        LinearLayout copy = column();
+        TextView eyebrow = text(copy, "STARPASS · 星海航线", "STARPASS · STARSEA", 12, true, false);
+        eyebrow.setTag("hero_secondary");
+        TextView name = text(copy, "星海领航员", "Your starsea navigator", 23, true, false); name.setTag("hero_text");
+        TextView subtitle = text(copy, "让连接简单一点。\n先选用途，再准备出发。",
+                "A calmer way to connect.\nChoose your use, then get ready.", 14, false, false); subtitle.setTag("hero_secondary");
+        hero.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
+        ImageView mark = new ImageView(this); mark.setImageResource(R.mipmap.ic_launcher);
+        mark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        mark.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        LinearLayout.LayoutParams portrait = new LinearLayout.LayoutParams(dp(104), dp(104));
+        portrait.setMarginStart(dp(12)); hero.addView(mark, portrait);
+        LinearLayout.LayoutParams placement = new LinearLayout.LayoutParams(-1, -2);
+        placement.topMargin = dp(14); parent.addView(hero, placement);
+        hero.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            boolean stacked = right - left < dp(320) || getResources().getConfiguration().fontScale > 1.2f;
+            int orientation = stacked ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL;
+            if (hero.getOrientation() == orientation) return;
+            hero.setOrientation(orientation);
+            copy.setLayoutParams(stacked ? new LinearLayout.LayoutParams(-1, -2) : new LinearLayout.LayoutParams(0, -2, 1));
+            LinearLayout.LayoutParams imageLayout = new LinearLayout.LayoutParams(dp(104), dp(104));
+            imageLayout.setMarginStart(stacked ? 0 : dp(12)); imageLayout.topMargin = stacked ? dp(10) : 0;
+            imageLayout.gravity = android.view.Gravity.END; mark.setLayoutParams(imageLayout);
+        });
+    }
+
     private LinearLayout column() { LinearLayout view = new LinearLayout(this); view.setOrientation(LinearLayout.VERTICAL); return view; }
     private LinearLayout card(LinearLayout parent) {
         LinearLayout card = column(); card.setTag("card"); card.setPadding(dp(18), dp(16), dp(18), dp(16));
@@ -317,18 +376,20 @@ public final class MainActivity extends Activity {
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private String value(EditText input) { return input.getText().toString(); }
     private void applySystemBars() {
-        getWindow().setStatusBarColor(dark ? Color.rgb(15, 23, 34) : Color.rgb(243, 246, 250));
-        getWindow().setNavigationBarColor(dark ? Color.rgb(15, 23, 34) : Color.rgb(243, 246, 250));
+        getWindow().setStatusBarColor(dark ? Color.rgb(19, 22, 43) : Color.rgb(246, 245, 252));
+        getWindow().setNavigationBarColor(dark ? Color.rgb(19, 22, 43) : Color.rgb(246, 245, 252));
         getWindow().getDecorView().setSystemUiVisibility(dark ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
     }
     private void applyTheme(View view) {
         int foreground = dark ? Color.rgb(240, 244, 250) : Color.rgb(27, 39, 56);
         int secondary = dark ? Color.rgb(177, 191, 209) : Color.rgb(82, 98, 119);
-        int accent = Color.rgb(35, 103, 192);
-        if (view == scroll) view.setBackgroundColor(dark ? Color.rgb(15, 23, 34) : Color.rgb(243, 246, 250));
-        if ("card".equals(view.getTag())) { GradientDrawable background = new GradientDrawable(); background.setColor(dark ? Color.rgb(27, 39, 55) : Color.WHITE); background.setCornerRadius(dp(18)); background.setStroke(dp(1), dark ? Color.rgb(43, 59, 79) : Color.rgb(217, 226, 237)); view.setBackground(background); }
+        int accent = Color.rgb(92, 77, 174);
+        if (view == scroll) view.setBackgroundColor(dark ? Color.rgb(19, 22, 43) : Color.rgb(246, 245, 252));
+        if ("card".equals(view.getTag())) { GradientDrawable background = new GradientDrawable(); background.setColor(dark ? Color.rgb(31, 35, 59) : Color.WHITE); background.setCornerRadius(dp(18)); background.setStroke(dp(1), dark ? Color.rgb(57, 62, 91) : Color.rgb(220, 218, 237)); view.setBackground(background); }
         if (view instanceof TextView) ((TextView)view).setTextColor(new ColorStateList(new int[][]{new int[]{-android.R.attr.state_enabled}, new int[]{}}, new int[]{dark ? Color.rgb(105, 110, 120) : Color.rgb(130, 136, 147), "secondary".equals(view.getTag()) ? secondary : foreground}));
-        if (view instanceof Button) { boolean primary = "primary".equals(view.getTag()); view.setBackgroundTintList(ColorStateList.valueOf(primary ? accent : dark ? Color.rgb(36, 52, 73) : Color.rgb(228, 236, 246))); if (primary) ((Button)view).setTextColor(Color.WHITE); }
+        if (view instanceof TextView && "hero_text".equals(view.getTag())) ((TextView)view).setTextColor(Color.WHITE);
+        if (view instanceof TextView && "hero_secondary".equals(view.getTag())) ((TextView)view).setTextColor(Color.rgb(207, 213, 240));
+        if (view instanceof Button) { boolean primary = "primary".equals(view.getTag()); view.setBackgroundTintList(ColorStateList.valueOf(primary ? accent : dark ? Color.rgb(46, 48, 78) : Color.rgb(233, 230, 247))); if (primary) ((Button)view).setTextColor(Color.WHITE); }
         if (view instanceof EditText) {
             view.setBackgroundTintList(ColorStateList.valueOf(secondary));
             ((EditText)view).setHintTextColor(secondary);

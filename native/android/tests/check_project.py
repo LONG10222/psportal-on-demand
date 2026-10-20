@@ -235,9 +235,21 @@ def luminance(rgb):
     values = [x / 255 for x in rgb]
     linear = [x / 12.92 if x <= .04045 else ((x + .055) / 1.055) ** 2.4 for x in values]
     return sum(v * w for v, w in zip(linear, [.2126, .7152, .0722]))
-assert 'int accent = Color.rgb(35, 103, 192);' in activity
-assert 1.05 / (luminance((35, 103, 192)) + .05) >= 4.5
-for foreground, background in [((177, 191, 209), (27, 39, 55)), ((82, 98, 119), (255, 255, 255))]:
+assert 'int accent = Color.rgb(92, 77, 174);' in activity
+assert 1.05 / (luminance((92, 77, 174)) + .05) >= 4.5
+for foreground, background in [((177, 191, 209), (31, 35, 59)), ((82, 98, 119), (255, 255, 255))]:
     values = sorted((luminance(foreground), luminance(background)))
     assert (values[1] + .05) / (values[0] + .05) >= 4.5
 print('PASS: Android slate/blue hierarchy, approved artwork, non-mutating responsive modes and text contrast guards')
+
+# Static anime navigator: same approved image, no animation or traffic side effects.
+hero = activity.split('private void navigatorHero(LinearLayout parent)', 1)[1].split('private LinearLayout column()', 1)[0]
+assert 'R.mipmap.ic_launcher' in hero and 'dp(104)' in hero
+assert 'navigator_hero' in hero and '星海领航员' in hero
+assert 'IMPORTANT_FOR_ACCESSIBILITY_NO' in hero
+assert 'fontScale > 1.2f' in hero and 'LinearLayout.VERTICAL' in hero
+assert 'beginStart' not in hero and 'setOnClickListener' not in hero and 'postDelayed' not in hero
+assert 'private final class NavigatorBackdrop extends Drawable' in activity
+for background in [(26, 28, 64), (40, 43, 87), (29, 61, 83)]:
+    assert (luminance((207, 213, 240)) + .05) / (luminance(background) + .05) >= 4.5
+print('PASS: static anime hero artwork, responsive reading order and contrast guards')

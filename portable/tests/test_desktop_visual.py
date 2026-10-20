@@ -84,6 +84,21 @@ class DesktopVisualEvidenceTests(unittest.TestCase):
 
                 self.assertFalse(app.view.advanced)
                 self.assertEqual(app.view.language, 'zh')
+                self.assertIsNotNone(app.view.navigator_avatar)
+                self.assertEqual(app.view.navigator_avatar.width(), 128)
+                self.assertEqual(len(app.view.navigator_canvas.find_all()), 16)
+                original_scaling = root.tk.call('tk', 'scaling')
+                for scaling in (2.0, 2.67):
+                    root.tk.call('tk', 'scaling', scaling)
+                    app.view._draw_navigator()
+                    root.update_idletasks()
+                    bounds = [app.view.navigator_canvas.bbox(item)
+                              for item in app.view.navigator_canvas.find_withtag('navigator-text')]
+                    self.assertEqual(len(bounds), 3)
+                    self.assertTrue(all(left[3] < right[1] for left, right in zip(bounds, bounds[1:])))
+                    self.assertLess(bounds[-1][3], int(app.view.navigator_canvas.cget('height')))
+                root.tk.call('tk', 'scaling', original_scaling)
+                app.view._draw_navigator()
                 self.assertFalse(app.view.runtime_panel.winfo_ismapped())
                 self.assertFalse(app.view.node_controls.winfo_ismapped())
                 visible(app.view.quick_button)

@@ -274,19 +274,19 @@ class DesktopView:
     def _styles(self):
         dark = self.theme == 'dark'
         self.palette = c = dict(
-            page='#101722' if dark else '#f3f6fa',
-            side='#151e2b' if dark else '#eaf0f6',
-            card='#1a2534' if dark else '#ffffff',
+            page='#111326' if dark else '#f4f2fc',
+            side='#191a32' if dark else '#ece8f8',
+            card='#20213c' if dark else '#ffffff',
             text='#f1f5fa' if dark else '#172b43',
-            note='#a9b8cb' if dark else '#52667e',
+            note='#b9bdd8' if dark else '#585a78',
             entry='#111c2a' if dark else '#f5f8fc',
             edge='#35485f' if dark else '#d7e1ed',
-            selected='#243f5e' if dark else '#dbeaf8',
-            hover='#2a3e56' if dark else '#dce8f4',
-            button='#243347' if dark else '#eaf0f7',
-            accent='#216bc8',
-            status='#8ac2ff' if dark else '#205fae',
-            accent_hover='#185bb0',
+            selected='#39345f' if dark else '#e2dbf8',
+            hover='#39375f' if dark else '#e5def8',
+            button='#303050' if dark else '#eeeaf8',
+            accent='#6250b9',
+            status='#b4a9ff' if dark else '#57429d',
+            accent_hover='#51409f',
             scroll='#657d9b' if dark else '#7d8da2')
         families = set(tkfont.families(self.root))
         self.font_family = next((name for name in ('Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', 'Segoe UI', 'Helvetica Neue', 'DejaVu Sans') if name in families), 'TkDefaultFont')
@@ -400,7 +400,8 @@ class DesktopView:
         card = ttk.Frame(parent, padding=padding, style='Portal.Card.TFrame')
         card.grid(sticky='new', row=row, column=0, pady=(0, 16))
         card.columnconfigure(1, weight=1)
-        self.label(card, title, style='Portal.CardTitle.TLabel').grid(row=0, column=0, columnspan=3, sticky='w', pady=(0, 16))
+        if title is not None:
+            self.label(card, title, style='Portal.CardTitle.TLabel').grid(row=0, column=0, columnspan=3, sticky='w', pady=(0, 16))
         return card
 
     def fields(self, parent, names):
@@ -435,7 +436,14 @@ class DesktopView:
 
     def _overview(self):
         page = self.scroll_page(self.frames['Overview'], 'Overview')
-        quick = self.card(page, 'Connect at your own pace', padding=(24, 20))
+        quick = self.card(page, None, padding=(24, 20))
+        # The approved character remains a local asset. Decoration never owns
+        # input focus, network activity, timers, or connection state.
+        self.navigator_avatar = load_avatar(self.root, size=128)
+        self.navigator_canvas = tk.Canvas(quick, height=142, width=480,
+            highlightthickness=0, borderwidth=0, takefocus=0)
+        self.navigator_canvas.grid(row=0, column=0, columnspan=3, sticky='ew', pady=(0, 18))
+        self.navigator_canvas.bind('<Configure>', lambda _: self._draw_navigator())
         product = ttk.Frame(quick, style='Portal.Card.TFrame')
         product.grid(row=1, column=0, columnspan=3, sticky='ew', pady=(0, 10))
         self.label(product, 'Product mode').pack(side='left', padx=(0, 12))
@@ -520,6 +528,45 @@ class DesktopView:
                    style='Portal.CardNote.TLabel', wraplength=680).pack(anchor='w', pady=(10, 0))
         panel.grid_remove()
         note.grid_remove()
+
+    def _draw_navigator(self):
+        """Static anime hero; nonessential art stays outside the text column."""
+        if not hasattr(self, 'navigator_canvas'):
+            return
+        canvas = self.navigator_canvas
+        width = max(1, canvas.winfo_width())
+        dark = self.theme == 'dark'
+        bg = '#17192f' if dark else '#eee9fa'
+        ink = '#f5f2ff' if dark else '#29223f'
+        muted = '#c5bfdf' if dark else '#5f527b'
+        orbit = '#484274' if dark else '#c6b8e8'
+        canvas.configure(background=bg)
+        canvas.delete('all')
+        # Right-aligned illustration leaves a bounded text area at every size.
+        center = width - 78
+        canvas.create_oval(center-88, -34, center+88, 168, outline=orbit, width=2)
+        canvas.create_line(center-108, 120, center+78, 24, fill=orbit, width=1)
+        for dx, y, r in ((-116, 27, 2), (-92, 62, 1), (-102, 105, 2), (62, 14, 2), (62, 124, 1)):
+            x = center + dx
+            canvas.create_line(x-r-2, y, x+r+2, y, fill=muted)
+            canvas.create_line(x, y-r-2, x, y+r+2, fill=muted)
+        if self.navigator_avatar is not None:
+            canvas.create_image(center, 71, image=self.navigator_avatar)
+        text_width = max(140, width-210)
+        y = 18
+        for text, color, size, weight in (
+            ('STARPASS  /  STAR-SEA', muted, 9, 'bold'),
+            (self.tr('Your star-sea navigator'), ink, 19, 'bold'),
+            (self.tr('Prepare. Connect. Explore.'), muted, 11, 'normal')):
+            item = canvas.create_text(18, y, anchor='nw', text=text, fill=color,
+                font=(self.font_family, size, weight), width=text_width, tags=('navigator-text',))
+            bounds = canvas.bbox(item)
+            y = (bounds[3] if bounds else y + size * 2) + 10
+        # Point fonts follow host DPI. Let text determine height rather than
+        # overlapping a fixed baseline at large scaling or translated wrapping.
+        height = max(142, y + 8)
+        if int(canvas.cget('height')) != height:
+            canvas.configure(height=height)
 
     def _product_mode_selected(self, _=None):
         index = self.product_mode_combo.current()
@@ -702,6 +749,7 @@ class DesktopView:
         self._node_controls()
 
     def refresh(self):
+        self._draw_navigator()
         if not hasattr(self, 'metric_vars') or not hasattr(self.app, 'status_var'):
             return
         if hasattr(self, 'theme_combo'):
