@@ -188,7 +188,10 @@ local function advance_startup()
     ownership.clear(cfg,startup_generation,startup_pid)
     startup_pid=nil; startup_killed=false; startup_generation=nil
     lifecycle.complete(life,now(),ready)
-    core_on=true -- Even a failed start may have left a core running: idle cleanup still applies.
+    -- Failed standalone starts may leave an owned core needing idle cleanup.
+    -- Linked readiness cannot start a core. Preserve only an earlier active
+    -- session or a successful new activation, including its idle cleanup.
+    core_on=core_on or ready or not linked
     last_external=now()
     for _,s in ipairs(sessions) do
         if s.waiting and not s.dead then
@@ -241,13 +244,16 @@ local function start_request(s)
     save('request')
 end
 local function activity(s,count) if s.kind=='external' and count and count>0 then last_external=now(); lifecycle.active(life,last_external) end end
+local function interrupted_io(err)
+    return err==n.const.EAGAIN or err==n.const.EWOULDBLOCK or err==n.const.EINTR
+end
 local function write_side(s,side)
     local sock=side=='c' and s.c or s.u
     local key=side=='c' and 'u2c' or 'c2u'
     if not sock or #s[key]==0 then return end
     local sent,err=sock:send(s[key])
-    if sent then s[key]=s[key]:sub(sent+1); activity(s,sent)
-    elseif err~=n.const.EAGAIN and err~=n.const.EWOULDBLOCK then close_session(s) end
+    if sent and sent>0 then s[key]=s[key]:sub(sent+1); activity(s,sent)
+    elseif sent==0 or not interrupted_io(err) then close_session(s) end
 end
 local function read_side(s,side)
     local sock=side=='c' and s.c or s.u
@@ -259,7 +265,7 @@ local function read_side(s,side)
             if #s.header>32768 then error_reply(s,'431 Request Header Fields Too Large') else start_request(s) end
         elseif side=='c' then s.c2u=s.c2u..data else s.u2c=s.u2c..data end
     elseif data=='' then s[side..'_eof']=true
-    elseif err~=n.const.EAGAIN and err~=n.const.EWOULDBLOCK then close_session(s) end
+    elseif not interrupted_io(err) then close_session(s) end
 end
 local function main()
     ownership.cancel(cfg)
