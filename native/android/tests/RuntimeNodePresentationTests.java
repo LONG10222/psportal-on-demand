@@ -50,6 +50,8 @@ public final class RuntimeNodePresentationTests {
             check(!mode.description(true).isEmpty() && !mode.description(false).isEmpty(), "Product boundaries are bilingual");
         }
         check(ProductMode.fromInputs(false, false) == null, "Both inputs off never silently enables a preset");
+        check(ProductMode.GAME.description(true).contains("separate checks"), "Game setup separates service, connection and verified access");
+        check(ProductMode.GAME.description(false).contains("分别确认"), "Chinese game setup preserves verification boundaries");
         check(ProductMode.GAME.description(true).contains("TCP only") && ProductMode.GAME.description(true).contains("not guaranteed"), "Game preset does not promise unsupported acceleration or UDP");
         for (ProductMode mode : new ProductMode[]{ProductMode.MIXED, ProductMode.CLASH})
             check(mode.description(true).contains("Android VPN consent"), "Phone presets require explicit Android consent");

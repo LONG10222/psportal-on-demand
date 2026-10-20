@@ -458,6 +458,13 @@ class DesktopView:
         self.link_button.pack(side='left')
         self.link_var = tk.StringVar()
         ttk.Label(link, textvariable=self.link_var, style='Portal.CardNote.TLabel', wraplength=350).pack(side='left', padx=12)
+        help_row = ttk.Frame(quick, style='Portal.Card.TFrame')
+        help_row.grid(row=8, column=0, columnspan=3, sticky='w', pady=(12, 0))
+        self.preflight_button = self.button(help_row, 'Before you start', command=self.app.check_preparation)
+        self.preflight_button.pack(side='left')
+        self.core_setup_button = self.button(help_row, 'Choose trusted Mihomo…', command=self.app.choose_core)
+        self.core_setup_button.pack(side='left', padx=8)
+        self.app.inputs.append((self.core_setup_button, 'normal'))
         metrics = ttk.Frame(page, style='Portal.Page.TFrame')
         metrics.grid(row=1, column=0, sticky='ew')
         metrics.columnconfigure((0, 1, 2), weight=1)
@@ -726,6 +733,10 @@ class DesktopView:
         self.metric_vars['Listener'].set(self.tr(self.status))
         self.metric_vars['Upstream core'].set(self.tr(self.core_state))
         mode = self.app.vars.get('engine_mode')
+        if mode and mode.get() == 'embedded':
+            self.core_setup_button.pack_forget()
+        else:
+            self.core_setup_button.pack(side='left', padx=8)
         self.metric_vars['Current engine'].set(self.tr('Embedded · experimental' if mode and mode.get() == 'embedded' else 'External Mihomo'))
         if self.app.raw.get('existing_proxy_port'):
             self.metric_vars['Current engine'].set(self.tr('Existing proxy'))
@@ -744,6 +755,8 @@ class DesktopView:
                            if effective_host and port and port.get() else self.tr('Prepare the subscription on Overview first.'))
         self.guide_instructions_var.set(self.tr('Configure apps manually with the local address below. System proxy and VPN settings stay unchanged.'
             if product_mode == 'clash' else 'Join the same Wi-Fi. In the device Wi-Fi settings choose HTTP Proxy → Manual, enter the server and port above, and leave authentication off.'))
+        self.guide_instructions_var.set(self.guide_instructions_var.get() + '\n\n' + self.tr(
+            'When finished, turn off the proxy setting on the device before stopping StarPass. Do not disable firewall or certificate protection.'))
         if self.preview:
             message = self.tr('Provider nodes: {nodes} · groups: {groups} · rules: {rules}', **{k: self.preview[k] for k in ('nodes', 'groups', 'rules')})
             if self.preview['kind'] == 'profile':
@@ -765,8 +778,10 @@ class DesktopView:
         title = ('Devices are using the proxy' if isinstance(devices, int) and devices > 0
                  else 'Ready · waiting for a device') if ready else self.status
         self.hero_var.set(self.tr(title))
-        self.hero_note_var.set(self.tr(self.core_state if not app.raw.get('existing_proxy_port')
-                                      else 'Managed by existing client'))
+        from .onboarding import next_step
+        guidance = self.tr(next_step(app.product_mode(), ready, devices, statistics.get('errors', 0)))
+        core_label = self.tr('Managed by existing client' if app.raw.get('existing_proxy_port') else self.core_state)
+        self.hero_note_var.set(core_label + ' · ' + guidance)
         self.connection_count_var.set(counts)
         self.lan_runtime_var.set(counts)
         self.client_summary.set(counts + ' · ' + self.tr('Errors: {count}', count=statistics.get('errors', 0)))

@@ -82,6 +82,10 @@ end
 
 local f=load()
 equal(#scenario.commands,0); equal(scenario.commit,0)
+equal(f.fields._game_mode.kind, DummyValue)
+assert(f.fields._game_mode.value:find('does not prove Internet access',1,true))
+assert(f.fields._game_mode.value:find('Game UDP and whole-device routing are not provided',1,true))
+assert(f.fields._game_mode.value:find('Turn off the device HTTP proxy when finished',1,true))
 equal(f.fields.subscription_url:cfgvalue(), '')
 assert(not f.description:find('token-secret',1,true))
 assert(f.fields._status.value:find('Sleeping',1,true))

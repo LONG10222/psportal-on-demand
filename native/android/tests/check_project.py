@@ -214,3 +214,8 @@ assert 'subscription.setText' not in preset_handler and 'routing.setSelection' n
 assert 'startService(' not in preset_handler and 'startForegroundService(' not in preset_handler and 'VpnService.prepare(' not in preset_handler
 assert '.putBoolean("phone_vpn"' not in activity and '.putString("product_mode"' not in activity
 print('PASS: StarPass game/mixed/Clash input presets, separate routing, consent and startup boundaries')
+
+assert 'A connection does not prove Internet access; verify on the device.' in activity
+assert 'Open a webpage on the device, then test the intended game feature' in activity
+assert 'Turn its HTTP proxy off when finished.' in activity
+print('PASS: novice game setup separates connection evidence from verified access and explains cleanup')

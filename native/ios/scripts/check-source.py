@@ -12,6 +12,15 @@ APP = ROOT / "PSPortalHost"
 
 
 class SourceGuardrails(unittest.TestCase):
+    def test_game_setup_explains_evidence_and_scope_on_home(self):
+        view = (APP / "ContentView.swift").read_text()
+        home = view.split("private var sharingPage", 1)[1].split("private var", 1)[0]
+        self.assertIn("Game mode · Device sharing", home)
+        self.assertIn('accessibilityIdentifier("gameSetupGuide")', home)
+        self.assertIn("does not prove Internet access", home)
+        self.assertIn("HTTP/TCP only, not game UDP; foreground by default", home)
+        self.assertIn("Turn the device's HTTP proxy off when finished", view)
+
     def test_required_reason_manifest_matches_reviewed_uses(self):
         manifest = plistlib.loads((APP / "PrivacyInfo.xcprivacy").read_bytes())
         entries = manifest["NSPrivacyAccessedAPITypes"]

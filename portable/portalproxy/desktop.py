@@ -631,6 +631,15 @@ class DesktopApp:
             messagebox.showerror(self._t('Cannot inspect provider'), self._t(str(error)), parent=self.root)
             return False
 
+    def check_preparation(self):
+        """Explain prerequisites without downloads, network changes or a launch."""
+        from tkinter import messagebox
+        from .onboarding import preparation_notes
+        values = {key: variable.get().strip() for key, variable in self.vars.items()}
+        values['existing_proxy_port'] = self.raw.get('existing_proxy_port')
+        messagebox.showinfo(self._t('Before you start'),
+            '\n\n'.join(self._t(note) for note in preparation_notes(values)), parent=self.root)
+
     def quick_start(self):
         if self.importing or self.backend.process is not None:
             return
