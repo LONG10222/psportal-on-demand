@@ -1,3 +1,11 @@
+## 2026-10-20 — Windows 订阅流程与模式约束修复
+
+- 粘贴一次导入并保存，启动共享独立；重复链接去重，显式刷新才下载。失败保留此前订阅，导入不变更网络或自动启动。
+- 普通首页默认 Mihomo，不要求选择文件；Windows 包可随附固定版本核心、匹配上游源码及许可证，缺少核心时点击启动自动准备与校验，失败可直接重试。
+- 联动已有 Clash 只允许游戏模式，混合/Clash 置灰，配置与启动双重校验；取消联动恢复原订阅与模式，不接管原客户端核心。
+- 区分直接订阅统计与 Clash 套餐缓存；就绪后才提供共享地址，保留可见启动入口并适应较小窗口。
+- Windows 子进程管道固定 UTF-8，异常/非法输入关闭后回收监听与锁；网络识别不弹出控制台窗口。问题跟踪 #19。
+
 ## 2026-10-20 — Anime star-sea navigator (draft)
 
 - Give desktop (Windows/macOS/Linux), Android, iOS and LuCI a visible anime navigator hero using the original approved character, not a replacement app icon.

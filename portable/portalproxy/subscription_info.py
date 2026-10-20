@@ -2,6 +2,7 @@
 from datetime import datetime, timezone, timedelta
 from urllib.parse import urlsplit
 import time
+import math
 from .i18n import text
 
 
@@ -41,8 +42,12 @@ def display(info: dict | None, language: str) -> str:
     if type(info.get('expire')) is int and 0 < info['expire'] <= 253402300799:
         expiration = date(info['expire'])
         if info['expire'] < time.time(): expiration += ' · ' + tr('Expired')
+        else: expiration += ' · ' + tr('{days} days remaining', days=math.ceil((info['expire']-time.time())/86400))
     result = tr('Used: {used} / Total: {total}\nRemaining: {remaining}\nExpires: {expiration}',
               used=size(used), total=size(total), remaining=size(remaining), expiration=expiration)
+    if used is not None:
+        result += '\n' + tr('Uploaded: {upload} · Downloaded: {download}',
+                             upload=size(info['upload']), download=size(info['download']))
     if info.get('source_kind') == 'clash-cache':
         result = tr('Clash local cache · read-only, not live') + '\n' + result
         if isinstance(info.get('provider_name'), str):

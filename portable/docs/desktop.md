@@ -1,6 +1,6 @@
 # 星渡 StarPass desktop: Windows, macOS and Linux
 
-This is an implementation and native build path, not a signed or fully native-accepted release. One Tk desktop window can select either the established Python listener with separate Mihomo (`external`, the default), or the experimental shared native engine (`embedded`). External mode still uses a separately supplied trusted Mihomo executable with `-post-up` readiness support (tested with official v1.19.32). Embedded mode uses the project's native executable with Mihomo adapters linked into that one process. No installer, TUN adapter, administrator service, system proxy, router change, firewall change, automatic startup, or downloaded core is added by the app.
+This is an implementation and native build path, not a signed or fully native-accepted release. One Tk desktop window can select either the established Python listener with separate Mihomo (`external`, the default), or the experimental shared native engine (`embedded`). Windows defaults to official Mihomo v1.19.32: development packages can include the pinned core with matching upstream source and license; otherwise Start sharing discovers a known stable installation or downloads and verifies the pinned Windows x64 release. No file selection is required in the normal workflow. Manual executable/experimental engine selection remains in Advanced settings. Embedded mode uses the project's native executable with Mihomo adapters linked into that one process. No installer, TUN adapter, administrator service, system proxy, router change, firewall change, or automatic startup is added by the app.
 
 The application must remain running on an awake computer on the Portal's LAN. Normal Portal use permits only configured exact private LAN IPv4 clients. Clash product mode binds to `127.0.0.1` and requires the sole allowed client to be `127.0.0.1`; a real Portal cannot reach that loopback listener. Keep the Portal's IP stable with an existing DHCP reservation. The local Mihomo proxy and controller bind to loopback; the Portal-facing HTTP listener binds only to the configured private LAN address.
 
@@ -27,25 +27,21 @@ listener. Only explicit `product_lan_automatic: true` allows automatic subnet
 lists to follow a changed network. Legacy saved allowlists are treated as manual,
 not inferred to authorize access for an entire new subnet.
 
-Prepare & start reuses a saved local provider/profile only when `source_provenance`
+Start sharing reuses a saved local provider/profile only when `source_provenance`
 records the same accepted subscription URL and exact file path, and revalidates the
 bounded local content before launch. Editing the URL and saving does not relabel
 an old file; legacy unknown provenance with a URL triggers import again. An explicit
 file-picker choice records a local override, shown in the UI. Mode changes preserve
-same-source node choices. Use **Import subscription** for an explicit refresh. Cached
+same-source node choices. Use **Refresh subscription** for an explicit refresh. Cached
 accounting remains a timestamped server snapshot, not renewed by switching modes.
 
 ## Run from source on Windows
 
-1. Install a current supported Python 3.10–3.13 from [python.org](https://www.python.org/downloads/windows/) with the Python launcher and Tcl/Tk components.
-2. Obtain Mihomo for this machine's architecture from its [official upstream releases](https://github.com/MetaCubeX/mihomo/releases), verify its published integrity information, and extract it to a local folder. A Windows machine needs the Windows executable, not an OpenWrt/Linux binary.
-3. Extract this project. Double-click `portable/launchers/windows.cmd`, or open a terminal in `portable` and run `py -3 -m portalproxy.desktop`.
-4. Fill in this computer's private LAN IPv4, the Portal's private IPv4, the Mihomo executable path and your own HTTPS subscription URL. Node selection is `auto`, `prefer` or `fixed`; the latter two require the exact node name. The URL is hidden in the form. Alternatively choose a local Clash/Mihomo provider YAML file (maximum 10 MiB); a nonempty file path takes precedence over the URL and avoids a subscription download. Clear it to resume using the URL.
-5. Select **Save / validate**, then **Start listener**. Read the status log: a running process is not proof that the listener is ready; wait for `Proxy ready ...`. Save validates local configuration without fetching the subscription. A real external request triggers the core and either the subscription fetch or local provider copy.
-6. In the Portal's current Wi-Fi advanced settings, keep automatic IP/gateway/DNS and set its manual HTTP proxy to this computer's LAN IPv4 and the configured proxy port, normally `10081`.
-7. If Windows prompts for firewall access, review it yourself. Permit only the required application/inbound listener on your trusted private network, ideally scoped to the Portal's address. Do not allow public-network access. The app never changes firewall policy.
+For the Windows development package, extract the entire folder and run `PSPortalProxy.exe`. Paste once to import and save a subscription. Import never opens a listener, changes LAN settings or prepares a core. Click **Start sharing** separately: it prepares a missing default core if needed, detects a supported LAN and starts the listener. A failed core download leaves the accepted subscription intact; retry Start sharing after correcting the connection. The same link is reused without another download; Refresh is explicit.
 
-Use **Stop** before leaving. Closing the window asks to stop the listener and its owned core. Closing the controller's stdin also signals shutdown if its desktop parent disappears. If shutdown takes longer than expected, keep the window open and check the native acceptance steps. Repeated Start cannot launch a duplicate child from the same window. External mode separately locks its runtime directory; both modes fail if their listener address/port is already in use.
+Source developers need a Tk-enabled Python 3.10–3.13 and the dependencies in `requirements-runtime.txt`; run `py -3 -m portalproxy.desktop` from `portable`. The Windows x64 GUI has the same automatic default-core fallback. Other platforms must supply their matching trusted executable in Advanced settings. CLI configuration remains explicit.
+
+**Share existing Clash** reuses the current loopback proxy; no second Mihomo process is owned by StarPass. Only Game mode is available while linked, including configuration/start validation. Mixed and Clash remain visible but disabled. Stop sharing, then choose **Unlink and use standalone core** to restore the previous accepted subscription, node choices and mode. The original Clash is neither stopped nor reconfigured. Cached Clash quota/expiry is labelled read-only and may be absent or stale; it is separate from a directly imported subscription's accounting. Connection addresses and copy/export actions appear only after actual listener readiness.
 
 ## Choose an engine in the same app
 
@@ -87,7 +83,7 @@ The GUI displays sanitized live listener/core state, distinct active source IPs,
 
 ## Build a native executable
 
-Build separately on every OS and CPU architecture you intend to distribute. [PyInstaller is not a cross-compiler](https://pyinstaller.org/en/stable/operating-mode.html); a Linux build does not establish Windows or macOS compatibility. Use a clean build virtual environment with a Tk-enabled Python. The build script never installs packages or downloads Mihomo.
+Build separately on every OS and CPU architecture you intend to distribute. [PyInstaller is not a cross-compiler](https://pyinstaller.org/en/stable/operating-mode.html); a Linux build does not establish Windows or macOS compatibility. Use a clean build virtual environment with a Tk-enabled Python. The build script never installs packages or downloads Mihomo. To supply the zero-configuration Windows package, pass `--default-mihomo /path/to/official.exe --mihomo-source /path/to/mihomo-v1.19.32-source.zip`; both files must match the fixed release hashes. It retains the core, matching upstream source ZIP, license and commit notice. Without these options the Windows GUI prepares the pinned core when Start sharing is explicitly requested.
 
 Windows, from `portable` in PowerShell:
 
