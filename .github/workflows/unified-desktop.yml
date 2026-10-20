@@ -8,6 +8,9 @@ on:
       - '.github/workflows/unified-desktop.yml'
   workflow_dispatch:
 
+env:
+  PSPORTAL_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+
 permissions:
   contents: read
 
@@ -61,14 +64,14 @@ jobs:
         if: always() && hashFiles('portable/ui-evidence/*.png') != ''
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: psportal-linux-ui-fixtures-${{ github.sha }}
+          name: psportal-linux-ui-fixtures-${{ env.PSPORTAL_SOURCE_COMMIT }}
           path: portable/ui-evidence/**
           if-no-files-found: error
           retention-days: 1
       - name: Upload unsigned Linux GUI with matching source and exact runtime notices
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: psportal-unified-linux-x64-unsigned-${{ github.sha }}
+          name: psportal-unified-linux-x64-unsigned-${{ env.PSPORTAL_SOURCE_COMMIT }}
           path: |
             portable/release/PSPortalProxy-linux-*.tar.gz
             portable/release/VALIDATION.json
@@ -120,16 +123,18 @@ jobs:
         if: always() && hashFiles('portable/build/portalproxy/Analysis-00.toc') != ''
         continue-on-error: true
         run: python portable/scripts/inventory_desktop_runtime.py --output portable/runtime-inventory
+      # Includes the newly retained pinned Mihomo upstream + vendored source archives.
+      # Observed complete evidence: 24,701,592 bytes; retain all bytes within 32 MiB.
       - name: Enforce diagnostic evidence size budget
         id: runtime_budget
         if: always() && hashFiles('portable/runtime-inventory/runtime-inventory.json') != ''
         run: |
-          python -c "from pathlib import Path; import shutil; d=Path('portable/runtime-inventory/final-packaging'); d.mkdir(exist_ok=True); [shutil.copy2(p,d/p.name) for p in Path('portable/release').glob('MACOS-*.json') if p.is_file()]; n=sum(p.stat().st_size for p in Path('portable/runtime-inventory').rglob('*') if p.is_file()); print(n); assert n < 20*1024*1024"
+          python -c "from pathlib import Path; import shutil; d=Path('portable/runtime-inventory/final-packaging'); d.mkdir(exist_ok=True); [shutil.copy2(p,d/p.name) for p in Path('portable/release').glob('MACOS-*.json') if p.is_file()]; n=sum(p.stat().st_size for p in Path('portable/runtime-inventory').rglob('*') if p.is_file()); print(n); assert n < 32*1024*1024"
       - name: Upload runtime inventory for notice review only
         if: always() && steps.runtime_budget.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: psportal-runtime-inventory-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          name: psportal-runtime-inventory-${{ runner.os }}-${{ runner.arch }}-${{ env.PSPORTAL_SOURCE_COMMIT }}
           path: portable/runtime-inventory/**
           if-no-files-found: error
           retention-days: 1
@@ -141,7 +146,7 @@ jobs:
         if: success() && runner.os == 'Windows' && steps.windows_release_gate.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: psportal-unified-windows-x64-unsigned-${{ github.sha }}
+          name: psportal-unified-windows-x64-unsigned-${{ env.PSPORTAL_SOURCE_COMMIT }}
           path: |
             portable/release/PSPortalProxy-windows-*.zip
             portable/release/VALIDATION.json
@@ -158,7 +163,7 @@ jobs:
         if: success() && runner.os == 'macOS' && steps.macos_release_gate.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: psportal-unified-macos-arm64-unsigned-${{ github.sha }}
+          name: psportal-unified-macos-arm64-unsigned-${{ env.PSPORTAL_SOURCE_COMMIT }}
           path: |
             portable/release/PSPortalProxy-darwin-*.tar.gz
             portable/release/VALIDATION.json

@@ -252,7 +252,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertNotIn("needs:", JOB)
 
     def test_unique_one_day_logs_and_evidence_only_no_distributable(self):
-        self.assertIn("name: psportal-ios-sdk26-${{ matrix.sdk }}-${{ github.sha }}-${{ github.run_attempt }}", JOB)
+        self.assertIn("name: psportal-ios-sdk26-${{ matrix.sdk }}-${{ env.PSPORTAL_SOURCE_COMMIT }}-${{ github.run_attempt }}", JOB)
         self.assertIn("if: always()", JOB)
         self.assertIn("retention-days: 1", JOB)
         self.assertIn("if-no-files-found: error", JOB)

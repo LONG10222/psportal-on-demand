@@ -5,7 +5,7 @@ import verify_mihomo_patch
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 
 # Registry DNS/transport failures are retryable, but source/integrity failures are not.
-TRANSIENT = ('i/o timeout', 'no such host', 'temporary failure in name resolution',
+TRANSIENT = ('i/o timeout', 'connect: operation timed out', 'no such host', 'temporary failure in name resolution',
              'connection reset', 'connection refused', 'tls handshake timeout',
              'network is unreachable', '502 bad gateway', '503 service unavailable',
              '504 gateway timeout')

@@ -12,6 +12,9 @@ name: Native iOS Simulator
       - 'native/go.mod'
       - 'native/go.sum'
       - '.github/workflows/ios-simulator.yml'
+env:
+  PSPORTAL_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+
 permissions:
   contents: read
 concurrency:
@@ -53,7 +56,7 @@ jobs:
       - name: Upload simulator and unsigned-device apps with matching source and licenses
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: psportal-ios-simulator-${{ github.sha }}
+          name: psportal-ios-simulator-${{ env.PSPORTAL_SOURCE_COMMIT }}
           path: native/dist/ios-simulator/*
           if-no-files-found: error
           retention-days: 1
@@ -65,7 +68,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: psportal-ios-simulator-diagnostics-${{ github.sha }}
+          name: psportal-ios-simulator-diagnostics-${{ env.PSPORTAL_SOURCE_COMMIT }}
           path: native/ios/build/diagnostics
           if-no-files-found: ignore
           retention-days: 1
@@ -97,7 +100,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: psportal-ios-sdk26-${{ matrix.sdk }}-${{ github.sha }}-${{ github.run_attempt }}
+          name: psportal-ios-sdk26-${{ matrix.sdk }}-${{ env.PSPORTAL_SOURCE_COMMIT }}-${{ github.run_attempt }}
           path: |
             native/ios/build/sdk26/${{ matrix.sdk }}/EVIDENCE.json
             native/ios/build/sdk26/${{ matrix.sdk }}/compile.log

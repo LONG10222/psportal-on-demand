@@ -55,7 +55,7 @@ def main():
     shutil.copyfile(ROOT / 'dist' / 'licenses' / 'ENGINE-NOTICES.txt', OUT / 'ENGINE-NOTICES.txt')
     events = [json.loads(line) for line in (OUT / 'go-tests.jsonl').read_text(encoding='utf-8').splitlines() if line.startswith('{')]
     evidence = {
-        'git_commit': os.environ.get('GITHUB_SHA', ''),
+        'git_commit': os.environ.get('PSPORTAL_SOURCE_COMMIT', os.environ.get('GITHUB_SHA', '')),
         'system': system, 'architecture': arch, 'platform': platform.platform(),
         'go_version': subprocess.check_output([go, 'version'], text=True).strip(),
         'python_version': platform.python_version(),

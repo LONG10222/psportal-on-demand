@@ -594,6 +594,11 @@ class DesktopApp:
         defaults = dict(config.DEFAULTS, listen_host='', allowed_clients=[], core_path='', subscription_url='',
                         native_path=str(config.bundled_native_path() or ''))
         defaults.update(self.raw)
+        # An empty saved field means bundled discovery, just as it does in
+        # config.validate. Keep the visible field/readiness check consistent;
+        # never replace a nonempty explicit path, even when it needs repair.
+        if not defaults.get('native_path'):
+            defaults['native_path'] = str(config.bundled_native_path() or '')
         defaults.update(product_modes.editable_config(defaults))
         if self.raw.get('existing_proxy_port'):
             defaults['product_mode'] = 'game'

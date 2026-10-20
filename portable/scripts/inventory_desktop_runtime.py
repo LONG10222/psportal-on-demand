@@ -429,7 +429,7 @@ def main(argv=None):
 
     report = dict(schema_version=1, diagnostic_only=True, inventory_complete=not issues,
         license_coverage_verified=False, distribution_approved=False,
-        source_commit=os.environ.get('GITHUB_SHA', ''), app=str(app), build=str(build), runtime=runtime,
+        source_commit=os.environ.get('PSPORTAL_SOURCE_COMMIT', os.environ.get('GITHUB_SHA', '')), app=str(app), build=str(build), runtime=runtime,
         companion_notice_directory=str(companion) if companion else None,
         limitations=[
             'License candidates are retained verbatim, but proximity does not establish license applicability.',

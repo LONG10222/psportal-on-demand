@@ -13,6 +13,9 @@ name: Native iOS Simulator
       - 'native/go.mod'
       - 'native/go.sum'
       - '.github/workflows/ios-simulator.yml'
+env:
+  PSPORTAL_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+
 permissions:
   contents: read
 concurrency:
@@ -34,6 +37,7 @@ jobs:
       - name: Check out source without persisting credentials
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Set up pinned Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -53,7 +57,7 @@ jobs:
       - name: Upload simulator and unsigned-device apps with matching source and licenses
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: psportal-ios-simulator-${{ github.sha }}
+          name: psportal-ios-simulator-${{ env.PSPORTAL_SOURCE_COMMIT }}
           path: native/dist/ios-simulator/*
           if-no-files-found: error
           retention-days: 1
@@ -65,7 +69,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: psportal-ios-simulator-diagnostics-${{ github.sha }}
+          name: psportal-ios-simulator-diagnostics-${{ env.PSPORTAL_SOURCE_COMMIT }}
           path: native/ios/build/diagnostics
           if-no-files-found: ignore
           retention-days: 1
@@ -87,6 +91,7 @@ jobs:
       - name: Check out source without persisting credentials
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Test SDK gate command and workflow guards without Swift
         run: python3 native/ios/scripts/check-sdk26-tests.py
@@ -96,7 +101,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: psportal-ios-sdk26-${{ matrix.sdk }}-${{ github.sha }}-${{ github.run_attempt }}
+          name: psportal-ios-sdk26-${{ matrix.sdk }}-${{ env.PSPORTAL_SOURCE_COMMIT }}-${{ github.run_attempt }}
           path: |
             native/ios/build/sdk26/${{ matrix.sdk }}/EVIDENCE.json
             native/ios/build/sdk26/${{ matrix.sdk }}/compile.log

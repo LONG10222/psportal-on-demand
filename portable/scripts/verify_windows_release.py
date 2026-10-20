@@ -129,7 +129,7 @@ def main(argv=None):
     require(app.resolve() == (ROOT / 'dist/PSPortalProxy').resolve(), 'Unexpected app inventory path')
     validation = json.loads((ROOT / 'release/VALIDATION.json').read_text(encoding='utf-8'))
     verify_default_core(app, validation)
-    require(report['source_commit'] == validation['source_commit'] == os.environ['GITHUB_SHA'], 'Evidence came from a different commit')
+    require(report['source_commit'] == validation['source_commit'] == os.environ.get('PSPORTAL_SOURCE_COMMIT', os.environ.get('GITHUB_SHA', '')), 'Evidence came from a different commit')
     require(validation['system'] == 'windows' and validation['architecture'] == 'amd64', 'Unreviewed platform')
     require(validation['tests_run'] >= 132 and all(validation.get(key) is True for key in (
         'exact_cpython_runtime_notices', 'actual_external_core_tested', 'native_platform_frozen_window_smoke_tested',

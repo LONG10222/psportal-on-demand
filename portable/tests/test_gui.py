@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 from test_core import port
 
@@ -67,6 +68,45 @@ class GuiReadinessRecordTests(unittest.TestCase):
         self.assertEqual(ready_records(contents, 'external', '127.0.0.1', 10081), 1)
 
 
+@unittest.skipUnless(os.environ.get('PSPORTAL_TK_TEST') == '1',
+                    'Set PSPORTAL_TK_TEST=1 for actual source-widget checks')
+class EmbeddedStartReadinessTests(unittest.TestCase):
+    def test_empty_native_path_uses_bundle_but_explicit_missing_path_is_preserved(self):
+        import tkinter as tk
+        from portalproxy.desktop import DesktopApp
+        root = tk.Tk()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                folder = Path(tmp)
+                bundled = folder / 'psportal-native'
+                bundled.write_bytes(b'not executed')
+                provider = folder / 'provider.json'
+                provider.write_text('{"proxies": []}', encoding='utf-8')
+                path = folder / 'config.json'
+                values = dict(engine_mode='embedded', native_path='',
+                              listen_host='127.0.0.1', allowed_clients=['127.0.0.1'],
+                              subscription_file=str(provider))
+                path.write_text(json.dumps(values), encoding='utf-8')
+                with patch('portalproxy.config.bundled_native_path', return_value=bundled), \
+                        patch('portalproxy.existing_proxy.detect_system_proxy', return_value=None):
+                    app = DesktopApp(root, path)
+                    app._next_discovery = float('inf')
+                    self.assertEqual(app.vars['native_path'].get(), str(bundled))
+                    self.assertEqual(str(app.start_button.cget('state')), 'normal')
+                    self.assertEqual(app.start_button.cget('text'), 'Start sharing')
+                    self.assertIsNone(app.backend.process)
+                    missing = str(folder / 'explicit-missing-native')
+                    path.write_text(json.dumps(dict(values, native_path=missing)), encoding='utf-8')
+                    app.load()
+                    self.assertEqual(app.vars['native_path'].get(), missing)
+                    self.assertEqual(str(app.start_button.cget('state')), 'disabled')
+                    self.assertIsNone(app.backend.process)
+        finally:
+            for timer in root.tk.splitlist(root.tk.call('after', 'info')):
+                root.tk.call('after', 'cancel', timer)
+            root.destroy()
+
+
 @unittest.skipUnless(os.environ.get('PSPORTAL_GUI_TEST') == '1' and os.environ.get('PSPORTAL_BINARY'),
     'Set PSPORTAL_GUI_TEST=1 and PSPORTAL_BINARY under an isolated X11 display')
 class FrozenGuiTests(unittest.TestCase):
@@ -111,20 +151,32 @@ class FrozenGuiTests(unittest.TestCase):
                 with (root / 'gui-output.txt').open('w+', encoding='utf-8') as output:
                     process = subprocess.Popen([binary, '--config', str(path)],
                         stdout=output, stderr=subprocess.STDOUT, env=child_env)
+                    target = log = status = None
+
+                    def diagnostics():
+                        output.seek(0)
+                        result = 'Child output:\n' + output.read()
+                        if target is not None:
+                            try:
+                                if log is not None:
+                                    result += '\nGUI log:\n' + str(remote(log, 'get', '1.0', 'end'))
+                                if status is not None:
+                                    result += '\nGUI status: ' + str(remote(status, 'cget', '-text'))
+                            except tk.TclError as error:
+                                result += '\nGUI diagnostics unavailable: ' + str(error)
+                        return result
 
                     def wait_for(predicate, timeout=20, state='frozen GUI state'):
                         deadline = time.monotonic() + timeout
                         while time.monotonic() < deadline:
                             controller.update()
                             if process.poll() is not None:
-                                output.seek(0)
-                                self.fail('Frozen GUI exited early: ' + output.read())
+                                self.fail('Frozen GUI exited early: ' + diagnostics())
                             result = predicate()
                             if result:
                                 return result
                             time.sleep(.05)
-                        output.seek(0)
-                        self.fail(f'Timed out waiting for {state}: ' + output.read())
+                        self.fail(f'Timed out waiting for {state}: ' + diagnostics())
 
                     target = wait_for(lambda: next(iter(set(controller.tk.splitlist(
                         controller.tk.call('winfo', 'interps'))) - previous), None))
@@ -168,6 +220,8 @@ class FrozenGuiTests(unittest.TestCase):
                             'Stopping must remove the native private configuration')
 
                     def start(cycle):
+                        self.assertEqual(str(remote(buttons['Start sharing'], 'cget', '-state')), 'normal',
+                                         'Start sharing must be enabled before invocation. ' + diagnostics())
                         remote(buttons['Start sharing'], 'invoke')
                         wait_for(lambda: ready_records(str(remote(log, 'get', '1.0', 'end')),
                             mode, '127.0.0.1', listen) >= cycle + 1, state=f'{mode} readiness record')

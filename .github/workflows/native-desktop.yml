@@ -6,6 +6,9 @@ name: Native Desktop Runtime Tests
     paths:
       - 'native/**'
       - '.github/workflows/native-desktop.yml'
+env:
+  PSPORTAL_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+
 permissions:
   contents: read
 concurrency:
@@ -47,7 +50,7 @@ jobs:
       - name: Upload native runtime-tested executable with corresponding source
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: psportal-native-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          name: psportal-native-${{ runner.os }}-${{ runner.arch }}-${{ env.PSPORTAL_SOURCE_COMMIT }}
           path: native/dist/ci-desktop/*
           if-no-files-found: error
           retention-days: 1
@@ -56,7 +59,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: psportal-native-diagnostics-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          name: psportal-native-diagnostics-${{ runner.os }}-${{ runner.arch }}-${{ env.PSPORTAL_SOURCE_COMMIT }}
           path: |
             native/dist/ci-desktop/*.jsonl
             native/dist/ci-desktop/*.txt

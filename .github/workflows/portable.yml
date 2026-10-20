@@ -13,6 +13,9 @@ on:
         required: false
         default: false
 
+env:
+  PSPORTAL_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+
 permissions:
   contents: read
 

@@ -20,6 +20,9 @@ name: Native Android Unsigned
       - 'native/go.sum'
       - 'native/ci/android-unsigned.yml.example'
       - '.github/workflows/android-unsigned.yml'
+env:
+  PSPORTAL_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+
 permissions:
   contents: read
 concurrency:
@@ -52,7 +55,7 @@ jobs:
       - name: Upload APK, licenses, corresponding source and provenance
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: psportal-android-unsigned-${{ github.sha }}
+          name: psportal-android-unsigned-${{ env.PSPORTAL_SOURCE_COMMIT }}
           path: native/dist/android-unsigned/*
           if-no-files-found: error
           retention-days: 1
@@ -61,7 +64,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: psportal-android-diagnostics-${{ github.sha }}
+          name: psportal-android-diagnostics-${{ env.PSPORTAL_SOURCE_COMMIT }}
           path: |
             native/android/build/ci-build.log
             native/android/build/reports/*.json

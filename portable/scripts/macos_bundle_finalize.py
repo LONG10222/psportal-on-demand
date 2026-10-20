@@ -72,7 +72,7 @@ def finalize_bundle(app, evidence, expected_native_sha256=None):
         raise ValueError('Expected the actual assembled PSPortalProxy.app bundle')
     if evidence.is_relative_to(app):
         raise ValueError('Seal evidence must remain outside the sealed app')
-    report = dict(schema_version=1, source_commit=os.environ.get('GITHUB_SHA', ''),
+    report = dict(schema_version=1, source_commit=os.environ.get('PSPORTAL_SOURCE_COMMIT', os.environ.get('GITHUB_SHA', '')),
                   app=str(app), passed=False, final_deep_strict_verified=False,
                   nested_strict_verified=False,
                   signing_identity='ad-hoc', developer_id=False, notarized=False,
