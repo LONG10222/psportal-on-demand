@@ -10,7 +10,7 @@ GO=${GO:-go}
 if command -v "$JAVAC" >/dev/null 2>&1; then
   "$JAVAC" --release 17 -d "$OUT" "$ROOT/app/src/main/java/org/psportal/host/HostConfig.java" "$ROOT/app/src/main/java/org/psportal/host/LanSetup.java" "$ROOT/tests/ExportConfig.java"
 elif "$JAVA" --list-modules 2>/dev/null | grep -q '^jdk.compiler@'; then
-  "$JAVA" -m jdk.compiler/com.sun.tools.javac.Main -source 17 -target 17 -d "$OUT" "$ROOT/app/src/main/java/org/psportal/host/HostConfig.java" "$ROOT/app/src/main/java/org/psportal/host/LanSetup.java" "$ROOT/tests/ExportConfig.java"
+  "$JAVA" -m jdk.compiler/com.sun.tools.javac.Main -encoding UTF-8 -source 17 -target 17 -d "$OUT" "$ROOT/app/src/main/java/org/psportal/host/HostConfig.java" "$ROOT/app/src/main/java/org/psportal/host/LanSetup.java" "$ROOT/tests/ExportConfig.java"
 elif [ -n "${ECJ_JAR:-}" ] && [ -f "$ECJ_JAR" ]; then
   "$JAVA" -jar "$ECJ_JAR" -17 -warn:none -d "$OUT" "$ROOT/app/src/main/java/org/psportal/host/HostConfig.java" "$ROOT/app/src/main/java/org/psportal/host/LanSetup.java" "$ROOT/tests/ExportConfig.java"
 else

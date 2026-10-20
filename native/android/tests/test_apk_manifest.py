@@ -153,10 +153,10 @@ class CompiledManifestTests(unittest.TestCase):
                              'assets/licenses/PROJECT-MIT.txt', 'classes.dex', 'AndroidManifest.xml'):
                     archive.writestr(name, b'fixture')
                 notices = pathlib.Path(__file__).resolve().parents[2] / 'THIRD_PARTY_NOTICES.md'
-                archive.writestr('assets/licenses/NATIVE-NOTICES.txt', notices.read_bytes())
+                archive.writestr('assets/licenses/NATIVE-NOTICES.txt', notices.read_bytes().replace(b'\r\n', b'\n'))
                 archive.writestr('lib/arm64-v8a/libgojni.so', elf)
             badging = "package: name='org.psportal.host'\nminSdkVersion:'26'\ntargetSdkVersion:'36'\nlaunchable-activity: name='org.psportal.host.MainActivity'\n"
-            dump = aapt2_fixture().replace('N: android=', 'N: unknown=')
+            dump = aapt2_fixture().replace('N: android=', 'N: unknown=') + '\n星渡构建诊断\n'
             script = pathlib.Path(__file__).resolve().parents[1] / 'tools/audit-apk.py'
             argv = [str(script), str(apk), '--sdk', str(root / 'sdk'), '--report', str(report), '--abis', 'arm64-v8a']
             with mock.patch.object(sys, 'argv', argv), \
@@ -164,7 +164,7 @@ class CompiledManifestTests(unittest.TestCase):
                     mock.patch('subprocess.check_output', side_effect=[badging, dump]):
                 with self.assertRaisesRegex(AssertionError, 'Unexpected compiled namespace'):
                     runpy.run_path(str(script), run_name='__main__')
-            self.assertEqual((report.parent / 'compiled-manifest.txt').read_text(), dump)
+            self.assertEqual((report.parent / 'compiled-manifest.txt').read_text(encoding="utf-8"), dump)
             self.assertFalse(report.exists())
 
     def test_bundled_native_notice_matches_authoritative_source(self):
@@ -172,7 +172,7 @@ class CompiledManifestTests(unittest.TestCase):
         self.assertEqual((native / 'android/app/src/main/assets/licenses/NATIVE-NOTICES.txt').read_bytes(),
                          (native / 'THIRD_PARTY_NOTICES.md').read_bytes())
         self.assertIn('cp THIRD_PARTY_NOTICES.md android/app/src/main/assets/licenses/NATIVE-NOTICES.txt',
-                      (native / 'scripts/mobile.sh').read_text())
+                      (native / 'scripts/mobile.sh').read_text(encoding="utf-8"))
 
     def test_missing_or_stale_native_notices_fail_before_sdk_commands(self):
         # Exercise the real audit entrypoint with an intentionally incomplete

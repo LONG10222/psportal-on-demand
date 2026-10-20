@@ -19,6 +19,7 @@ import android.os.Looper;
 /** Explicit user-started connected-device service. Never sticky and never boot-started. */
 public final class ProxyService extends Service {
     static final String ACTION_START = "org.psportal.host.START";
+    static final String ACTION_REPAIR = "org.psportal.host.REPAIR";
     static final String ACTION_STOP = "org.psportal.host.STOP";
     static final String EXTRA_CONFIG = "config";
     static final String EXTRA_ADDRESS = "address";
@@ -81,9 +82,22 @@ public final class ProxyService extends Service {
         getSystemService(NotificationManager.class).createNotificationChannel(channel);
     }
 
+    private static boolean inputsMatch(String config, boolean lan, boolean phone) {
+        if (config == null || config.length() > 32768) return false;
+        try {
+            org.json.JSONObject json = new org.json.JSONObject(config);
+            return ProductMode.matchesSessionInputs(lan, phone, json.opt("lan_enabled"), json.opt("phone_vpn"));
+        } catch (org.json.JSONException invalid) { return false; }
+    }
+
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         latestStartId = startId;
         taskRemovedSinceCommand = false;
+        if (intent != null && ACTION_REPAIR.equals(intent.getAction())) {
+            phoneRequested = false; PhoneVpnService.stop(this); main.removeCallbacks(statusTick);
+            session.repair(() -> { if (!destroyed) finishStop(startId); });
+            return START_NOT_STICKY;
+        }
         if (intent == null || ACTION_STOP.equals(intent.getAction())) {
             requestStop(startId);
             return START_NOT_STICKY;
@@ -93,7 +107,7 @@ public final class ProxyService extends Service {
         intent.removeExtra(EXTRA_CONFIG); // Do not retain the subscription token in service intents.
         boolean requestedLan = intent.getBooleanExtra(EXTRA_LAN_ENABLED, true);
         boolean requestedPhone = intent.getBooleanExtra(EXTRA_PHONE_APPS, false);
-        if (config == null || config.length() > 32768 || (!requestedLan && !requestedPhone)
+        if (!inputsMatch(config, requestedLan, requestedPhone)
                 || (requestedLan && !Permissions.localNetworkGranted(this)) || !notificationsAllowed()
                 || (requestedPhone && (android.net.VpnService.prepare(this) != null || PhoneVpnService.hasVpnConflict(this)))) {
             session.rejectedStart();

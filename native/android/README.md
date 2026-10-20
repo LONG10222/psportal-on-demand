@@ -17,6 +17,30 @@ They do not start anything, erase a typed subscription or persist phone-VPN
 opt-in for a future process. Change them only while stopped. Existing explicit
 input switches remain available; both off disables Start.
 
+## External clients and capability checks
+
+Android always uses its embedded Mihomo. It has no external-Clash association,
+controller import, external-proxy relay or disconnect-association action. The
+Windows external-client mode does not imply an Android counterpart. Game mode
+while another VPN is active still runs the embedded LAN engine; that VPN may
+affect upstream connections according to Android/network policy.
+
+Android has one active VPN per user/profile. Mode selection remains available;
+starting Mixed/Clash while another VPN is active instead shows a clear conflict
+message and an explicit link to system VPN Settings. The app does not replace or
+disconnect another VPN. Start and both services recheck conflict/consent.
+Repair app network stops this app's proxy/tunnel and retries native cleanup,
+including after failed cleanup, without reconnecting or changing system DNS,
+Wi-Fi, another VPN or user data. A successful cleanup restores the stopped state;
+failed repair remains blocked and suggests force-stop. Network loss already stops
+this app's tunnel automatically. LAN devices must disable their manual HTTP proxy
+when sharing stops. No core selection or developer tooling appears in normal use.
+The service rejects missing, non-boolean or mismatched LAN/phone flags between its
+command and native JSON before starting foreground/native work.
+Editing/pasting the masked subscription field never imports or starts a session;
+only the explicit Start controls do so. Repeated Start is guarded during setup,
+permission requests, native startup and an active session.
+
 ## Choose the session
 
 - **LAN sharing**, on by default: HTTP/HTTPS CONNECT on a specific LAN address,
@@ -120,6 +144,17 @@ cd android
 ./gradlew --no-daemon :app:assembleRelease :app:lintRelease
 ```
 
+On Windows, add a JDK's `bin` to PATH and run the JVM, source/resource and APK
+helper tests without Bash or a `python3` launcher:
+
+```powershell
+./tools/test-host.ps1 -Python C:/path/to/python.exe
+```
+
+The shell host runner also accepts `PYTHON=/path/to/python`. Java source and
+Python text artifacts explicitly use UTF-8, including on Chinese Windows.
+Local host tests require no SDK, device, signing key or subscription.
+
 The Android-only binding is `org.psportal.engine.androidmobile.Androidmobile`.
 The build includes actual gVisor (`with_gvisor`), arm64-v8a and x86_64 JNI libraries,
 16 KiB page alignment and full dependency notices. iOS retains its existing
@@ -132,7 +167,7 @@ source and notices. Artifacts have one-day retention. The SDK installer receives
 no license-acceptance input; changed/unaccepted terms fail closed.
 
 The original project development signing key is unavailable. No replacement is
-created. CI APKs remain unsigned; install-ready signing and same-key upgrade
+created. CI release and debug APKs remain unsigned; install-ready signing and same-key upgrade
 compatibility are not established.
 
 ## Verification boundaries

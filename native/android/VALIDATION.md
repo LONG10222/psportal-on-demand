@@ -1,5 +1,39 @@
 # Android validation record
 
+## 2026-10-20 Android capability admission and Windows verification
+
+Based on StarPass anime navigator `e28e197`. Refs #19. No portable/Windows,
+Apple or router implementation is modified by this Android change.
+
+- Reproduced Chinese Windows `UnicodeDecodeError` in `check_project.py` with
+  default GBK decoding. Explicit UTF-8 reads/writes, Java compiler encoding and a
+  PowerShell host runner remove the failure without changing the host locale.
+  The APK auditor now locates Windows SDK executables, decodes UTF-8 output and
+  accepts equivalent LF/CRLF notice text without masking stale notice content.
+  The existing baseline APK was independently audited using real Windows SDK
+  Build Tools 35.0.0; both ABIs and 16 KiB alignment passed.
+- 378 JVM assertions pass locally: 256 host/controller, 99 runtime/product/
+  accounting, 8 background and 15 phone state; XML/source guards and 17 compiled
+  manifest/notice helper tests pass. These are host tests, not device execution.
+- New cases cover all service/native topology pairs, missing/non-boolean flags
+  and explicit cleanup recovery. Services reject mismatched inputs
+  before native Start; phone consent/conflict gates remain independent.
+- Android keeps all stopped-session modes selectable. A VPN conflict at Start
+  shows a clear warning and opens system VPN Settings only on explicit user tap.
+  It does not take over a second VPN or apply Windows external-client constraints.
+- Repair app network stops this app's proxy/tunnel without reconnecting, retries
+  failed native cleanup and permits Start only after successful recovery. Tests
+  cover repeated repair, queued-start cancellation, failed repair, idle repair
+  and restart gating. Android has no external-Clash association feature.
+- adb platform tools were downloaded locally; `adb devices -l` returned no
+  device. Physical-device install, logcat, Android instrumentation, real VPN/TUN, hotspot,
+  OEM/background or actual game tests have not been performed. Emulator execution
+  is checked separately. No existing phone data was changed.
+- CI now builds/lints and audits both unsigned release and debug APKs using the
+  same real AAR; matching corresponding source, notices and checksums accompany
+  them. Inspect this change's exact-revision CI result, not a prior green run.
+  Signing is unchanged: installation still needs separately authorized signing.
+
 ## 2026-10-19 StarPass product modes and profile selectors
 
 Local checked source adds Game/Mixed/Clash next-session input presets, manual
