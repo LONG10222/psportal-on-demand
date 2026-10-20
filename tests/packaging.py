@@ -100,7 +100,7 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('class="starpass-guide"', template)
         self.assertIn('prefers-color-scheme:dark', template)
         self.assertIn('max-width:480px', template)
-        for forbidden in ('<script', '<form', 'onclick=', 'fetch(', '<%=', 'subscription_url'):
+        for forbidden in ('<script', '<form', 'onclick=', 'fetch(', '<%=', '<%--', 'subscription_url'):
             self.assertNotIn(forbidden, template)
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / 'root'
