@@ -6,6 +6,10 @@ from pathlib import Path
 import tempfile
 
 ZH = {
+    'Connect at your own pace': '从这里，开始连接',
+    'HTTPS subscription link': '订阅链接 · HTTPS',
+    'Already have Clash? Or need help?': '已有客户端，或需要帮助',
+    'Service status · next step': '服务状态 · 下一步',
     'Sharing an existing client: keep that client running with its proxy enabled. StarPass does not need a separate subscription or core; verify access on the connected device.': '正在复用已有客户端：请保持该客户端运行并开启代理。星渡无需另选订阅或核心；请在接入设备上验证访问。',
     'Before you start': '使用前检查',
     'Choose trusted Mihomo…': '选择可信的 Mihomo 核心…',
