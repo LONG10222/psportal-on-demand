@@ -120,8 +120,8 @@ class BrandAssetTests(unittest.TestCase):
         self.assertEqual(manifest["brand"], "星渡 StarPass")
         self.assertEqual(len(manifest["outputs"]), 43)
         self.assertEqual(png_dimensions((ROOT / brand.SOURCE).read_bytes()), (1254, 1254))
-        # Retain the coherent v2 asset set until the candidate swap is authorized.
-        self.assertEqual(manifest["source_sha256"], "cded3888e0a9538615cf9b0841147400f214b7480ac992ef002b729c0006bfab")
+        # Bind the selected v3 artwork to the retained original and all derived icons.
+        self.assertEqual(manifest["source_sha256"], "c2c78755d5b73fc5e2897bfbc418525956932add2222319bb21cc3ec5fe3aa54")
 
     def test_every_raster_is_opaque_rgb_with_platform_dimensions(self):
         manifest = brand.verify(ROOT)

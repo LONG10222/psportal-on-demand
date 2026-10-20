@@ -1,8 +1,10 @@
 # 星渡 StarPass artwork
 
-The retained original is the requested **minimal monochrome sci-fi emblem**
-(revision 2). The discarded anime portrait is not included. This is original
-generated artwork, not a Wuthering Waves game asset or official mark.
+The retained original is the selected **black-and-white character silhouette**
+(revision 3), inspired by 达妮娅 (Denia) from Wuthering Waves. It is a
+fan-inspired generated illustration, not an official game asset or an indication
+of official authorization or affiliation. Earlier proposals and character
+reference images are not included in this repository.
 
 `starpass-original.png` is the original unmodified 1254×1254 opaque RGB PNG.
 Its SHA-256 is recorded in `manifest.json` and the conversion script. All app
