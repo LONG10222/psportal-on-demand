@@ -22,7 +22,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.security.MessageDigest;
 import java.util.Locale;
 
-/** Exercises real APK verification/provider/UI; never grants install permission or installs. */
+/** Exercises real APK verification/provider APIs without a window, installation or source permission change. */
 public final class UpdateInstrumentation extends Instrumentation {
     private int assertions;
     private Bundle arguments;
@@ -73,22 +73,24 @@ public final class UpdateInstrumentation extends Instrumentation {
                 JSONObject invalid=asset(6,"universal");invalid.put(key,key.equals("size")?-1:"invalid");
                 boolean rejected=false;try{invoke(select,null,release(new JSONArray().put(invalid)),5L,arm);}catch(Exception expected){rejected=true;}check(rejected,"reject malformed "+key);
             }
-            screen=startActivitySync(new Intent().setClassName(getTargetContext(),"org.psportal.host.UpdateActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-            Activity shown=screen;runOnMainSync(()->{
-                Button action=(Button)tagged(shown.getWindow().getDecorView(),"update_action");
-                check(action!=null&&action.getVisibility()==View.GONE,"no install before check");
-                check(tagged(shown.getWindow().getDecorView(),"update_status")!=null,"status accessible");
-            });
+            // Package parsing and private-provider tests only: no Activity lifecycle or window.
+            final Object[] holder={null};
+            runOnMainSync(() -> {try {
+                holder[0]=updater.getDeclaredConstructor().newInstance();
+                Method attach=android.content.ContextWrapper.class.getDeclaredMethod("attachBaseContext",android.content.Context.class);
+                attach.setAccessible(true);attach.invoke(holder[0],getTargetContext());
+            }catch(Exception error){throw new RuntimeException(error);}});
+            Object verifier=holder[0];
             Method verify=updater.getDeclaredMethod("verifyApk",File.class,entry);verify.setAccessible(true);
             java.lang.reflect.Constructor<?> constructor=entry.getDeclaredConstructor(JSONObject.class,String.class,String.class,String.class);constructor.setAccessible(true);
             File installed=new File(getTargetContext().getApplicationInfo().sourceDir);
             JSONObject same=asset(6,"universal").put("size",installed.length()).put("digest","sha256:"+hash(installed));
-            boolean rejected=false;try{invoke(verify,screen,installed,constructor.newInstance(same,"test","Test",""));}catch(java.io.IOException expected){rejected=true;}check(rejected,"same/old APK rejected despite matching hash");
+            boolean rejected=false;try{invoke(verify,verifier,installed,constructor.newInstance(same,"test","Test",""));}catch(java.io.IOException expected){rejected=true;}check(rejected,"same/old APK rejected despite matching hash");
             // Optional explicitly generated APK fixtures test the real platform signature parser.
             for(String key:new String[]{"fixture_good","fixture_bad","fixture_package"}) {
                 String path=arguments==null?null:arguments.getString(key);if(path==null)continue;
                 File fixture=new File(path);JSONObject meta=asset(6,"universal").put("size",fixture.length()).put("digest","sha256:"+hash(fixture));
-                boolean accepted=true;try{invoke(verify,screen,fixture,constructor.newInstance(meta,"test","Test",""));}catch(java.io.IOException expected){accepted=false;}
+                boolean accepted=true;try{invoke(verify,verifier,fixture,constructor.newInstance(meta,"test","Test",""));}catch(java.io.IOException expected){accepted=false;}
                 check(accepted==key.equals("fixture_good"),"real certificate/package validation: "+key);
             }
             File directory=new File(getTargetContext().getFilesDir(),"updates");directory.mkdirs();probe=new File(directory,"update-"+"0".repeat(64)+".apk");
@@ -98,8 +100,8 @@ public final class UpdateInstrumentation extends Instrumentation {
             try(Cursor cursor=getTargetContext().getContentResolver().query(uri,null,null,null,null)){check(cursor!=null&&cursor.moveToFirst()&&cursor.getLong(cursor.getColumnIndexOrThrow(OpenableColumns.SIZE))==3,"single-file metadata");}
             try(ParcelFileDescriptor fd=getTargetContext().getContentResolver().openFileDescriptor(uri,"r")){check(fd!=null&&fd.getStatSize()==3,"read-only APK grant");}
             rejected=false;try{getTargetContext().getContentResolver().openFileDescriptor(uri,"w");}catch(Exception expected){rejected=true;}check(rejected,"write denied");
-            for(String path:new String[]{"/../ui.xml","/update-../files","/download.part","/"}) {rejected=false;try{getTargetContext().getContentResolver().getType(Uri.parse("content://org.psportal.host.updates"+path));}catch(Exception expected){rejected=true;}check(rejected,"path denied");}
-            result.putString("result","PASS: "+assertions+" Android update selection, real APK identity, private provider and UI assertions (no installation permission granted)");finish(Activity.RESULT_OK,result);
+            for(String path:new String[]{"/../ui.xml","/update-../files","/download.part","/"}) {rejected=false;try{ParcelFileDescriptor fd=getTargetContext().getContentResolver().openFileDescriptor(Uri.parse("content://org.psportal.host.updates"+path),"r");rejected=fd==null;if(fd!=null)fd.close();}catch(Exception expected){rejected=true;}check(rejected,"path denied");}
+            result.putString("result","PASS: "+assertions+" Android update selection, real APK identity, private provider assertions without opening any window (no installation permission granted)");finish(Activity.RESULT_OK,result);
         } catch(Throwable error) {result.putString("failure",android.util.Log.getStackTraceString(error));finish(Activity.RESULT_CANCELED,result);}
         finally {if(probe!=null)probe.delete();if(screen!=null){Activity shown=screen;runOnMainSync(shown::finish);}}
     }

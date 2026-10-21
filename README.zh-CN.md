@@ -45,7 +45,7 @@
 
 ## 文档与开发
 
-[Android 构建](native/android/README.md#build-unsigned-without-creating-credentials) · [桌面源码](portable/README.md) · [原生引擎](native/README.md) · [验证记录](VALIDATION-LOCAL.md) · [安全反馈](SECURITY.md) · [更新日志](CHANGELOG.md)
+[Android 构建](native/android/README.md#build-unsigned-without-creating-credentials) · [桌面源码](portable/README.md) · [原生引擎](native/README.md) · [验证记录](VALIDATION-LOCAL.md) · [安全反馈](SECURITY.md) · [更新日志](CHANGELOG.md) · [应用更新](docs/updates.md)
 
 构建通过、模拟器测试与真机网络验收分别记录，不用旧版测试数字代替当前提交结果。详细能力和历史记录移至[平台参考](docs/platform-reference.zh-CN.md)。
 
@@ -55,4 +55,3 @@
 
 路由器与桌面包装层采用 [MIT](LICENSE)；链接 Mihomo 的原生引擎/Android 应用采用 [GPL-3.0-only](native/LICENSE)。分发时保留匹配源码和依赖许可证。
 
-[应用更新方式与发布要求](docs/updates.md)

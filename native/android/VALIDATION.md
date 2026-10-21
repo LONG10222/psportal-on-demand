@@ -2,7 +2,7 @@
 
 ## 2026-10-21 Settings updates
 
-Local JVM checks: 419 assertions including 33 new update URL/ABI/integrity/cancellation checks; 18 compiled-manifest helper tests. The SDK instrumentation runner `UpdateInstrumentation` validates release selection, actual APK identity and the restricted read-only APK provider. Installation permission/confirmation remain user-controlled. See the PR for exact-revision build and device results.
+Local JVM checks: 419 assertions including 33 new update URL/ABI/integrity/cancellation checks; 18 compiled-manifest helper tests. The SDK instrumentation runner `UpdateInstrumentation` validates release selection, actual APK identity and the restricted read-only APK provider without opening an Activity window. Android 15 x86_64 passed 24 assertions including a real same-key newer fixture, a different-key fixture and a wrong-package fixture, plus external-shell provider denial. A same-development-key code 4 → 5 APK replacement preserved private preference bytes. UI preview automation was rejected by automatic approval review with only `blocked by policy`; no update-page visual or system-installer interaction result is claimed. Installation permission/confirmation remain user-controlled. See the PR for exact-revision build and device results.
 
 ## 2026-10-21 Compact navigation
 
