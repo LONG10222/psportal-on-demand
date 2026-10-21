@@ -54,3 +54,5 @@
 界面信息组织参考 [Clash Meta for Android](https://github.com/MetaCubeX/ClashMetaForAndroid)；文档结构参考 [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev) 和 [v2rayNG](https://github.com/2dust/v2rayNG)。保留星渡原有角色与图标。
 
 路由器与桌面包装层采用 [MIT](LICENSE)；链接 Mihomo 的原生引擎/Android 应用采用 [GPL-3.0-only](native/LICENSE)。分发时保留匹配源码和依赖许可证。
+
+[应用更新方式与发布要求](docs/updates.md)

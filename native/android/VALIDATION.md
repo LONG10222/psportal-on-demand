@@ -1,5 +1,9 @@
 # Android validation record
 
+## 2026-10-21 Settings updates
+
+Local JVM checks: 419 assertions including 33 new update URL/ABI/integrity/cancellation checks; 18 compiled-manifest helper tests. The SDK instrumentation runner `UpdateInstrumentation` validates release selection, actual APK identity and the restricted read-only APK provider. Installation permission/confirmation remain user-controlled. See the PR for exact-revision build and device results.
+
 ## 2026-10-21 Compact navigation
 
 The Android UI uses Overview / Proxies / Sharing / Settings. Long explanations

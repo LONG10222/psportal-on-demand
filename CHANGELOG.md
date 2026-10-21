@@ -1,5 +1,11 @@
 ## 2026-10-21 — Android 界面精简
 
+## 2026-10-21 Android Settings updates
+
+- Settings now checks stable GitHub releases, selects the device APK and downloads with progress.
+- Verify digest, size, package, newer version and current signer before opening the Android installer; active connections must stop first.
+- Keep CI unsigned and document the signed-release contract; no production key is generated or uploaded.
+
 - 概览、节点、共享、设置四页导航；首页保留状态、订阅、用途、分流和单一连接/停止操作。
 - 协议、VPN、后台与排障说明移入帮助；空套餐数据和未启用 VPN 状态默认隐藏，共享地址只在监听就绪后显示。
 - 设置保留原网络开关、修复、外观与高级选项；原角色图放入关于，导航不改变订阅或会话。

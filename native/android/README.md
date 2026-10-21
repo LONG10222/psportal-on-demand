@@ -201,3 +201,7 @@ build on real devices. Prior signed build-1 emulator evidence does not validate 
 The combined application is GPL-3.0-only. Preserve the complete corresponding
 source and dependency notices with distributed binaries. The original project's
 MIT attribution remains separate. No app-store compatibility is claimed.
+
+## App updates
+
+Settings → App updates checks the latest stable GitHub Release and selects the device ABI automatically. Downloaded APKs require matching SHA-256, package, newer version code and signing certificate. Android owns installation-source consent and confirmation. Stop the connection before installing. CI remains unsigned; no stable signed update is published yet. See [the update and release contract](../../docs/updates.md).

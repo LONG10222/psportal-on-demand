@@ -23,14 +23,24 @@ def fixture():
     return '''N: android=http://schemas.android.com/apk/res/android
   E: manifest (line=1)
     A: package="org.psportal.host" (Raw: "org.psportal.host")
-    A: android:versionCode(0x0101021b)=(type 0x10)0x4
-    A: android:versionName(0x0101021c)="0.4.0-dev" (Raw: "0.4.0-dev")
+    A: android:versionCode(0x0101021b)=(type 0x10)0x5
+    A: android:versionName(0x0101021c)="0.5.0-dev" (Raw: "0.5.0-dev")
 ''' + permissions + '''    E: application (line=12)
       A: android:allowBackup(0x01010280)=(type 0x12)0x0
       A: android:label(0x01010001)=@0x7f010000
       E: activity (line=14)
         A: android:name(0x01010003)="org.psportal.host.MainActivity"
         A: android:exported(0x01010010)=(type 0x12)0xffffffff
+      E: activity (line=16)
+        A: android:name=".UpdateActivity"
+        A: android:exported=(type 0x12)0x0
+      E: provider (line=17)
+        A: android:name=".UpdateApkProvider"
+        A: android:authorities="org.psportal.host.updates"
+        A: android:exported=(type 0x12)0x0
+        A: android:grantUriPermissions=(type 0x12)0xffffffff
+        E: grant-uri-permission (line=18)
+          A: android:pathPrefix="/update-"
       E: service (line=20)
         A: android:name(0x01010003)=".ProxyService" (Raw: ".ProxyService")
         A: android:exported(0x01010010)=(type 0x12)0x0
@@ -76,12 +86,24 @@ class CompiledManifestTests(unittest.TestCase):
         with self.assertRaises((AssertionError, ValueError)):
             audit_manifest(text)
 
-    def test_exact_v4_service_contract_accepts_compiled_values(self):
+    def test_update_install_permission_and_provider_are_exact(self):
+        text = fixture()
+        for old, new in [('".UpdateApkProvider"', '".OtherProvider"'),
+                         ('"org.psportal.host.updates"', '"org.psportal.host.files"'),
+                         ('A: android:grantUriPermissions=(type 0x12)0xffffffff', 'A: android:grantUriPermissions=(type 0x12)0x0'),
+                         ('A: android:pathPrefix="/update-"', 'A: android:pathPrefix="/"'),
+                         ('A: android:name=".UpdateActivity"\n        A: android:exported=(type 0x12)0x0', 'A: android:name=".UpdateActivity"\n        A: android:exported=(type 0x12)0xffffffff'),
+                         ('A: android:authorities="org.psportal.host.updates"\n        A: android:exported=(type 0x12)0x0', 'A: android:authorities="org.psportal.host.updates"\n        A: android:exported=(type 0x12)0xffffffff'),
+                         ('android.permission.REQUEST_INSTALL_PACKAGES', 'android.permission.INSTALL_PACKAGES')]:
+            self.assertIn(old, text)
+            with self.subTest(new=new): self.reject(text.replace(old, new))
+
+    def test_exact_v5_service_contract_accepts_compiled_values(self):
         report = audit_manifest(fixture())
         self.assertEqual(set(report['services']), {'org.psportal.host.ProxyService', 'org.psportal.host.PhoneVpnService'})
         self.assertFalse(report['always_on_vpn'])
-        self.assertEqual(report['version_code'], 4)
-        self.assertEqual(report['version_name'], '0.4.0-dev')
+        self.assertEqual(report['version_code'], 5)
+        self.assertEqual(report['version_name'], '0.5.0-dev')
         self.assertEqual(report['services']['org.psportal.host.PhoneVpnService']['binding_permission'], 'android.permission.BIND_VPN_SERVICE')
 
     def test_aapt2_namespace_lines_uri_attributes_and_pretty_values(self):
@@ -127,8 +149,8 @@ class CompiledManifestTests(unittest.TestCase):
 
     def test_aapt2_values_remain_strict_and_references_opaque(self):
         text = aapt2_fixture()
-        for old, new in [('versionCode(0x0101021b)=4', 'versionCode(0x0101021b)="4"'),
-                         ('versionCode(0x0101021b)=4', 'versionCode(0x0101021b)=true'),
+        for old, new in [('versionCode(0x0101021b)=5', 'versionCode(0x0101021b)="4"'),
+                         ('versionCode(0x0101021b)=5', 'versionCode(0x0101021b)=true'),
                          ('exported(0x01010010)=false', 'exported(0x01010010)=0'),
                          ('exported(0x01010010)=false', 'exported(0x01010010)=true (Raw: "false")'),
                          ('foregroundServiceType(0x01010599)=0x00000400', 'foregroundServiceType(0x01010599)=@0x7f010001'),
@@ -198,12 +220,12 @@ class CompiledManifestTests(unittest.TestCase):
                     self.assertFalse(report.exists())
 
     def test_exact_compiled_version_is_required(self):
-        for old, new in [('(type 0x10)0x4', '(type 0x10)0x3'),
-                         ('(type 0x10)0x4', '"4"'),
-                         ('"0.4.0-dev"', '"0.3.0-dev"'),
-                         ('"0.4.0-dev"', '@0x7f010001')]:
+        for old, new in [('(type 0x10)0x5', '(type 0x10)0x3'),
+                         ('(type 0x10)0x5', '"4"'),
+                         ('"0.5.0-dev"', '"0.3.0-dev"'),
+                         ('"0.5.0-dev"', '@0x7f010001')]:
             self.reject(fixture().replace(old, new))
-        self.reject(fixture().replace('    A: android:versionCode(0x0101021b)=(type 0x10)0x4\n', ''))
+        self.reject(fixture().replace('    A: android:versionCode(0x0101021b)=(type 0x10)0x5\n', ''))
         self.reject(fixture().replace('    A: android:versionName', '    A: android:versionCodeMajor=(type 0x10)0x1\n    A: android:versionName'))
 
     def test_required_binding_permission_is_service_specific(self):
