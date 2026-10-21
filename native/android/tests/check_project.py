@@ -212,7 +212,7 @@ assert 'if (!canChangeProductMode()) { syncProductMode(); return; }' in activity
 assert 'if (mode == null) productModes.clearCheck();' in activity
 assert 'configurationViews.add(choice)' in activity, 'Disable each radio button during pending or active sessions'
 assert 'pendingConfig != null || preparing || launchRequested || addressChoiceOpen || vpnConsentPending' in activity
-preset_handler = activity.split('productModes.setOnCheckedChangeListener(', 1)[1].split('text(subscriptionCard,', 1)[0]
+preset_handler = activity.split('productModes.setOnCheckedChangeListener(', 1)[1].split('// End product-mode presets.', 1)[0]
 assert 'lanSharing.setChecked(mode.lanEnabled); phoneApps.setChecked(mode.phoneVpn);' in preset_handler
 assert 'vpnConsentGranted = false' in preset_handler
 assert 'subscription.setText' not in preset_handler and 'routing.setSelection' not in preset_handler
@@ -228,8 +228,8 @@ print('PASS: novice game setup separates connection evidence from verified acces
 # Shared desktop visual language, adapted to native Android without changing consent.
 assert 'mark.setImageResource(R.mipmap.ic_launcher)' in activity, 'Reuse the approved packaged artwork'
 assert 'subscription.setHint(t(' in activity and 'Subscription link · HTTPS' in activity
-assert 'Service status · Next step' in activity and 'Connect & verify' in activity
-assert 'connection counts do not prove a game works' in activity
+assert 'page_overview' in activity and 'page_nodes' in activity and 'page_sharing' in activity and 'page_settings' in activity
+assert 'A connection does not prove Internet access; verify on the device.' in activity
 assert 'button.setMinHeight(dp(primary ? 56 : 48))' in activity
 layout_method = activity.split('private void updateProductModeLayout(int width)', 1)[1].split('private int dp', 1)[0]
 assert 'width < dp(310)' in layout_method and 'fontScale > 1.2f' in layout_method
@@ -258,3 +258,16 @@ assert 'private final class NavigatorBackdrop extends Drawable' in activity
 for background in [(26, 28, 64), (40, 43, 87), (29, 61, 83)]:
     assert (luminance((207, 213, 240)) + .05) / (luminance(background) + .05) >= 4.5
 print('PASS: static anime hero artwork, responsive reading order and contrast guards')
+
+# Compact home keeps explanations in explicit help and preserves operation boundaries.
+page_switch = activity.split('private void showPage(int page)', 1)[1].split('private void updateNavigation()', 1)[0]
+assert 'View.VISIBLE : View.GONE' in page_switch
+assert not any(action in page_switch for action in ('beginStart(', 'startService(', 'subscription.setText', 'setChecked(', 'prefs()'))
+assert 'navigatorHero(about)' in activity and 'navigatorHero(home)' not in activity
+assert 'showHelpTopic(int topic)' in activity and 'setItems(topics' in activity
+assert 'mode.shortDescription(english)' in activity
+assert 'accounting.setText(""); accounting.setVisibility(View.GONE)' in activity
+assert 'shareSteps.setVisibility(showAddress ? View.VISIBLE : View.GONE)' in activity
+assert 'boolean showAddress = snapshot.phase == SessionController.Phase.RUNNING && Boolean.TRUE.equals(running)' in activity
+assert 'showAccountingDetails()' in activity
+print('PASS: compact four-page navigation, deferred help and readiness-only sharing address')

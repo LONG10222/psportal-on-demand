@@ -1,5 +1,20 @@
 # Android validation record
 
+## 2026-10-21 Compact navigation
+
+The Android UI uses Overview / Proxies / Sharing / Settings. Long explanations
+are in explicit Help topics; empty accounting and inactive phone-VPN status are
+hidden, and the sharing address waits for actual RUNNING/readiness data.
+Navigation retains the same views, subscription text, selection and native
+session; original consent, conflict, background and cleanup gates remain intact.
+
+Local Windows host verification: 386 JVM assertions, source/XML guardrails and
+17 APK helper tests pass. The framework device runner now checks compact home
+text and page navigation without mutation as well as prior privacy controls.
+Actual APK/device results belong to this PR's exact revision and delivery report;
+previous emulator evidence is not reused as acceptance for this layout.
+
+
 ## 2026-10-20 Android capability admission and Windows verification
 
 Based on StarPass anime navigator `e28e197`. Refs #19. No portable/Windows,

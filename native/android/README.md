@@ -5,6 +5,24 @@ Android v4 (`0.4.0-dev`, code 4) embeds pinned Mihomo in one application through
 or downloaded executable is needed. The Chinese-first simple UI retains language,
 theme and subscription-usage choices.
 
+## Quick start
+
+Enter a public HTTPS subscription in **Overview**, choose the use/routing mode,
+and tap **Connect**. Phone routing uses the normal Android VPN-consent flow.
+The masked URL remains in memory and is never persisted.
+
+| Page | Controls |
+| --- | --- |
+| Overview | Status, subscription, use mode, routing and Connect/Stop |
+| Proxies | Load, test and select supported live nodes or policy groups |
+| Sharing | Ready-only address, port and connection guide |
+| Settings | LAN/phone/background switches, advanced network settings, repair and appearance |
+
+Help in the app bar holds protocol, VPN, background and subscription explanations.
+Empty usage and inactive phone-VPN status do not occupy the home screen. The
+original artwork remains under About. Navigation does not import, start, stop,
+clear the subscription or change traffic selection.
+
 ## Product modes
 
 - **Game**: LAN sharing on, phone VPN off. HTTP/HTTPS CONNECT TCP for devices

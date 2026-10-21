@@ -1,3 +1,10 @@
+## 2026-10-21 — Android 界面精简
+
+- 概览、节点、共享、设置四页导航；首页保留状态、订阅、用途、分流和单一连接/停止操作。
+- 协议、VPN、后台与排障说明移入帮助；空套餐数据和未启用 VPN 状态默认隐藏，共享地址只在监听就绪后显示。
+- 设置保留原网络开关、修复、外观与高级选项；原角色图放入关于，导航不改变订阅或会话。
+- README 改为下载、功能、快速开始和文档入口；详细平台/路由器参考独立保留，区分旧归档和当前界面构建。
+
 # Integration test candidate (2026-10-20)
 
 - Combine Android validation and shared desktop workflow updates without changing native Apple work or anime artwork.
