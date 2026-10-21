@@ -109,9 +109,10 @@ public final class UpdateActivity extends Activity {
         notes.setContentDescription(t("点击查看完整更新内容", "Tap to read all release notes"));
         notes.setOnClickListener(v -> {
             if (asset == null) return;
-            ScrollView detail = new ScrollView(this); TextView copy = new TextView(this);
+            android.content.Context themed = new ContextThemeWrapper(this, dark ? android.R.style.Theme_Material_Dialog_Alert : android.R.style.Theme_Material_Light_Dialog_Alert);
+            ScrollView detail = new ScrollView(themed); TextView copy = new TextView(themed);
             copy.setText(asset.notes); copy.setTextSize(16); copy.setTextIsSelectable(true); copy.setPadding(dp(20),dp(12),dp(20),dp(12)); detail.addView(copy);
-            new AlertDialog.Builder(new ContextThemeWrapper(this, dark ? android.R.style.Theme_Material_Dialog_Alert : android.R.style.Theme_Material_Light_Dialog_Alert))
+            new AlertDialog.Builder(themed)
                 .setTitle(t("更新内容", "Release notes")).setView(detail).setPositiveButton(t("关闭", "Close"),null).show();
         });
         text(body, t("正式版 · GitHub Releases", "Stable · GitHub Releases"), 13);
@@ -236,7 +237,7 @@ public final class UpdateActivity extends Activity {
                 .setMessage(t("请在系统设置中允许星渡安装应用，然后返回点击‘安装更新’。", "Allow StarPass to install apps in system settings, then return and tap Install update."))
                 .setNegativeButton(t("取消", "Cancel"), null).setPositiveButton(t("打开设置", "Open settings"), (d,w) -> {
                     try { startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName()))); }
-                    catch (android.content.ActivityNotFoundException error) { status.setText(t("此设备无法打开安装权限设置", "Install permission settings are unavailable")); }
+                    catch (android.content.ActivityNotFoundException | SecurityException error) { status.setText(t("此设备无法打开安装权限设置", "Install permission settings are unavailable")); }
                 }).show(); return;
         }
         busy(true); File file = ready; Asset expected = asset;
