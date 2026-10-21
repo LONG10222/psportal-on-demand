@@ -224,6 +224,10 @@ public final class UpdateActivity extends Activity {
             finally { if (part != null && part.exists()) part.delete(); HttpURLConnection active = connection; if (active != null) active.disconnect(); }
         });
     }
+    private void downloadRequired() {
+        ready = null;
+        action.setText(t("下载更新", "Download update"));
+    }
     private boolean running() {
         SessionController.Phase phase = ((PortalApplication)getApplication()).session().snapshot().phase;
         return (phase != SessionController.Phase.STOPPED && phase != SessionController.Phase.ERROR) || PhoneVpnService.isActive();
@@ -249,7 +253,12 @@ public final class UpdateActivity extends Activity {
             install.setClipData(ClipData.newRawUri("StarPass update", uri));
             try { startActivity(install); status.setText(t("请在系统窗口确认安装；取消后可重试。", "Confirm installation in the system window. You can retry after cancelling.")); }
             catch (android.content.ActivityNotFoundException | SecurityException error) { status.setText(t("无法打开系统安装程序，请检查安装权限。", "Cannot open the system installer. Check installation permission.")); }
-        }); } catch (Exception error) { ready = null; fail(error); } });
+        }); } catch (Exception error) {
+            // A cached package can disappear or fail revalidation after download.
+            // Keep the button label and its next action in sync on the UI thread.
+            ui(this::downloadRequired);
+            fail(error);
+        } });
     }
     @Override public void onDestroy() {
         closed = true; HttpURLConnection active = connection; if (active != null) active.disconnect();

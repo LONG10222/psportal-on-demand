@@ -26,7 +26,12 @@ public final class UpdatePolicy {
         Matcher match = ASSET.matcher(name);
         if (!match.matches()) return Integer.MAX_VALUE;
         for (int i = 0; i < abis.length; i++) if (match.group(2).equals(abis[i])) return i;
-        return match.group(2).equals("universal") ? abis.length : Integer.MAX_VALUE;
+        // Our universal APK bundles only the two 64-bit native engines. It is
+        // not an architecture-independent APK and cannot run on a 32-bit device.
+        if (match.group(2).equals("universal")) {
+            for (String abi : abis) if ("arm64-v8a".equals(abi) || "x86_64".equals(abi)) return abis.length;
+        }
+        return Integer.MAX_VALUE;
     }
     public static boolean assetUrl(String url, String tag, String name) {
         try {

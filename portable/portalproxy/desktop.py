@@ -387,6 +387,10 @@ class DesktopApp:
         self.load()
         root.after(150, self.poll)
 
+    def show_app_updates(self):
+        from .update_dialog import show
+        show(self)
+
     def _changed(self, *_):
         if not self.loading:
             if _ and 'subscription_url' in self.vars and str(self.vars['subscription_url']) == _[0]:

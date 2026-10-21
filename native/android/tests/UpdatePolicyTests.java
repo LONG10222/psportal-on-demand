@@ -24,6 +24,10 @@ public final class UpdatePolicyTests {
         check(UpdatePolicy.preference("StarPass-Android-6-x86_64.apk", abis) == 1);
         check(UpdatePolicy.preference("StarPass-Android-6-universal.apk", abis) == 2);
         check(UpdatePolicy.preference(asset, new String[]{"x86_64"}) == Integer.MAX_VALUE);
+        for (String[] unsupported : new String[][]{{"armeabi-v7a", "armeabi"}, {"x86"}, {"riscv64"}, {}})
+            check(UpdatePolicy.preference("StarPass-Android-6-universal.apk", unsupported) == Integer.MAX_VALUE);
+        check(UpdatePolicy.preference("StarPass-Android-6-universal.apk", new String[]{"arm64-v8a", "armeabi-v7a"}) == 2);
+        check(UpdatePolicy.preference("StarPass-Android-6-universal.apk", new String[]{"x86_64", "x86"}) == 2);
         String url = "https://github.com/" + UpdatePolicy.REPOSITORY + "/releases/download/v0.6/" + asset;
         check(UpdatePolicy.assetUrl(url,"v0.6",asset));
         for (String bad : new String[]{url.replace("https:","http:"), url.replace("github.com", "github.com.evil.test"), url.replace(UpdatePolicy.REPOSITORY,"other/repo"), url + "?url=x", url + "#fragment", url.replace("github.com", "user@github.com"), url.replace("github.com", "github.com:8443")}) check(!UpdatePolicy.assetUrl(bad,"v0.6",asset));
