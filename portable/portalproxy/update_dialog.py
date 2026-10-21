@@ -27,9 +27,24 @@ def show(app):
     buttons = ttk.Frame(frame)
     buttons.pack(fill='x', pady=12)
     palette = app.view.palette
-    notes = tk.Text(frame, height=6, wrap='word', state='disabled', background=palette['entry'], foreground=palette['text'], insertbackground=palette['text'])
-    notes.pack(fill='both', expand=True)
-    ttk.Label(frame, text=app._t('Manual update: stop sharing, close StarPass, extract into a new folder and launch. Keep the old folder for rollback. Never delete your user configuration.'), wraplength=550).pack(fill='x', pady=10)
+    detail_frame = ttk.Frame(frame)
+    detail_frame.pack(fill='both', expand=True)
+    notes = tk.Text(detail_frame, height=4, width=1, wrap='word', state='disabled',
+                    background=palette['entry'], foreground=palette['text'],
+                    insertbackground=palette['text'])
+    scrollbar = ttk.Scrollbar(detail_frame, orient='vertical', command=notes.yview)
+    notes.configure(yscrollcommand=scrollbar.set)
+    scrollbar.pack(side='right', fill='y')
+    notes.pack(side='left', fill='both', expand=True)
+    guide = app._t('Manual update: stop sharing, close StarPass, extract into a new folder and launch. Keep the old folder for rollback. Never delete your user configuration.')
+
+    def details(extra=''):
+        notes.configure(state='normal')
+        notes.delete('1.0', 'end')
+        notes.insert('1.0', guide + ('\n\n' + extra if extra else ''))
+        notes.configure(state='disabled')
+        notes.yview_moveto(0)
+    details()
     events = queue.Queue()
     cancel = threading.Event()
     state = {'busy': False, 'update': None, 'closed': False, 'after': None}
@@ -110,18 +125,17 @@ def show(app):
                     update, published = value
                     state['update'] = update
                     status.set(app._t('Update available: ') + '.'.join(map(str, update.version)) if update else app._t('No newer matching desktop release in the latest 100 releases.' if published else 'No official release for this desktop platform has been published in the latest 100 releases.'))
-                    notes.configure(state='normal')
-                    notes.delete('1.0', 'end')
-                    if update:
-                        notes.insert('1.0', update.notes)
-                    notes.configure(state='disabled')
+                    details(update.notes if update else '')
                 elif kind == 'downloaded':
                     progress['value'] = 100
-                    status.set(app._t('Package verified and saved. It is not installed. Follow the manual update instructions below.') + '\n' + str(value))
+                    status.set(app._t('Package saved, not installed. See instructions below.'))
+                    details(app._t('Saved package: ') + str(value) + ('\n\n' + state['update'].notes if state['update'] else ''))
                 elif kind == 'validation_error':
-                    status.set(app._t(value))
+                    status.set(app._t('Update failed. See details below.'))
+                    details(app._t(value))
                 else:
-                    status.set(app._t('Update check failed. Check your network and retry; installed version status is unknown.' if value == 'checked' else 'Download failed or cancelled. Check network, storage and permissions; choose a new filename and retry. Existing application and configuration are unchanged.'))
+                    status.set(app._t('Update check failed; version status unknown.' if value == 'checked' else 'Download failed. See details below.'))
+                    details(app._t('Update check failed. Check your network and retry; installed version status is unknown.' if value == 'checked' else 'Download failed or cancelled. Check network, storage and permissions; choose a new filename and retry. Existing application and configuration are unchanged.'))
                 download_button.configure(state='normal' if state['update'] is not None else 'disabled')
         except queue.Empty:
             pass

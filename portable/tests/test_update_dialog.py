@@ -16,7 +16,9 @@ class UpdateDialogTests(unittest.TestCase):
         import tkinter as tk
         self.root=tk.Tk()
         self.addCleanup(self.root.destroy)
-        self.app=SimpleNamespace(root=self.root,_t=lambda text:text,view=SimpleNamespace(palette={'entry':'#111c2a','text':'#ffffff'}))
+        from portalproxy.desktop_view import DesktopView
+        self.app=SimpleNamespace(root=self.root,_t=lambda text:text,view=SimpleNamespace(root=self.root,theme='dark'))
+        DesktopView._styles(self.app.view)
         update_dialog.show(self.app)
         self.window=self.app._update_window
         self.root.update()
@@ -28,6 +30,9 @@ class UpdateDialogTests(unittest.TestCase):
         while not condition() and time.monotonic()<deadline:
             self.root.update();time.sleep(.01)
         self.assertTrue(condition())
+
+    def notes(self):
+        return self.frame.winfo_children()[4].winfo_children()[0]
 
     def status(self):
         return self.root.getvar(self.frame.winfo_children()[1].cget('textvariable'))
@@ -45,7 +50,7 @@ class UpdateDialogTests(unittest.TestCase):
     def test_existing_window_reused_and_theme_applied(self):
         update_dialog.show(self.app)
         self.assertIs(self.window,self.app._update_window)
-        self.assertEqual(self.frame.winfo_children()[4].cget('background'),'#111c2a')
+        self.assertEqual(self.notes().cget('background'),'#111c2a')
 
     def test_check_has_no_automatic_download_and_close_is_safe(self):
         candidate=SimpleNamespace(version=(0,2,0),notes='Synthetic notes',name='example.tar.gz')
@@ -65,8 +70,9 @@ class UpdateDialogTests(unittest.TestCase):
                 with self.subTest(language=language,dark=dark):
                     self.window.destroy()
                     self.app._t=lambda text:i18n.text(text,language)
-                    self.app.view.palette={'entry':'#111c2a' if dark else '#f5f8fc','text':'#ffffff' if dark else '#172b43'}
-                    ttk.Style(self.root).configure('.',font=('TkDefaultFont',11))
+                    from portalproxy.desktop_view import DesktopView
+                    self.app.view.theme='dark' if dark else 'light'
+                    DesktopView._styles(self.app.view)
                     update_dialog.show(self.app)
                     self.window=self.app._update_window
                     self.frame=self.window.winfo_children()[0]
@@ -74,13 +80,21 @@ class UpdateDialogTests(unittest.TestCase):
                     self.window.geometry('380x320')
                     self.root.update()
                     self.assertEqual(self.buttons[0].cget('text'),i18n.text('Check updates',language))
-                    self.assertEqual(self.frame.winfo_children()[4].cget('background'),self.app.view.palette['entry'])
+                    self.assertEqual(self.notes().cget('background'),self.app.view.palette['entry'])
                     for button in self.buttons:
                         self.assertTrue(button.winfo_viewable())
                         self.assertGreaterEqual(button.winfo_rootx(),self.window.winfo_rootx())
                         self.assertGreaterEqual(button.winfo_rooty(),self.window.winfo_rooty())
                         self.assertLessEqual(button.winfo_rootx()+button.winfo_width(),self.window.winfo_rootx()+self.window.winfo_width())
                         self.assertLessEqual(button.winfo_rooty()+button.winfo_height(),self.window.winfo_rooty()+self.window.winfo_height())
+                    notes=self.notes()
+                    self.assertEqual(ttk.Style(self.root).lookup('TLabel','background'),self.app.view.palette['card'])
+                    self.assertEqual(ttk.Style(self.root).lookup('TButton','foreground'),self.app.view.palette['text'])
+                    self.assertTrue(notes.winfo_viewable())
+                    self.assertGreater(notes.winfo_height(),20)
+                    self.assertIsNotNone(notes.dlineinfo('1.0'), 'The first manual-update instruction must actually be visible')
+                    self.assertTrue(notes.get('1.0','end').startswith(i18n.text('Manual update: stop sharing, close StarPass, extract into a new folder and launch. Keep the old folder for rollback. Never delete your user configuration.',language)))
+                    self.assertLessEqual(notes.winfo_rooty()+notes.winfo_height(),self.window.winfo_rooty()+self.window.winfo_height())
                     if os.environ.get('PSPORTAL_SCREENSHOT_DIR') and os.sys.platform.startswith('linux'):
                         from helpers.x11_window_capture import capture
                         output=Path(os.environ['PSPORTAL_SCREENSHOT_DIR'])
@@ -93,10 +107,18 @@ class UpdateDialogTests(unittest.TestCase):
             self.buttons[0].invoke()
             self.wait(lambda:'0.2.0' in self.status())
         with tempfile.TemporaryDirectory() as folder:
-            target=Path(folder)/'synthetic.tar.gz'
+            target=Path(folder)/('synthetic-'+'long-path-'*100+'.tar.gz')
             with patch('tkinter.filedialog.asksaveasfilename',return_value=str(target)),patch('portalproxy.app_updates.download',return_value=target):
                 self.buttons[1].invoke()
                 self.wait(lambda:'not installed' in self.status())
+                self.root.update()
+                self.assertNotIn(str(target),self.status())
+                self.assertIn(str(target),self.notes().get('1.0','end'))
+                self.assertIsNotNone(self.notes().dlineinfo('1.0'))
+                self.notes().yview_moveto(1)
+                self.root.update()
+                self.assertGreater(self.notes().yview()[0],0)
+                self.notes().yview_moveto(0)
             started=threading.Event();stopped=threading.Event();cancelled=[]
             def pending(update,destination,cancel,progress):
                 started.set()

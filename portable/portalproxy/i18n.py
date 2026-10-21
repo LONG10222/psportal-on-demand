@@ -6,6 +6,11 @@ from pathlib import Path
 import tempfile
 
 ZH = {
+    'Package saved, not installed. See instructions below.': '安装包已保存，尚未安装。请查看下方说明。',
+    'Saved package: ': '安装包保存位置：',
+    'Update failed. See details below.': '更新失败，请查看下方详情。',
+    'Update check failed; version status unknown.': '检查更新失败，无法确定是否最新。',
+    'Download failed. See details below.': '下载失败，请查看下方详情。',
     'Release metadata request timed out.': '读取发行信息超时，请检查网络后重试。',
     'This system or architecture is not supported by the update channel.': '更新通道暂不支持此系统或架构。',
     'The installed desktop version is not a stable semantic version.': '当前桌面版本号不符合正式版本规范，无法自动比较。',
