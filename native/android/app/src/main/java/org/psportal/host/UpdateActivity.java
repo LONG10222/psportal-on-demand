@@ -102,9 +102,18 @@ public final class UpdateActivity extends Activity {
         try { text(body, t("当前版本 ", "Installed ") + installed().versionName, 14); } catch (Exception ignored) { /* own package always exists */ }
         status = text(body, "", 16); status.setTag("update_status");
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); body.addView(progress); progress.setVisibility(android.view.View.GONE);
-        notes = text(body, "", 15); notes.setTextIsSelectable(true);
         action = button(body, "", v -> { if (ready == null) download(); else installRequested(); }); action.setTag("update_action"); action.setVisibility(android.view.View.GONE);
         check = button(body, t("检查更新", "Check for updates"), v -> check()); check.setTag("update_check");
+        notes = text(body, "", 15); notes.setTextIsSelectable(true);
+        notes.setMaxLines(6); notes.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        notes.setContentDescription(t("点击查看完整更新内容", "Tap to read all release notes"));
+        notes.setOnClickListener(v -> {
+            if (asset == null) return;
+            ScrollView detail = new ScrollView(this); TextView copy = new TextView(this);
+            copy.setText(asset.notes); copy.setTextSize(16); copy.setTextIsSelectable(true); copy.setPadding(dp(20),dp(12),dp(20),dp(12)); detail.addView(copy);
+            new AlertDialog.Builder(new ContextThemeWrapper(this, dark ? android.R.style.Theme_Material_Dialog_Alert : android.R.style.Theme_Material_Light_Dialog_Alert))
+                .setTitle(t("更新内容", "Release notes")).setView(detail).setPositiveButton(t("关闭", "Close"),null).show();
+        });
         text(body, t("正式版 · GitHub Releases", "Stable · GitHub Releases"), 13);
         check();
     }
