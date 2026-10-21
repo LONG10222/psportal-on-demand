@@ -67,7 +67,8 @@ public final class UpdateInstrumentation extends Instrumentation {
             check(invoke(select,null,release(new JSONArray().put(asset(6,"x86_64"))),5L,arm)==null,"unsupported ABI excluded");
             check(name.get(invoke(select,null,release(new JSONArray().put(asset(6,"arm64-v8a")).put(asset(7,"universal"))),5L,arm)).toString().contains("-7-"),"highest code before ABI");
             Method selectAll=updater.getDeclaredMethod("selectReleases",JSONArray.class,long.class,String[].class);selectAll.setAccessible(true);
-            check(name.get(invoke(selectAll,null,new JSONArray().put(release(new JSONArray())).put(release(new JSONArray().put(asset(6,"universal"))))),5L,arm)).toString().contains("-6-"),"desktop-only release does not mask Android");
+            JSONArray history = new JSONArray().put(release(new JSONArray())).put(release(new JSONArray().put(asset(6,"universal"))));
+            check(name.get(invoke(selectAll,null,history,5L,arm)).toString().contains("-6-"),"desktop-only release does not mask Android");
             for(String key:new String[]{"digest","browser_download_url","size"}) {
                 JSONObject invalid=asset(6,"universal");invalid.put(key,key.equals("size")?-1:"invalid");
                 boolean rejected=false;try{invoke(select,null,release(new JSONArray().put(invalid)),5L,arm);}catch(Exception expected){rejected=true;}check(rejected,"reject malformed "+key);
