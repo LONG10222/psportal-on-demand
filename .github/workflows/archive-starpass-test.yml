@@ -56,93 +56,25 @@ jobs:
               except urllib.error.HTTPError as e:
                   if e.code == 404: return None
                   raise
-          artifacts = json.loads(pathlib.Path('artifacts.json').read_text())
-          assert api('')['full_name'] == REPO
-          assert api('/commits/' + SHA)['sha'] == SHA
-          out = pathlib.Path('archive'); out.mkdir(exist_ok=True)
-          manifest = {'repository': REPO, 'source_commit': SHA, 'release_tag': TAG, 'artifacts': []}
-          for item in artifacts:
-              meta = api('/actions/artifacts/' + str(item['id']))
-              assert not meta['expired'], 'Artifact expired'
-              assert meta['workflow_run']['head_sha'] == SHA, 'Wrong artifact source commit'
-              assert meta['workflow_run']['id'] == item['run'], 'Wrong workflow run'
-              assert meta['digest'] == item['digest'] and meta['size_in_bytes'] == item['size']
-              assert meta['name'] + '.zip' == item['name']
-              run = api('/actions/runs/' + str(item['run']))
-              assert run['conclusion'] == 'success' and run['head_sha'] == SHA
-              target = out / item['name']
-              with request(BASE + '/actions/artifacts/' + str(item['id']) + '/zip') as response, target.open('wb') as f:
-                  while chunk := response.read(1024 * 1024): f.write(chunk)
-              digest = 'sha256:' + hashlib.file_digest(target.open('rb'), 'sha256').hexdigest()
-              assert target.stat().st_size == item['size'] and digest == item['digest'], 'Archive byte mismatch'
-              with zipfile.ZipFile(target) as archive:
-                  assert archive.testzip() is None, 'ZIP CRC failure'
-                  entries = len(archive.infolist())
-              manifest['artifacts'].append({**item, 'zip_entries': entries})
-              print('Verified', item['name'], item['size'], digest, flush=True)
-          (out / 'SHA256SUMS.txt').write_text(''.join(a['digest'].split(':')[1] + '  ' + a['name'] + '\n' for a in artifacts))
-          (out / 'archive-provenance.json').write_text(json.dumps(manifest, indent=2) + '\n')
-          body = '''星渡 StarPass：PR #22 整合测试包归档（非正式稳定版）
-          
-          Source commit: `''' + SHA + '''`
-          
-          这些 ZIP 原样保存自已成功完成的 GitHub Actions 构建，未重新构建。每个原始 ZIP 已校验 GitHub 记录的 SHA-256、字节数及 ZIP CRC；SHA256SUMS.txt 和 archive-provenance.json 记录来源与校验值。原包内的许可证、对应源码及审计材料保持不变。
-          
-          - Windows x64、macOS ARM64、Linux x64：未签名桌面测试包。
-          - Android：原始 unsigned 构建集合，包含开发/审计材料，不作为正式签名发行。
-          - iOS：模拟器与未签名构建材料，不是可直接安装的已签名 IPA。
-          - 不代表真实订阅、实体 PS Portal、手机后台/热点/家庭网络端到端验证通过；HTTP/CONNECT TCP 共享不等同于通用 UDP 游戏加速或系统级 VPN。
-          
-          仅归档现有最终包；不合并 main，不覆盖任何用户开发分支。Release 附件不受原 Actions 产物保留期影响，但仍依赖仓库及附件未被删除。
-          '''
+          expected = json.loads(pathlib.Path('artifacts.json').read_text())
+          expected.extend([{'name':'SHA256SUMS.txt','size':716,'digest':'sha256:76ab05d42268beb7829f75d59c83ba79d5be5a1f9aeb24fbae8a1c1d585c0d02'}, {'name':'archive-provenance.json','size':1669,'digest':'sha256:ef9be3e04b607f192f5a373c9dffae35b3a44feee3bad3655a7feeeffca1b288'}])
+          release = api('/releases/419496286')
+          assert release['tag_name'] == TAG and release['target_commitish'] == SHA and release['prerelease']
+          assets = api('/releases/419496286/assets?per_page=100')
+          assert len(assets) == len(expected)
+          byname = {a['name']: a for a in assets}
+          for a in expected:
+              b = byname[a['name']]
+              assert b['state'] == 'uploaded' and b['size'] == a['size'] and b['digest'] == a['digest']
           ref = optional('/git/ref/tags/' + TAG)
-          if ref:
-              assert ref['object']['type'] == 'commit' and ref['object']['sha'] == SHA, 'Tag collision'
-          matches = []
-          page = 1
-          while True:
-              batch = api('/releases?per_page=100&page=' + str(page))
-              matches.extend(r for r in batch if r['tag_name'] == TAG)
-              if len(batch) < 100: break
-              page += 1
-              assert page <= 100, 'Release pagination exceeds safe bound'
-          assert len(matches) <= 1, 'Duplicate release tags require manual reconciliation'
-          release = matches[0] if matches else None
-          if release:
-              assert release['target_commitish'] == SHA and release['prerelease'], 'Release collision'
-          else:
-              release = api('/releases', 'POST', {'tag_name': TAG, 'target_commitish': SHA, 'name': 'StarPass integration test archive · 2026-10-20 · c1d2d3a', 'body': body, 'draft': True, 'prerelease': True, 'make_latest': 'false'})
-          expected = {}
-          assets = {a['name']: a for a in api('/releases/' + str(release['id']) + '/assets?per_page=100')}
-          expected_names = {a['name'] for a in artifacts} | {'SHA256SUMS.txt', 'archive-provenance.json'}
-          assert {p.name for p in out.iterdir()} == expected_names, 'Unexpected local files'
-          for path in sorted(out / name for name in expected_names):
-              size = path.stat().st_size
-              with path.open('rb') as f: digest = 'sha256:' + hashlib.file_digest(f, 'sha256').hexdigest()
-              expected[path.name] = (size, digest)
-              if path.name in assets:
-                  assert assets[path.name]['size'] == size and assets[path.name].get('digest') == digest, 'Existing asset collision'
-                  continue
-              url = release['upload_url'].split('{')[0] + '?name=' + urllib.parse.quote(path.name)
-              with request(url, 'POST', path.read_bytes(), raw=True) as response: uploaded = json.load(response)
-              assert uploaded['state'] == 'uploaded' and uploaded['size'] == size and uploaded.get('digest') == digest
-              print('Uploaded', path.name, size, digest, flush=True)
-          assets = api('/releases/' + str(release['id']) + '/assets?per_page=100')
-          assert len(assets) == len(expected), 'Unexpected release assets'
-          for a in assets:
-              assert (a['size'], a.get('digest')) == expected[a['name']] and a['state'] == 'uploaded'
-          # Verify the source tag before publishing.
-          ref = api('/git/ref/tags/' + TAG)
+          if not ref:
+              ref = api('/git/refs', 'POST', {'ref': 'refs/tags/' + TAG, 'sha': SHA})
           assert ref['object']['type'] == 'commit' and ref['object']['sha'] == SHA
-          # Publish only after every exact archive and manifest is present and verified.
           if release['draft']:
-              release = api('/releases/' + str(release['id']), 'PATCH', {'draft': False, 'prerelease': True, 'make_latest': 'false', 'body': body})
+              release = api('/releases/419496286', 'PATCH', {'draft':False, 'prerelease':True, 'make_latest':'false'})
           ref = api('/git/ref/tags/' + TAG)
           assert ref['object']['type'] == 'commit' and ref['object']['sha'] == SHA
           assert not release['draft'] and release['prerelease']
-          print('ARCHIVE_COMPLETE', release['html_url'], sum(v[0] for v in expected.values()), 'bytes', flush=True)
-          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
-              f.write('## Verified StarPass test archive\n' + release['html_url'] + '\n\nSource: ' + SHA + '\n\n')
-              for a in assets: f.write('- ' + a['name'] + ': ' + str(a['size']) + ' bytes; ' + a['digest'] + '\n')
+          print('ARCHIVE_COMPLETE', release['html_url'], sum(a['size'] for a in assets), flush=True)
           PYTHON
           python3 archive.py
