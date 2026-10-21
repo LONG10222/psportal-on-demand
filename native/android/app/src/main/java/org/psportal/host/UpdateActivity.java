@@ -244,7 +244,8 @@ public final class UpdateActivity extends Activity {
             busy(false); if (running()) { status.setText(t("请先停止连接", "Stop your connection first")); return; }
             Uri uri = UpdateApkProvider.uri(file);
             Intent install = new Intent(Intent.ACTION_VIEW).setDataAndType(uri, UpdateApkProvider.MIME)
-                .setClipData(ClipData.newRawUri("StarPass update", uri)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            install.setClipData(ClipData.newRawUri("StarPass update", uri));
             try { startActivity(install); status.setText(t("请在系统窗口确认安装；取消后可重试。", "Confirm installation in the system window. You can retry after cancelling.")); }
             catch (android.content.ActivityNotFoundException | SecurityException error) { status.setText(t("无法打开系统安装程序，请检查安装权限。", "Cannot open the system installer. Check installation permission.")); }
         }); } catch (Exception error) { ready = null; fail(error); } });
