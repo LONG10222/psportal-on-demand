@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 /** Release contract independent of Android UI and network transport. */
 public final class UpdatePolicy {
     public static final String REPOSITORY = "LONG10222/psportal-on-demand";
-    public static final String ENDPOINT = "https://api.github.com/repos/" + REPOSITORY + "/releases/latest";
+    public static final String ENDPOINT = "https://api.github.com/repos/" + REPOSITORY + "/releases?per_page=100";
     public static final long MAX_APK = 256L * 1024 * 1024;
     private static final Pattern ASSET = Pattern.compile("StarPass-Android-([1-9][0-9]{0,8})-(arm64-v8a|x86_64|universal)\\.apk");
     private UpdatePolicy() {}

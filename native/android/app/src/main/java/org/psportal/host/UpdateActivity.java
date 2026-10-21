@@ -77,6 +77,15 @@ public final class UpdateActivity extends Activity {
         }
         return best;
     }
+    static Asset selectReleases(JSONArray releases, long installed, String[] abis) throws Exception {
+        Asset best = null;
+        for (int i = 0; i < releases.length(); i++) {
+            Asset candidate = select(releases.getJSONObject(i), installed, abis);
+            if (candidate != null && (best == null || candidate.version > best.version ||
+                    (candidate.version == best.version && UpdatePolicy.preference(candidate.name, abis) < UpdatePolicy.preference(best.name, abis)))) best = candidate;
+        }
+        return best;
+    }
     private String t(String zh, String en) { return english ? en : zh; }
     private int dp(int n) { return Math.round(n * getResources().getDisplayMetrics().density); }
     @Override public void onCreate(Bundle state) {
@@ -155,13 +164,16 @@ public final class UpdateActivity extends Activity {
         worker.submit(() -> {
             try {
                 HttpURLConnection response = open(UpdatePolicy.ENDPOINT, true); int code = response.getResponseCode();
-                if (code == 404) { ui(() -> { busy(false); status.setText(t("尚未发布正式更新", "No stable release has been published yet")); }); return; }
                 if (code != 200) throw new IOException("HTTP");
                 ByteArrayOutputStream bytes = new ByteArrayOutputStream(); byte[] buffer = new byte[8192];
-                try (InputStream in = response.getInputStream()) { int n; while ((n = in.read(buffer)) != -1) { if (closed || bytes.size() + n > 2*1024*1024) throw new IOException("metadata size"); bytes.write(buffer,0,n); } }
-                Asset found = select(new JSONObject(bytes.toString(StandardCharsets.UTF_8.name())), version(installed()), Build.SUPPORTED_ABIS);
+                try (InputStream in = response.getInputStream()) { int n; while ((n = in.read(buffer)) != -1) { if (closed || bytes.size() + n > 4*1024*1024) throw new IOException("metadata size"); bytes.write(buffer,0,n); } }
+                JSONArray releases = new JSONArray(bytes.toString(StandardCharsets.UTF_8.name()));
+                Asset found = selectReleases(releases, version(installed()), Build.SUPPORTED_ABIS);
+                boolean stable = false;
+                for (int i = 0; i < releases.length(); i++) if (!releases.getJSONObject(i).getBoolean("prerelease") && !releases.getJSONObject(i).getBoolean("draft")) stable = true;
+                final boolean hasStable = stable;
                 ui(() -> { busy(false); asset = found;
-                    if (found == null) status.setText(t("当前没有适用于此设备的更新", "No update is available for this device"));
+                    if (found == null) status.setText(hasStable ? t("当前没有适用于此设备的更新", "No update is available for this device") : t("尚未发布正式更新", "No stable release has been published yet"));
                     else { status.setText(found.title + " · " + Math.round(found.size / 1048576.0) + " MB"); notes.setText(found.notes); action.setText(t("下载更新", "Download update")); action.setVisibility(android.view.View.VISIBLE); }
                 });
             } catch (Exception error) { fail(error); }
