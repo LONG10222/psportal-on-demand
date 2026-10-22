@@ -1,15 +1,15 @@
 name: Archive exact StarPass test artifacts
 on:
   push:
-    branches: [archive/starpass-c1d2d3a-20261021]
+    branches: [archive/starpass-42a6aec-20261022]
 permissions:
   contents: read
 concurrency:
-  group: archive-starpass-c1d2d3a
+  group: archive-starpass-42a6aec
   cancel-in-progress: false
 jobs:
   archive:
-    if: github.repository == 'LONG10222/psportal-on-demand' && github.ref == 'refs/heads/archive/starpass-c1d2d3a-20261021'
+    if: github.repository == 'LONG10222/psportal-on-demand' && github.ref == 'refs/heads/archive/starpass-42a6aec-20261022'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -23,13 +23,13 @@ jobs:
         run: |
           set -euo pipefail
           cat > artifacts.json <<'ARTIFACTS'
-          [{"id":12284082512,"name":"psportal-unified-macos-arm64-unsigned-c1d2d3a365b51c62ab29466d3b26705df3fa456f.zip","size":50800182,"digest":"sha256:eaf15312ba3e30c8888f55ee5f58be46b024393d96d31ce87ac7edbade1386e7","run":39463278728},{"id":12283179307,"name":"psportal-unified-linux-x64-unsigned-c1d2d3a365b51c62ab29466d3b26705df3fa456f.zip","size":53979837,"digest":"sha256:a8e73b804e7dcbcba4e4af181e2024dcb55b4def20b9bcc3d75a49b053bfcf1e","run":39463278728},{"id":12282884593,"name":"psportal-unified-windows-x64-unsigned-c1d2d3a365b51c62ab29466d3b26705df3fa456f.zip","size":94730705,"digest":"sha256:58f5b186d1cebdd5d420285e8edac14080a8c6b9c74f25e8b73c67f92a9e6212","run":39463278728},{"id":12284381055,"name":"psportal-android-unsigned-c1d2d3a365b51c62ab29466d3b26705df3fa456f.zip","size":232239494,"digest":"sha256:c8a7c1c20124013b73d9c3c691aab0dae635c14c78dd4be8b26e31bafb05f11f","run":39463277902},{"id":12284477364,"name":"psportal-ios-simulator-c1d2d3a365b51c62ab29466d3b26705df3fa456f.zip","size":73973424,"digest":"sha256:e170f31a8cf63dcdc68f82980addc1aab546fce4c04dca963dae77ff853c8b55","run":39463278157}]
+          [{"id":12376407398,"name":"psportal-unified-macos-arm64-unsigned-42a6aec39f50e092cd8441738cd5ff3e28eb0c73.zip","size":50836546,"digest":"sha256:19c26938c385b959ea9da30375409565a5c6118e1bd8f81151b5590138bb5dd1","run":39664811215},{"id":12376402743,"name":"psportal-unified-windows-x64-unsigned-42a6aec39f50e092cd8441738cd5ff3e28eb0c73.zip","size":94780088,"digest":"sha256:12c63b4f1ce94ea22fdbe4d5cd23dad8983a720fb2eb5fc809363e6ee6617532","run":39664811215},{"id":12375514687,"name":"psportal-unified-linux-x64-unsigned-42a6aec39f50e092cd8441738cd5ff3e28eb0c73.zip","size":54003116,"digest":"sha256:b9f36878a699771eec8b2a7c201fa636fb3e21a366ccf3f84dc202952421add4","run":39664811215},{"id":12377293314,"name":"psportal-android-unsigned-42a6aec39f50e092cd8441738cd5ff3e28eb0c73.zip","size":232309390,"digest":"sha256:62da5e3765f633b4bddcf76c2ac867adaf02575ae1e9dc655249109818a03030","run":39664811182},{"id":12378895292,"name":"psportal-ios-simulator-42a6aec39f50e092cd8441738cd5ff3e28eb0c73.zip","size":74028974,"digest":"sha256:786b72107b01ea4ed372ea2290d66eb6d98d908417e8a9f247f138b3da3bf712","run":39664811111},{"id":12376512578,"name":"starpass-router-source-42a6aec39f50e092cd8441738cd5ff3e28eb0c73.zip","size":165777,"digest":"sha256:e22238ca49baf89c69833416b3bd010a2be239dbc66452dd702ae9e54f96c095","run":39664811262}]
           ARTIFACTS
           cat > archive.py <<'PYTHON'
           import hashlib, json, os, pathlib, time, urllib.request, urllib.error, urllib.parse, zipfile
           REPO = 'LONG10222/psportal-on-demand'
-          SHA = 'c1d2d3a365b51c62ab29466d3b26705df3fa456f'
-          TAG = 'starpass-test-20261020-c1d2d3a'
+          SHA = '42a6aec39f50e092cd8441738cd5ff3e28eb0c73'
+          TAG = 'starpass-test-20261021-42a6aec'
           BASE = 'https://api.github.com/repos/' + REPO
           TOKEN = os.environ['GH_TOKEN']
           class SafeRedirect(urllib.request.HTTPRedirectHandler):
@@ -56,25 +56,96 @@ jobs:
               except urllib.error.HTTPError as e:
                   if e.code == 404: return None
                   raise
-          expected = json.loads(pathlib.Path('artifacts.json').read_text())
-          expected.extend([{'name':'SHA256SUMS.txt','size':716,'digest':'sha256:76ab05d42268beb7829f75d59c83ba79d5be5a1f9aeb24fbae8a1c1d585c0d02'}, {'name':'archive-provenance.json','size':1669,'digest':'sha256:ef9be3e04b607f192f5a373c9dffae35b3a44feee3bad3655a7feeeffca1b288'}])
-          release = api('/releases/419496286')
-          assert release['tag_name'] == TAG and release['target_commitish'] == SHA and release['prerelease']
-          assets = api('/releases/419496286/assets?per_page=100')
-          assert len(assets) == len(expected)
-          byname = {a['name']: a for a in assets}
-          for a in expected:
-              b = byname[a['name']]
-              assert b['state'] == 'uploaded' and b['size'] == a['size'] and b['digest'] == a['digest']
+          artifacts = json.loads(pathlib.Path('artifacts.json').read_text())
+          assert api('')['full_name'] == REPO
+          assert api('/commits/' + SHA)['sha'] == SHA
+          out = pathlib.Path('archive'); out.mkdir(exist_ok=True)
+          manifest = {'repository': REPO, 'source_commit': SHA, 'release_tag': TAG, 'artifacts': []}
+          for item in artifacts:
+              meta = api('/actions/artifacts/' + str(item['id']))
+              assert not meta['expired'], 'Artifact expired'
+              assert meta['workflow_run']['head_sha'] == SHA, 'Wrong artifact source commit'
+              assert meta['workflow_run']['id'] == item['run'], 'Wrong workflow run'
+              assert meta['digest'] == item['digest'] and meta['size_in_bytes'] == item['size']
+              assert meta['name'] + '.zip' == item['name']
+              run = api('/actions/runs/' + str(item['run']))
+              assert run['conclusion'] == 'success' and run['head_sha'] == SHA
+              target = out / item['name']
+              with request(BASE + '/actions/artifacts/' + str(item['id']) + '/zip') as response, target.open('wb') as f:
+                  while chunk := response.read(1024 * 1024): f.write(chunk)
+              digest = 'sha256:' + hashlib.file_digest(target.open('rb'), 'sha256').hexdigest()
+              assert target.stat().st_size == item['size'] and digest == item['digest'], 'Archive byte mismatch'
+              with zipfile.ZipFile(target) as archive:
+                  assert archive.testzip() is None, 'ZIP CRC failure'
+                  entries = len(archive.infolist())
+              manifest['artifacts'].append({**item, 'zip_entries': entries})
+              print('Verified', item['name'], item['size'], digest, flush=True)
+          (out / 'SHA256SUMS.txt').write_text(''.join(a['digest'].split(':')[1] + '  ' + a['name'] + '\n' for a in artifacts))
+          (out / 'archive-provenance.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          body = '''星渡 StarPass：PR #25 整合测试包归档（非正式稳定版）
+          
+          Source commit: `''' + SHA + '''`
+          
+          这些 ZIP 原样保存自已成功完成的 GitHub Actions 构建，未重新构建。每个原始 ZIP 已校验 GitHub 记录的 SHA-256、字节数及 ZIP CRC；SHA256SUMS.txt 和 archive-provenance.json 记录来源与校验值。原包内的许可证、对应源码及审计材料保持不变。
+          
+          - Windows x64、macOS ARM64、Linux x64：未签名桌面测试包。
+          - 路由器：源代码归档，含升级前检查、备份与回滚脚本；不等于已在真实路由器验证。
+          - Android：原始 unsigned 构建集合，包含开发/审计材料，不作为正式签名发行。
+          - iOS：模拟器与未签名构建材料，不是可直接安装的已签名 IPA。
+          - 不代表真实订阅、实体 PS Portal、手机后台/热点/家庭网络端到端验证通过；HTTP/CONNECT TCP 共享不等同于通用 UDP 游戏加速或系统级 VPN。
+          
+          仅归档现有最终包；不合并 main，不覆盖任何用户开发分支。Release 附件不受原 Actions 产物保留期影响，但仍依赖仓库及附件未被删除。
+          '''
+          ref = optional('/git/ref/tags/' + TAG)
+          if ref:
+              assert ref['object']['type'] == 'commit' and ref['object']['sha'] == SHA, 'Tag collision'
+          matches = []
+          page = 1
+          while True:
+              batch = api('/releases?per_page=100&page=' + str(page))
+              matches.extend(r for r in batch if r['tag_name'] == TAG)
+              if len(batch) < 100: break
+              page += 1
+              assert page <= 100, 'Release pagination exceeds safe bound'
+          assert len(matches) <= 1, 'Duplicate release tags require manual reconciliation'
+          release = matches[0] if matches else None
+          if release:
+              assert release['target_commitish'] == SHA and release['prerelease'], 'Release collision'
+          else:
+              release = api('/releases', 'POST', {'tag_name': TAG, 'target_commitish': SHA, 'name': 'StarPass integration test archive · 2026-10-21 · 42a6aec', 'body': body, 'draft': True, 'prerelease': True, 'make_latest': 'false'})
+          expected = {}
+          assets = {a['name']: a for a in api('/releases/' + str(release['id']) + '/assets?per_page=100')}
+          expected_names = {a['name'] for a in artifacts} | {'SHA256SUMS.txt', 'archive-provenance.json'}
+          assert {p.name for p in out.iterdir()} == expected_names, 'Unexpected local files'
+          for path in sorted(out / name for name in expected_names):
+              size = path.stat().st_size
+              with path.open('rb') as f: digest = 'sha256:' + hashlib.file_digest(f, 'sha256').hexdigest()
+              expected[path.name] = (size, digest)
+              if path.name in assets:
+                  assert assets[path.name]['size'] == size and assets[path.name].get('digest') == digest, 'Existing asset collision'
+                  continue
+              url = release['upload_url'].split('{')[0] + '?name=' + urllib.parse.quote(path.name)
+              with request(url, 'POST', path.read_bytes(), raw=True) as response: uploaded = json.load(response)
+              assert uploaded['state'] == 'uploaded' and uploaded['size'] == size and uploaded.get('digest') == digest
+              print('Uploaded', path.name, size, digest, flush=True)
+          assets = api('/releases/' + str(release['id']) + '/assets?per_page=100')
+          assert len(assets) == len(expected), 'Unexpected release assets'
+          for a in assets:
+              assert (a['size'], a.get('digest')) == expected[a['name']] and a['state'] == 'uploaded'
+          # Create an exact source tag explicitly; draft releases do not create one.
           ref = optional('/git/ref/tags/' + TAG)
           if not ref:
               ref = api('/git/refs', 'POST', {'ref': 'refs/tags/' + TAG, 'sha': SHA})
           assert ref['object']['type'] == 'commit' and ref['object']['sha'] == SHA
+          # Publish only after every exact archive and manifest is present and verified.
           if release['draft']:
-              release = api('/releases/419496286', 'PATCH', {'draft':False, 'prerelease':True, 'make_latest':'false'})
+              release = api('/releases/' + str(release['id']), 'PATCH', {'draft': False, 'prerelease': True, 'make_latest': 'false', 'body': body})
           ref = api('/git/ref/tags/' + TAG)
           assert ref['object']['type'] == 'commit' and ref['object']['sha'] == SHA
           assert not release['draft'] and release['prerelease']
-          print('ARCHIVE_COMPLETE', release['html_url'], sum(a['size'] for a in assets), flush=True)
+          print('ARCHIVE_COMPLETE', release['html_url'], sum(v[0] for v in expected.values()), 'bytes', flush=True)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write('## Verified StarPass test archive\n' + release['html_url'] + '\n\nSource: ' + SHA + '\n\n')
+              for a in assets: f.write('- ' + a['name'] + ': ' + str(a['size']) + ' bytes; ' + a['digest'] + '\n')
           PYTHON
           python3 archive.py
