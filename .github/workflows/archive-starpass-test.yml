@@ -147,5 +147,16 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
               f.write('## Verified StarPass test archive\n' + release['html_url'] + '\n\nSource: ' + SHA + '\n\n')
               for a in assets: f.write('- ' + a['name'] + ': ' + str(a['size']) + ' bytes; ' + a['digest'] + '\n')
+
+          # Public download verification without authentication, including full bytes.
+          for a in assets:
+              req = urllib.request.Request(a['browser_download_url'], headers={'User-Agent': 'starpass-public-download-verification'})
+              h = hashlib.sha256(); size = 0
+              with urllib.request.urlopen(req, timeout=180) as response:
+                  assert response.status == 200
+                  while chunk := response.read(1024 * 1024):
+                      h.update(chunk); size += len(chunk)
+              assert size == a['size'] and 'sha256:' + h.hexdigest() == a['digest']
+              print('PUBLIC_DOWNLOAD_VERIFIED', a['name'], size, h.hexdigest(), flush=True)
           PYTHON
           python3 archive.py
