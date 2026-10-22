@@ -48,9 +48,6 @@ public final class RuntimeNodePresentationTests {
             check(ProductMode.fromInputs(mode.lanEnabled, mode.phoneVpn) == mode, "Existing input switches map back to their exact preset");
             check(!mode.label(true).isEmpty() && !mode.label(false).isEmpty(), "Product label is bilingual");
             check(!mode.description(true).isEmpty() && !mode.description(false).isEmpty(), "Product boundaries are bilingual");
-            check(!mode.shortDescription(true).isEmpty() && mode.shortDescription(true).length() <= 65, "English overview hint stays compact");
-            check(!mode.shortDescription(false).isEmpty() && mode.shortDescription(false).length() <= 30, "Chinese overview hint stays compact");
-            if (mode.phoneVpn) check(mode.shortDescription(true).contains("VPN consent") && mode.shortDescription(false).contains("VPN"), "Compact phone hint still explains consent");
         }
         for (ProductMode mode : ProductMode.values()) {
             for (ProductMode envelope : ProductMode.values())

@@ -5,24 +5,6 @@ Android v4 (`0.4.0-dev`, code 4) embeds pinned Mihomo in one application through
 or downloaded executable is needed. The Chinese-first simple UI retains language,
 theme and subscription-usage choices.
 
-## Quick start
-
-Enter a public HTTPS subscription in **Overview**, choose the use/routing mode,
-and tap **Connect**. Phone routing uses the normal Android VPN-consent flow.
-The masked URL remains in memory and is never persisted.
-
-| Page | Controls |
-| --- | --- |
-| Overview | Status, subscription, use mode, routing and Connect/Stop |
-| Proxies | Load, test and select supported live nodes or policy groups |
-| Sharing | Ready-only address, port and connection guide |
-| Settings | LAN/phone/background switches, advanced network settings, repair and appearance |
-
-Help in the app bar holds protocol, VPN, background and subscription explanations.
-Empty usage and inactive phone-VPN status do not occupy the home screen. The
-original artwork remains under About. Navigation does not import, start, stop,
-clear the subscription or change traffic selection.
-
 ## Product modes
 
 - **Game**: LAN sharing on, phone VPN off. HTTP/HTTPS CONNECT TCP for devices
@@ -201,7 +183,3 @@ build on real devices. Prior signed build-1 emulator evidence does not validate 
 The combined application is GPL-3.0-only. Preserve the complete corresponding
 source and dependency notices with distributed binaries. The original project's
 MIT attribution remains separate. No app-store compatibility is claimed.
-
-## App updates
-
-Settings → App updates checks the latest stable GitHub Release and selects the device ABI automatically. Downloaded APKs require matching SHA-256, package, newer version code and signing certificate. Android owns installation-source consent and confirmation. Stop the connection before installing. CI remains unsigned; no stable signed update is published yet. See [the update and release contract](../../docs/updates.md).

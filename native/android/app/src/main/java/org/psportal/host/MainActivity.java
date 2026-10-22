@@ -71,11 +71,7 @@ public final class MainActivity extends Activity {
     private final List<Label> labels = new ArrayList<>();
     private SessionController session;
     private ScrollView scroll;
-    private LinearLayout advanced, shell, about;
-    private final LinearLayout[] pages = new LinearLayout[4];
-    private final Button[] navigation = new Button[4];
-    private int selectedPage;
-    private TextView shareSteps;
+    private LinearLayout advanced;
     private EditText phone, portal, port, subscription, preferred, idle, threshold;
     private Spinner selection, routing;
     private RadioGroup productModes;
@@ -121,7 +117,7 @@ public final class MainActivity extends Activity {
         updatingProductMode = true;
         if (mode == null) productModes.clearCheck(); else productModes.check(productModeIds[mode.ordinal()]);
         updatingProductMode = false;
-        productModeDescription.setText(mode == null ? t("全部接入已关闭。请选择一种使用模式后再启动。", "All inputs are off. Choose a use mode before starting.") : mode.shortDescription(english));
+        productModeDescription.setText(mode == null ? t("全部接入已关闭。请选择一种使用模式后再启动。", "All inputs are off. Choose a use mode before starting.") : mode.description(english));
     }
 
     @Override public void onCreate(Bundle state) {
@@ -130,38 +126,32 @@ public final class MainActivity extends Activity {
         english = prefs().getBoolean("english", false);
         dark = prefs().getBoolean("dark", true);
         session = ((PortalApplication)getApplication()).session();
-        shell = column();
-        shell.setOnApplyWindowInsetsListener((view, insets) -> {
+        scroll = new ScrollView(this);
+        LinearLayout layout = column();
+        layout.setPadding(dp(20), dp(16), dp(20), dp(32));
+        scroll.setFillViewport(true);
+        scroll.addView(layout);
+        scroll.setOnApplyWindowInsetsListener((view, insets) -> {
             view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
                     insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets;
         });
-        setContentView(shell);
-        LinearLayout heading = new LinearLayout(this); heading.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        heading.setPadding(dp(16), dp(4), dp(16), dp(4));
-        TextView title = text(heading, "星渡 StarPass", "星渡 StarPass", 22, true, false);
+        setContentView(scroll);
+        LinearLayout heading = new LinearLayout(this);
+        heading.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView title = text(heading, "星渡 StarPass", "星渡 StarPass", 25, true, false);
         title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
         Button language = button(heading, "English", "中文", false, v -> switchLanguage());
         language.setLayoutParams(new LinearLayout.LayoutParams(-2, dp(48)));
-        Button help = button(heading, "帮助", "Help", false, v -> showUsageHelp());
-        help.setTag("help"); help.setLayoutParams(new LinearLayout.LayoutParams(-2, dp(48)));
-        shell.addView(heading);
-        scroll = new ScrollView(this); scroll.setFillViewport(true);
-        LinearLayout layout = column(); layout.setPadding(dp(16), dp(8), dp(16), dp(16));
-        scroll.addView(layout); shell.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        for (int i = 0; i < pages.length; i++) { pages[i] = column(); pages[i].setTag("page_" + i); layout.addView(pages[i]); }
-        LinearLayout home = pages[0], nodes = pages[1], sharing = pages[2], settings = pages[3];
-        home.setTag("page_overview"); nodes.setTag("page_nodes"); sharing.setTag("page_sharing"); settings.setTag("page_settings");
+        layout.addView(heading);
+        navigatorHero(layout);
 
-        LinearLayout stateCard = card(home);
-        status = text(stateCard, "已停止", "Stopped", 20, true, false);
-        status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        network = text(stateCard, "正在识别网络", "Detecting network", 13, false, true);
-        metrics = text(stateCard, "", "", 14, false, true);
-        phoneVpnStatus = text(stateCard, "", "", 13, false, true);
-        profileWarning = text(stateCard, "", "", 12, false, true);
-        LinearLayout modeCard = card(home);
-        productModes = new RadioGroup(this); productModes.setTag("product_modes"); productModes.setOrientation(LinearLayout.HORIZONTAL);
+        section(layout, "当前网络", "Current network");
+        network = text(card(layout), "正在识别网络", "Detecting network", 16, false, false);
+        section(layout, "选择用途", "Choose your use");
+        LinearLayout modeCard = card(layout);
+        productModes = new RadioGroup(this); productModes.setTag("product_modes");
+        productModes.setOrientation(LinearLayout.HORIZONTAL);
         for (ProductMode mode : ProductMode.values()) {
             RadioButton choice = new RadioButton(this); choice.setId(View.generateViewId());
             productModeIds[mode.ordinal()] = choice.getId(); choice.setTag("product_mode_" + mode.name().toLowerCase(Locale.ROOT));
@@ -169,11 +159,15 @@ public final class MainActivity extends Activity {
             productModes.addView(choice, new RadioGroup.LayoutParams(0, -2, 1)); configurationViews.add(choice);
         }
         modeCard.addView(productModes);
-        productModes.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> updateProductModeLayout(right - left));
+        productModes.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
+                updateProductModeLayout(right - left));
         productModeDescription = text(modeCard, "", "", 13, false, true);
-        LinearLayout subscriptionCard = card(home);
+        text(modeCard, "使用模式选择接入哪些设备；下方规则 / 全局 / 直连选择如何分流。更改模式不会自动启动或授予 VPN 权限。本机 VPN 选项不会保存为下次启动授权。", "Use mode chooses which devices connect; Rule / Global / Direct below chooses how traffic is routed. Changing modes never starts a service or grants VPN consent. Phone VPN opt-in is not saved for the next launch.", 12, false, true);
+        section(layout, "准备并启动", "Prepare & start");
+        LinearLayout subscriptionCard = card(layout);
         subscription = input(subscriptionCard, "订阅链接 · HTTPS", "Subscription link · HTTPS", "",
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        // setSingleLine() may replace the transformation installed by setInputType().
         subscription.setTransformationMethod(android.text.method.PasswordTransformationMethod.getInstance());
         subscription.setHint(t("在这里粘贴订阅链接", "Paste your subscription here"));
         subscription.setSaveEnabled(false);
@@ -185,39 +179,26 @@ public final class MainActivity extends Activity {
             }
             public void afterTextChanged(Editable s) {}
         });
-        TextView routingLabel = text(subscriptionCard, "分流", "Routing", 13, false, true);
+        accounting = text(subscriptionCard, "", "", 13, false, true);
+        usage = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        usage.setMax(100); usage.setVisibility(View.GONE);
+        subscriptionCard.addView(usage, new LinearLayout.LayoutParams(-1, dp(6)));
+        TextView routingLabel = text(subscriptionCard, "流量分流模式", "Traffic routing mode", 14, true, false);
         routing = new Spinner(this); routing.setId(View.generateViewId()); routing.setTag("routing_mode");
         routingLabel.setLabelFor(routing.getId()); routing.setMinimumHeight(dp(48)); subscriptionCard.addView(routing);
         configurationViews.add(routing); updateRoutingModes(routingIndex(prefs().getString("routing_mode", "rule")));
-        start = button(subscriptionCard, "连接", "Connect", true, v -> beginStart(true));
-        stop = button(subscriptionCard, "停止", "Stop", true, v -> stopRequested());
-        accounting = text(subscriptionCard, "", "", 13, false, true);
-        accounting.setOnClickListener(v -> showAccountingDetails());
-        accounting.setContentDescription(t("查看订阅用量详情", "View subscription usage details"));
-        usage = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); usage.setMax(100); usage.setVisibility(View.GONE);
-        subscriptionCard.addView(usage, new LinearLayout.LayoutParams(-1, dp(4)));
-
-        section(nodes, "节点", "Proxies");
-        LinearLayout nodeCard = card(nodes);
-        nodeSummary = text(nodeCard, "连接后可加载节点", "Connect to load proxies", 14, false, true);
-        loadNodes = button(nodeCard, "加载实时节点", "Load live nodes", false, v -> nodeAction("prepare", "", ""));
-        testNodes = button(nodeCard, "重新测速", "Test latency again", false, v -> nodeAction("test", "", ""));
-        chooseNode = button(nodeCard, "选择节点", "Select a node", false, v -> chooseLiveNode());
-        chooseGroup = button(nodeCard, "选择策略组", "Select a group", false, v -> chooseLiveGroup());
-        fastest = button(nodeCard, "自动选择低延迟节点", "Use lowest-latency selection", false, v -> nodeAction("select", "fastest", ""));
-
-        section(sharing, "局域网共享", "LAN sharing");
-        LinearLayout guide = card(sharing);
-        address = text(guide, "连接后显示共享地址", "Connect to see the sharing address", 18, true, false); address.setTextIsSelectable(true);
-        shareSteps = text(guide, "同一 Wi-Fi → 设备 HTTP 代理 → 手动填写地址和端口", "Same Wi-Fi → device HTTP proxy → enter address and port", 14, false, true);
-        button(guide, "连接指南", "Connection guide", false, v -> showHelpTopic(1));
-
-        section(settings, "接入", "Traffic inputs");
-        LinearLayout inputCard = card(settings);
-        lanSharing = new Switch(this); lanSharing.setTag("lan_enabled"); bind(lanSharing, "局域网共享", "LAN sharing");
-        lanSharing.setChecked(prefs().getBoolean("lan_enabled", true)); lanSharing.setPadding(dp(8), dp(12), dp(8), dp(12)); inputCard.addView(lanSharing); configurationViews.add(lanSharing);
-        phoneApps = new Switch(this); phoneApps.setTag("phone_apps"); bind(phoneApps, "代理本机应用", "Proxy phone apps");
-        phoneApps.setChecked(PhoneVpnService.isRequested()); phoneApps.setPadding(dp(8), dp(12), dp(8), dp(12)); inputCard.addView(phoneApps); configurationViews.add(phoneApps);
+        lanSharing = new Switch(this); lanSharing.setTag("lan_enabled");
+        bind(lanSharing, "共享给局域网设备", "Share with LAN devices");
+        lanSharing.setChecked(prefs().getBoolean("lan_enabled", true));
+        lanSharing.setPadding(dp(8), dp(12), dp(8), dp(12)); subscriptionCard.addView(lanSharing); configurationViews.add(lanSharing);
+        phoneApps = new Switch(this); phoneApps.setTag("phone_apps");
+        bind(phoneApps, "同时代理本机应用（可选）", "Also proxy this phone’s apps (optional)");
+        phoneApps.setChecked(PhoneVpnService.isRequested()); phoneApps.setPadding(dp(8), dp(12), dp(8), dp(12));
+        subscriptionCard.addView(phoneApps); configurationViews.add(phoneApps);
+        start = button(subscriptionCard, "一键准备并启动", "Prepare & start", true, v -> beginStart(true));
+        text(subscriptionCard, "规则：按订阅规则分流；全局：全部走所选代理；直连：由本机直接连接。模式只影响明确接入本应用的流量，停止后可更改。", "Rule follows subscription rules; Global uses the selected proxy; Direct connects from this phone. Modes only affect traffic explicitly sent through this app. Stop before changing modes.", 12, false, true);
+        text(subscriptionCard, "默认关闭，仅共享给手动设置代理的局域网设备。开启后，启动时需 Android VPN 授权；不能与其他 VPN 同时使用。关闭后不会接管本机普通应用；运行中可单独关闭，重新开启需先停止本次代理。本机代理支持 TCP/UDP；节点不支持的 UDP 会被阻断，不会自动直连。不支持 ICMP（ping），部分应用可能不兼容；加密 DNS 可能影响域名规则。", "Off by default: only LAN devices with a manually configured proxy use sharing. When enabled, Start requests Android VPN consent. Another VPN cannot run at the same time. When off, ordinary phone apps are untouched. You can turn it off during a run; turning it back on requires Stop and a new Start. Phone routing supports TCP/UDP. UDP unsupported by the selected node is blocked, without direct fallback. ICMP (ping) is unsupported, and some apps may be incompatible. Encrypted DNS may limit domain rules.", 12, false, true);
+        text(subscriptionCard, "开启本机代理后，访问家中设备等局域网功能可能不可用，直连模式也一样；关闭本机代理后恢复原来的联网方式。", "Phone proxying may prevent access to local devices, including in Direct mode. Turn it off to restore normal networking.", 12, false, true);
         lanSharing.setOnCheckedChangeListener((view, checked) -> { prefs().edit().putBoolean("lan_enabled", checked).apply(); refreshNetwork(); render(); });
         phoneApps.setOnCheckedChangeListener((view, checked) -> {
             if (!checked && PhoneVpnService.isRequested()) PhoneVpnService.stop(this);
@@ -237,70 +218,68 @@ public final class MainActivity extends Activity {
                 updatingProductMode = false; syncProductMode(); refreshNetwork(); render(); return;
             }
         });
-        // End product-mode presets.
-        backgroundSharing = new Switch(this); backgroundSharing.setTag("background_sharing"); bind(backgroundSharing, "允许后台运行", "Allow background operation");
-        backgroundSharing.setChecked(prefs().getBoolean(BackgroundPolicy.PREFERENCE_KEY, BackgroundPolicy.DEFAULT_ALLOW_BACKGROUND));
-        backgroundSharing.setPadding(dp(8), dp(12), dp(8), dp(12)); inputCard.addView(backgroundSharing); configurationViews.add(backgroundSharing);
-        backgroundSharing.setOnCheckedChangeListener((view, checked) -> prefs().edit().putBoolean(BackgroundPolicy.PREFERENCE_KEY, checked).apply());
-        advancedToggle = button(settings, "高级网络设置 ▾", "Advanced network settings ▾", false, v -> advanced.setVisibility(advanced.getVisibility() == View.GONE ? View.VISIBLE : View.GONE));
-        advanced = card(settings); advanced.setVisibility(View.GONE);
-        phone = input(advanced, "本机私网 IPv4", "Local private IPv4", prefs().getString("phone", ""), InputType.TYPE_CLASS_PHONE);
-        Button choose = button(advanced, "选择本机地址", "Choose local address", false, v -> chooseAddress()); configurationViews.add(choose);
-        portal = input(advanced, "接入设备 IPv4（逗号分隔）", "Client IPv4 allowlist (comma-separated)", prefs().getString("portal", ""), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        port = input(advanced, "代理端口", "Proxy port", prefs().getString("port", "10081"), InputType.TYPE_CLASS_NUMBER);
-        text(advanced, "节点策略", "Node policy", 14, true, false);
-        selection = new Spinner(this); selection.setMinimumHeight(dp(48)); advanced.addView(selection); configurationViews.add(selection); updateModes(prefs().getInt("mode", 0));
-        preferred = input(advanced, "准确节点名称", "Exact node name", prefs().getString("preferred", ""), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        idle = input(advanced, "空闲回收（秒）", "Idle release (seconds)", prefs().getString("idle", "60"), InputType.TYPE_CLASS_NUMBER);
-        threshold = input(advanced, "测速容差（毫秒）", "Latency tolerance (ms)", prefs().getString("threshold", "50"), InputType.TYPE_CLASS_NUMBER);
-        manualStart = button(advanced, "使用手动配置启动", "Start with manual settings", false, v -> beginStart(false));
-        repair = button(settings, "修复本应用网络", "Repair app network", false, v -> repairRequested());
-        appearance = new Switch(this); appearance.setTag("appearance"); bind(appearance, "深色外观", "Dark appearance"); appearance.setChecked(dark);
-        appearance.setPadding(dp(8), dp(12), dp(8), dp(12)); settings.addView(appearance);
-        appearance.setOnCheckedChangeListener((view, checked) -> { dark = checked; prefs().edit().putBoolean("dark", dark).apply(); applyTheme(shell); updateModes(selection.getSelectedItemPosition()); updateRoutingModes(routing.getSelectedItemPosition()); updateNavigation(); applySystemBars(); });
-        engine = text(settings, "内置 Mihomo", "Embedded Mihomo", 13, false, true);
-        button(settings, "应用更新", "App updates", false, v -> startActivity(new Intent(this, UpdateActivity.class)));
-        button(settings, "关于星渡", "About StarPass", false, v -> about.setVisibility(about.getVisibility() == View.GONE ? View.VISIBLE : View.GONE));
-        about = card(settings); about.setVisibility(View.GONE); navigatorHero(about);
-        button(about, "开源许可", "Open-source licenses", false, v -> showLicenses());
-        LinearLayout navBar = new LinearLayout(this); navBar.setPadding(dp(8), dp(4), dp(8), dp(8)); shell.addView(navBar);
-        String[] zh = {"概览", "节点", "共享", "设置"}, en = {"Overview", "Proxies", "Sharing", "Settings"};
-        for (int i = 0; i < navigation.length; i++) { final int page = i; navigation[i] = button(navBar, zh[i], en[i], false, v -> showPage(page)); navigation[i].setTag("tab_" + i); navigation[i].setTextSize(13); navigation[i].setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1)); }
-        refreshNetwork(); renderAccounting(); applyTheme(shell); applySystemBars(); showPage(0); render();
-    }
+        text(subscriptionCard, "开启局域网共享时，自动识别地址并优先使用端口 10081。仅手动填写本机代理的设备使用共享；关闭共享时不开放局域网端口。", "LAN sharing detects the address and prefers port 10081. Only devices manually configured to use this proxy send traffic through it. Turning sharing off opens no LAN port.", 13, false, true);
+        text(subscriptionCard, "订阅链接仅留在本次内存，启动后清空，不保存到设置。套餐数据来自服务器响应头，非实时统计。", "The subscription URL stays in session memory, clears after Start and is not saved. Accounting is a server-header snapshot, not live traffic.", 12, false, true);
 
-    /** Navigation changes presentation only; it never edits session input or secret text. */
-    private void showPage(int page) {
-        selectedPage = Math.max(0, Math.min(page, pages.length - 1));
-        for (int i = 0; i < pages.length; i++) pages[i].setVisibility(i == selectedPage ? View.VISIBLE : View.GONE);
-        scroll.scrollTo(0, 0); updateNavigation();
-    }
-    private void updateNavigation() {
-        for (int i = 0; i < navigation.length; i++) if (navigation[i] != null) {
-            boolean selected = i == selectedPage; navigation[i].setSelected(selected);
-            navigation[i].setBackgroundTintList(ColorStateList.valueOf(selected ? Color.rgb(92, 77, 174) : dark ? Color.rgb(30, 34, 54) : Color.rgb(240, 241, 246)));
-            navigation[i].setTextColor(selected ? Color.WHITE : dark ? Color.rgb(177, 191, 209) : Color.rgb(82, 98, 119));
-        }
-    }
-    private void showUsageHelp() {
-        String[] topics = english ? new String[]{"Modes and routing", "Connect a LAN device", "Phone VPN", "Background operation", "Subscriptions and usage", "Proxy selection", "Repair connections"} :
-                new String[]{"用途与分流", "连接局域网设备", "本机 VPN", "后台运行", "订阅与用量", "节点选择", "连接修复"};
-        new AlertDialog.Builder(dialogContext()).setTitle(t("使用帮助", "Help")).setItems(topics, (dialog, index) -> showHelpTopic(index)).show();
-    }
-    private void showHelpTopic(int topic) {
-        String body;
-        switch (topic) {
-            case 0: body = ProductMode.GAME.description(english) + "\n\n" + ProductMode.MIXED.description(english) + "\n\n" + ProductMode.CLASH.description(english) + "\n\n" +
-                    t("规则按订阅规则分流；全局使用所选代理；直连从本机访问。仅影响明确接入本应用的流量。", "Rule follows subscription rules, Global uses the selected proxy, and Direct connects from this phone. Only explicitly selected traffic is affected."); break;
-            case 1: body = t("1. 设备加入同一可互通的 Wi-Fi。\n2. 在设备 Wi-Fi 设置中选择 HTTP 代理 → 手动。\n3. 填写共享页地址和端口，认证关闭。\n4. 在设备打开网页，再验证目标游戏功能。\n\nIP 变化后重新连接并更新地址。停止使用后关闭设备的手动 HTTP 代理。仅支持 HTTP/HTTPS CONNECT TCP，不保证 UDP 游戏或串流可用。", "1. Join the same reachable Wi-Fi.\n2. Open device Wi-Fi settings → HTTP Proxy → Manual.\n3. Enter the Sharing address and port; leave authentication off.\n4. Open a webpage on the device, then test the intended game feature.\n\nUpdate device settings after an IP change. Turn its HTTP proxy off when finished. HTTP/HTTPS CONNECT only; UDP games and streaming are not guaranteed. A connection does not prove Internet access; verify on the device."); break;
-            case 2: body = t("本机代理默认关闭，开启后仍需点击连接并通过 Android VPN 授权；其他 VPN 正在运行时会提示冲突。本应用不会接管第二个 VPN。\n\n支持 TCP 和节点支持的 UDP；不支持 ICMP。代理本机时，访问家中设备等局域网功能可能不可用，直连模式也一样。关闭本机代理可恢复原来的联网方式。", "Phone proxying defaults off. Connect requires Android VPN consent; another active VPN produces a conflict message. This app does not take over a second VPN.\n\nTCP and supported-node UDP are supported; ICMP (ping) is unsupported. UDP unsupported by the selected node is blocked, without direct fallback. Local-device apps may fail while phone VPN is active, including in Direct mode. Turn it off to restore normal networking."); break;
-            case 3: body = t("允许后台运行时，回到桌面、锁屏或移出最近任务可继续本次代理；关闭后离开页面即停止。运行通知提供停止按钮。Android 强行停止、省电和厂商限制仍可能中断服务。", "Background operation continues this session on Home, lock and removal from Recents. When disabled, leaving the screen stops proxying. The notification provides Stop; force-stop, battery and OEM controls may still interrupt service."); break;
-            case 4: body = t("订阅仅保留在本次内存，不保存到设置；连接后和离开应用时清空。用量来自服务器响应头快照，点击用量可查看获取时间。缺失字段不代表无限流量。", "The subscription stays in session memory and is not saved to settings. It clears after Connect and when leaving the app. Usage is a server-header snapshot; tap it for retrieval time. Missing fields do not mean unlimited data."); break;
-            case 5: body = t("先连接，再在节点页加载实时节点。加载会唤醒核心，测速会产生探测请求。完整订阅使用已有策略组；只可选择手动组的已有路线。连接使用中或本机 VPN 开启时不能切换路线。", "Connect, then load live nodes in Proxies. Loading wakes the core and latency tests send probes. Full profiles keep their policy groups; only existing manual-group choices can be selected. Route changes wait until connections and phone VPN are off. Choices survive idle core release for this session and reset after Stop."); break;
-            default: body = t("在设置中选择“修复本应用网络”，停止本应用代理、清理隧道并重新检测网络，不自动重连、不修改系统 DNS/Wi-Fi，也不关闭其他 VPN。局域网设备仍需关闭其手动 HTTP 代理。", "Choose Repair app network in Settings to stop this app, clean up its tunnel and check the network. This does not reconnect, change system DNS/Wi-Fi or stop other VPNs. LAN devices must turn off their manual HTTP proxy.");
-        }
-        ScrollView detail = new ScrollView(this); TextView copy = new TextView(this); copy.setText(body); copy.setTextColor(dark ? Color.rgb(240, 244, 250) : Color.rgb(27, 39, 56)); copy.setTextSize(15); copy.setPadding(dp(22), dp(12), dp(22), dp(12)); detail.addView(copy);
-        new AlertDialog.Builder(dialogContext()).setTitle(t("使用说明", "Usage guide")).setView(detail).setPositiveButton(t("好", "OK"), null).show();
+        section(layout, "服务状态 · 下一步", "Service status · Next step");
+        LinearLayout stateCard = card(layout);
+        status = text(stateCard, "", "", 18, true, false);
+        status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        text(stateCard, "服务启动、设备接入、访问成功是三个不同步骤。请按下方指引在设备上验证，不以连接数代替游戏可用性。", "Service started, device connected and successful access are separate steps. Verify on the device below; connection counts do not prove a game works.", 13, false, true);
+        metrics = text(stateCard, "", "", 14, false, true);
+        engine = text(stateCard, "内置代理引擎 · 按需运行", "Embedded proxy engine · on demand", 13, false, true);
+        phoneVpnStatus = text(stateCard, "", "", 13, false, true);
+        profileWarning = text(stateCard, "", "", 12, false, true);
+        stop = button(stateCard, "停止全部代理", "Stop all proxying", false, v -> stopRequested());
+        repair = button(stateCard, "修复本应用网络", "Repair app network", false, v -> repairRequested());
+        text(stateCard, "遇到断网或残留连接时，一键停止本应用代理、清理隧道并重新检测网络；不会自动重连。其他 VPN 请在系统设置中关闭。局域网设备还需自行关闭手动 HTTP 代理。", "If connectivity fails, stop this app’s proxy, clean up its tunnel and check the network again. This does not reconnect automatically. Close other VPNs in Settings. LAN devices also need their manual HTTP proxy turned off.", 12, false, true);
+        backgroundSharing = new Switch(this); backgroundSharing.setTag("background_sharing");
+        bind(backgroundSharing, "允许后台运行", "Allow background operation");
+        backgroundSharing.setChecked(prefs().getBoolean(BackgroundPolicy.PREFERENCE_KEY, BackgroundPolicy.DEFAULT_ALLOW_BACKGROUND));
+        backgroundSharing.setPadding(dp(8), dp(12), dp(8), dp(12)); stateCard.addView(backgroundSharing);
+        configurationViews.add(backgroundSharing);
+        backgroundSharing.setOnCheckedChangeListener((view, checked) -> prefs().edit().putBoolean(BackgroundPolicy.PREFERENCE_KEY, checked).apply());
+        text(stateCard, "开启后，回到桌面、锁屏或移出最近任务仍继续本次共享与本机代理。关闭后，离开页面即停止全部代理。运行时通知提供停止按钮；Android 强行停止、省电或厂商限制仍可能中断服务。", "When enabled, this session’s LAN sharing and phone proxy continue on Home, screen lock and removal from Recents. When disabled, leaving this screen stops all proxying. The running notification provides Stop; Android force-stop, battery or OEM controls can still interrupt the service.", 12, false, true);
+
+        section(layout, "连接设备并验证", "Connect & verify");
+        LinearLayout guide = card(layout);
+        address = text(guide, "准备后显示服务器和端口", "Server and port appear after preparation", 17, true, false);
+        address.setTextIsSelectable(true);
+        text(guide, "1. 让设备加入同一个可互通的 Wi-Fi\n2. 打开设备 Wi-Fi 设置 → HTTP 代理 → 手动\n3. 填写上方服务器和端口，认证关闭\n4. 在设备上打开网页验证，再测试目标游戏功能", "1. Join the same reachable Wi-Fi\n2. Open the device Wi-Fi settings → HTTP Proxy → Manual\n3. Enter the server and port above; leave authentication off\n4. Open a webpage on the device, then test the intended game feature", 14, false, false);
+        text(guide, "IP 变化后需重新准备并更新设备设置。停止使用时，将设备 HTTP 代理恢复为关闭。仅支持 HTTP/HTTPS CONNECT，不保证 UDP 游戏或串流可用。", "Prepare again and update the device if the IP changes. Turn its HTTP proxy off when finished. HTTP/HTTPS CONNECT only; UDP games and streaming are not guaranteed.", 12, false, true);
+
+        advancedToggle = button(layout, "高级设置 ▾", "Advanced settings ▾", false, v -> {
+            advanced.setVisibility(advanced.getVisibility() == View.GONE ? View.VISIBLE : View.GONE);
+        });
+        advanced = card(layout); advanced.setVisibility(View.GONE);
+        phone = input(advanced, "本机私网 IPv4", "Local private IPv4", prefs().getString("phone", ""), InputType.TYPE_CLASS_PHONE);
+        Button choose = button(advanced, "选择本机地址", "Choose local address", false, v -> chooseAddress());
+        configurationViews.add(choose);
+        portal = input(advanced, "手动接入名单（设备 IPv4，逗号分隔）", "Manual client IPv4 allowlist (comma-separated)", prefs().getString("portal", ""), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        port = input(advanced, "代理端口", "Proxy port", prefs().getString("port", "10081"), InputType.TYPE_CLASS_NUMBER);
+        text(advanced, "节点策略（完整订阅请用自动）", "Node selection (use Auto for full profiles)", 14, true, false);
+        selection = new Spinner(this); selection.setMinimumHeight(dp(48)); advanced.addView(selection);
+        configurationViews.add(selection); updateModes(prefs().getInt("mode", 0));
+        preferred = input(advanced, "准确节点名称", "Exact node name", prefs().getString("preferred", ""), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        idle = input(advanced, "空闲后回收核心（秒）", "Release idle core after (seconds)", prefs().getString("idle", "60"), InputType.TYPE_CLASS_NUMBER);
+        manualStart = button(advanced, "使用手动配置启动", "Start with manual settings", false, v -> beginStart(false));
+        text(advanced, "运行中的节点", "Live nodes", 16, true, false);
+        nodeSummary = text(advanced, "启动后可加载节点并测速", "Load and test nodes after starting", 13, false, true);
+        loadNodes = button(advanced, "加载实时节点", "Load live nodes", false, v -> nodeAction("prepare", "", ""));
+        testNodes = button(advanced, "重新测速", "Test latency again", false, v -> nodeAction("test", "", ""));
+        chooseNode = button(advanced, "手动选择节点", "Select a node", false, v -> chooseLiveNode());
+        chooseGroup = button(advanced, "选择订阅策略组路线", "Choose a profile-group route", false, v -> chooseLiveGroup());
+        threshold = input(advanced, "Mihomo 测速组容差（0–60000 毫秒）", "Mihomo URL-test tolerance (0–60000 ms)", prefs().getString("threshold", "50"), InputType.TYPE_CLASS_NUMBER);
+        // Mihomo probe tolerance is fixed for a run; changing it requires Stop.
+        fastest = button(advanced, "自动选择低延迟节点", "Use lowest-latency selection", false, v -> nodeAction("select", "fastest", ""));
+        text(advanced, "加载会唤醒核心，测速会产生探测请求。完整订阅只允许在其手动选择组中选择已有路线，自动测速与回退组仍由核心管理。选择保留到本次会话结束，空闲回收后仍有效；停止后重置。修改测速容差前请先停止。", "Loading wakes the core; latency tests send probe requests. Full profiles allow only existing routes in manual select groups; automatic URL-test and fallback groups stay core-managed. Choices survive idle core release for this session and reset after Stop. Stop before changing probe tolerance.", 12, false, true);
+        text(advanced, "代理由本应用内置核心运行，无需启动其他 Clash 应用。订阅中不支持的必要配置会明确报错，不会静默改为直连。", "The embedded core runs inside this app without another Clash app. Unsupported required profile settings fail explicitly rather than silently falling back to direct.", 12, false, true);
+        appearance = new Switch(this); appearance.setTag("appearance"); bind(appearance, "深色外观", "Dark appearance"); appearance.setChecked(dark);
+        appearance.setPadding(dp(8), dp(12), dp(8), dp(12)); layout.addView(appearance);
+        appearance.setOnCheckedChangeListener((view, checked) -> { dark = checked; prefs().edit().putBoolean("dark", dark).apply(); applyTheme(scroll); updateModes(selection.getSelectedItemPosition()); updateRoutingModes(routing.getSelectedItemPosition()); applySystemBars(); });
+        button(layout, "开源许可与开发限制", "Licenses and development limits", false, v -> showLicenses());
+        text(layout, "局域网共享不接管本机应用；只有明确开启本机选项并授权 Android VPN 后才代理本机流量。只在可信局域网使用。", "LAN sharing leaves phone apps untouched. Phone traffic is proxied only after you enable its option and grant Android VPN consent. Use only on trusted LANs.", 12, false, true);
+        refreshNetwork(); renderAccounting(); applyTheme(scroll); applySystemBars(); render();
     }
 
     /** Static decorative artwork only: never polls, animates or handles input. */
@@ -407,7 +386,7 @@ public final class MainActivity extends Activity {
         int foreground = dark ? Color.rgb(240, 244, 250) : Color.rgb(27, 39, 56);
         int secondary = dark ? Color.rgb(177, 191, 209) : Color.rgb(82, 98, 119);
         int accent = Color.rgb(92, 77, 174);
-        if (view == scroll || view == shell) view.setBackgroundColor(dark ? Color.rgb(19, 22, 43) : Color.rgb(246, 245, 252));
+        if (view == scroll) view.setBackgroundColor(dark ? Color.rgb(19, 22, 43) : Color.rgb(246, 245, 252));
         if ("card".equals(view.getTag())) { GradientDrawable background = new GradientDrawable(); background.setColor(dark ? Color.rgb(31, 35, 59) : Color.WHITE); background.setCornerRadius(dp(18)); background.setStroke(dp(1), dark ? Color.rgb(57, 62, 91) : Color.rgb(220, 218, 237)); view.setBackground(background); }
         if (view instanceof TextView) ((TextView)view).setTextColor(new ColorStateList(new int[][]{new int[]{-android.R.attr.state_enabled}, new int[]{}}, new int[]{dark ? Color.rgb(105, 110, 120) : Color.rgb(130, 136, 147), "secondary".equals(view.getTag()) ? secondary : foreground}));
         if (view instanceof TextView && "hero_text".equals(view.getTag())) ((TextView)view).setTextColor(Color.WHITE);
@@ -448,8 +427,7 @@ public final class MainActivity extends Activity {
         english = !english; prefs().edit().putBoolean("english", english).apply();
         for (Label label : labels) label.view.setText(t(label.zh, label.en));
         subscription.setHint(t("在这里粘贴订阅链接", "Paste your subscription here"));
-        accounting.setContentDescription(t("查看订阅用量详情", "View subscription usage details"));
-        updateModes(selection.getSelectedItemPosition()); updateRoutingModes(routing.getSelectedItemPosition()); refreshNetwork(); renderAccounting(); render(); updateNavigation();
+        updateModes(selection.getSelectedItemPosition()); updateRoutingModes(routing.getSelectedItemPosition()); refreshNetwork(); renderAccounting(); render();
     }
 
     private boolean automaticNetworkAllowed() {
@@ -789,11 +767,6 @@ public final class MainActivity extends Activity {
         String coreName = "mihomo-full-core".equals(nativeState.optString("engine", "")) ? t("内置 Mihomo 完整核心", "Embedded Mihomo full core") : t("核心状态未提供", "Core status not provided");
         engine.setText(snapshot.isActive() ? coreName + " · " + t("模式：", "Mode: ") + routingLabel(activeMode) : t("内置代理引擎 · 启动后显示实际模式", "Embedded proxy engine · applied mode appears after Start"));
         phoneVpnStatus.setText(phoneVpnDescription());
-        boolean vpnFeedback = phoneApps.isChecked() || PhoneVpnService.isRequested() || vpnConsentPending ||
-                Arrays.asList("consent_required", "permission_denied", "revoked", "vpn_conflict", "no_network", "core_unavailable", "start_failed").contains(PhoneVpnService.stateCode());
-        phoneVpnStatus.setVisibility(vpnFeedback ? View.VISIBLE : View.GONE);
-        boolean showStop = preparing || pendingConfig != null || launchRequested || PhoneVpnService.isActive() || snapshot.isActive();
-        start.setVisibility(showStop ? View.GONE : View.VISIBLE); stop.setVisibility(showStop ? View.VISIBLE : View.GONE);
         String overrideWarning = profileOverrides(nativeState);
         profileWarning.setText(overrideWarning); profileWarning.setVisibility(overrideWarning.isEmpty() ? View.GONE : View.VISIBLE);
         Long connections = count(nativeState, "active_connections");
@@ -833,7 +806,7 @@ public final class MainActivity extends Activity {
             case STOPPING: display = t("正在停止并关闭连接…", "Stopping and closing connections…"); break;
             case ERROR: display = snapshot.phase == SessionController.Phase.FAULTED ? t("核心清理失败，请强行停止应用后重试", "Native cleanup failed. Force stop this app before retrying") : t("运行错误 · 请检查网络、端口和订阅后重试", "Runtime error · check network, port and subscription, then retry"); break;
             case UNKNOWN: display = t("监听状态暂不可用，正在等待真实数据", "Listener status unavailable; waiting for real data"); break;
-            default: display = t("已停止", "Stopped");
+            default: display = t("粘贴订阅后，点击一键准备并启动", "Paste a subscription, then tap Prepare & start");
         }
         String profileError = RuntimePresentation.profileError(nativeState.optString("error_code", ""), english);
         if (hasError && !profileError.isEmpty()) display = profileError;
@@ -846,14 +819,13 @@ public final class MainActivity extends Activity {
         if (snapshot.phase == SessionController.Phase.RUNNING) {
             counts = t("局域网设备：", "LAN devices: ") + (clients == null ? t("未提供", "Not provided") : clients) + t(" · 连接：", " · Connections: ") + (connections == null ? t("未提供", "Not provided") : connections);
             if (clients == null && count(nativeState, "active") != null) counts += "\n" + t("外部连接：", "External connections: ") + count(nativeState, "active");
-
+            counts += "\n" + t("设备数仅统计连接到本程序的不同来源 IP，不是所有 Wi-Fi 设备。有连接不代表外网访问成功，请在设备上验证。", "Devices count distinct source IPs connected to this app, not all Wi-Fi devices. A connection does not prove Internet access; verify on the device.");
         }
         if (!nativeState.optBoolean("lan_enabled", lanSharing.isChecked())) counts = "";
         metrics.setText(counts); metrics.setVisibility(counts.isEmpty() ? View.GONE : View.VISIBLE);
-        boolean showAddress = snapshot.phase == SessionController.Phase.RUNNING && Boolean.TRUE.equals(running) && nativeState.optBoolean("lan_enabled", lanSharing.isChecked());
-        shareSteps.setVisibility(showAddress ? View.VISIBLE : View.GONE);
+        boolean showAddress = (snapshot.isActive() || launchRequested) && nativeState.optBoolean("lan_enabled", lanSharing.isChecked());
         String host = value(phone), number = value(port);
-        address.setText(showAddress && !host.isEmpty() ? t("服务器：", "Server: ") + host + "\n" + t("端口：", "Port: ") + number : !lanSharing.isChecked() ? t("局域网共享已关闭，不开放代理端口", "LAN sharing is off; no LAN proxy port is open") : t("连接后显示共享地址", "Connect to see the sharing address"));
+        address.setText(showAddress && !host.isEmpty() ? t("服务器：", "Server: ") + host + "\n" + t("端口：", "Port: ") + number : !lanSharing.isChecked() ? t("局域网共享已关闭，不开放代理端口", "LAN sharing is off; no LAN proxy port is open") : t("准备并启动后显示服务器和端口", "Server and port appear after preparation and Start"));
     }
     private String profileOverrides(JSONObject state) {
         org.json.JSONArray settings = state.optJSONArray("ignored_profile_settings");
@@ -899,10 +871,9 @@ public final class MainActivity extends Activity {
     private void renderAccounting() {
         if (accounting == null) return;
         if (subscriptionInfo == null) {
-            accounting.setText(""); accounting.setVisibility(View.GONE);
+            accounting.setText(t("准备后显示订阅流量与到期信息，未返回的字段显示“未提供”。", "Accounting appears after preparation. Missing server fields show Not provided."));
             if (usage != null) usage.setVisibility(View.GONE); return;
         }
-        accounting.setVisibility(View.VISIBLE);
         String missing = t("未提供", "Not provided");
         String expiry = missing;
         if (subscriptionInfo.expires != null) {
@@ -910,17 +881,11 @@ public final class MainActivity extends Activity {
             expiry = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, locale()).format(date);
             if (date.before(new Date())) expiry += t(" · 已到期", " · Expired");
         }
-        accounting.setText(SubscriptionAccounting.bytes(subscriptionInfo.used, missing, locale()) + " / " + SubscriptionAccounting.bytes(subscriptionInfo.total, missing, locale()) +
-                "\n" + t("到期：", "Expires: ") + expiry + t(" · 服务器快照", " · Server snapshot"));
+        String updated = subscriptionInfo.updatedAt == null ? "" : "\n" + t("获取时间：", "Retrieved: ") +
+                DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, locale()).format(new Date(subscriptionInfo.updatedAt * 1000));
+        accounting.setText(t("已用 / 总量：", "Used / total: ") + SubscriptionAccounting.bytes(subscriptionInfo.used, missing, locale()) + " / " + SubscriptionAccounting.bytes(subscriptionInfo.total, missing, locale()) + "\n" + t("剩余流量：", "Remaining: ") + SubscriptionAccounting.bytes(subscriptionInfo.remaining, missing, locale()) + "\n" + t("到期时间：", "Expires: ") + expiry + updated + "\n" + t("服务器快照 · 非实时", "Server snapshot · not live"));
         usage.setVisibility(subscriptionInfo.percent() < 0 ? View.GONE : View.VISIBLE); usage.setProgress(Math.max(0, subscriptionInfo.percent()));
     }
-    private void showAccountingDetails() {
-        if (subscriptionInfo == null) return;
-        String missing = t("未提供", "Not provided");
-        String updated = subscriptionInfo.updatedAt == null ? missing : DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, locale()).format(new Date(subscriptionInfo.updatedAt * 1000));
-        message(t("剩余流量：", "Remaining: ") + SubscriptionAccounting.bytes(subscriptionInfo.remaining, missing, locale()) + "\n" + t("获取时间：", "Retrieved: ") + updated + "\n" + t("服务器快照 · 非实时", "Server snapshot · not live"));
-    }
-
     private void message(String text) { new AlertDialog.Builder(dialogContext()).setMessage(text).setPositiveButton(t("好", "OK"), null).show(); }
     private void showLicenses() {
         try {

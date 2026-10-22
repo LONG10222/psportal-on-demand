@@ -6,9 +6,9 @@ $out = Join-Path $project 'build/host-tests'
 $src = Join-Path $project 'app/src/main/java/org/psportal/host'
 New-Item -ItemType Directory -Force $out | Out-Null
 $sources = @('HostConfig', 'SessionController', 'LanSetup', 'SubscriptionAccounting',
-    'RuntimePresentation', 'RuntimeNodePresentation', 'ProductMode', 'BackgroundPolicy', 'PhoneVpnState', 'UpdatePolicy') |
+    'RuntimePresentation', 'RuntimeNodePresentation', 'ProductMode', 'BackgroundPolicy', 'PhoneVpnState') |
     ForEach-Object { Join-Path $src ($_ + '.java') }
-$tests = @('HostTests', 'RuntimeNodePresentationTests', 'BackgroundPolicyTests', 'PhoneVpnStateTests', 'UpdatePolicyTests')
+$tests = @('HostTests', 'RuntimeNodePresentationTests', 'BackgroundPolicyTests', 'PhoneVpnStateTests')
 $sources += $tests | ForEach-Object { Join-Path $project ('tests/' + $_ + '.java') }
 & javac -encoding UTF-8 --release 17 -d $out @sources
 if ($LASTEXITCODE -ne 0) { throw 'Java host test compilation failed' }

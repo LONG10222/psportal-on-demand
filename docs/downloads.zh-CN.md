@@ -1,15 +1,8 @@
 # 下载与安装
 
-## 当前入口
+## 获取构建产物
 
-- [测试归档 Releases](https://github.com/LONG10222/psportal-on-demand/releases)：`starpass-test-20261020-c1d2d3a` 保留已验证的整合测试包及校验信息。
-- [当前分支 Actions](https://github.com/LONG10222/psportal-on-demand/actions)：Android 四页精简界面、升级校验和全平台更新入口由对应 PR 构建，旧归档不包含这些更新。原始 CI APK 未签名。
-
-以下列举早期交付方式及历史产物，不应作为最新版本入口。
-
-## 获取历史构建产物
-
-当前产物来自开发分支 `feat/unified-native-ports`，不代表 `main` 或正式发行版。这些早期链接不包含后来归档的整合测试版本。
+当前产物来自开发分支 `feat/unified-native-ports`，不代表 `main` 或正式发行版。仓库尚无本项目的正式 Release 下载页。
 
 - [桌面 GUI：run 39113880648](https://github.com/LONG10222/psportal-on-demand/actions/runs/39113880648)（Mac/Linux 任务通过；同轮 Windows 测试夹具失败，已验收 Windows 包见下方版本表）
 - [原生 CLI：run 39113880825](https://github.com/LONG10222/psportal-on-demand/actions/runs/39113880825)

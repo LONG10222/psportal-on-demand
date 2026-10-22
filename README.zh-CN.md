@@ -1,56 +1,140 @@
-<div align="center">
-  <img src="native/android/app/src/main/res/mipmap-xhdpi/ic_launcher.png" width="72" alt="StarPass" />
-  <h1>星渡 StarPass</h1>
-  <p>给手机和局域网设备使用的按需代理。</p>
-  <p><a href="#下载">下载</a> · <a href="#快速开始">快速开始</a> · <a href="docs/README.en.md">English</a> · <a href="https://github.com/LONG10222/psportal-on-demand/issues">反馈问题</a></p>
-</div>
+# 星渡 StarPass
 
-## 下载
+[![CI](https://github.com/LONG10222/psportal-on-demand/actions/workflows/check.yml/badge.svg)](https://github.com/LONG10222/psportal-on-demand/actions/workflows/check.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-- **[已归档测试包](https://github.com/LONG10222/psportal-on-demand/releases)**：Windows、macOS、Linux、Android 与 iOS 模拟器产物。
-- **[当前分支构建](https://github.com/LONG10222/psportal-on-demand/actions)**：Android 精简界面、升级校验和全平台更新入口由对应 PR 构建；旧版 `c1d2d3a` 归档不含这些更新。
-- [选择版本与安装](docs/downloads.zh-CN.md)。Android CI 原始 APK 未签名；iOS 设备版需要自行签名，模拟器包不能装到手机。
+简体中文 | [English](README.md)
 
-## 功能
+**星渡 StarPass** 是从 PS Portal 局域网代理延伸出的跨平台按需代理开发版，
+保留仓库、程序标识和原项目来源。新界面将**游戏设备、混合、本机 Clash**用途分开；
+用途模式不等于规则／全局／直连，也不代表任意游戏 UDP 加速。
+详见[三种用途、平台对照与验证边界](docs/starpass-platform-modes.zh-CN.md)。
+桌面不会自动修改系统代理、VPN、DNS 或防火墙；Android 本机代理仍需系统 VPN 授权。
 
-- **按需运行**：外部请求唤醒核心，空闲后回收。
-- **手机或设备共享**：Android 内置 Mihomo；电脑可独立运行或复用已有 Clash。
-- **节点与状态**：查看实际连接、选择支持的节点/策略组并测速。
-- **清爽界面**：Android 分为概览、节点、共享、设置，操作说明按需展开。
 
-| 平台 | 入口 | 使用说明 |
-| --- | --- | --- |
-| Android | 手机代理、局域网共享 | [Android](native/android/README.md) |
-| Windows / macOS / Linux | 独立代理、Clash 联动 | [桌面](portable/docs/desktop.md) |
-| iPhone / iPad | 前台设备共享 | [iOS](native/ios/README.md) |
-| OpenWrt / iStoreOS | 独立运行、OpenClash 联动 | [路由器](docs/router-readme.zh-CN.md) |
+PS Portal 的 OpenWrt / iStoreOS 按需代理。独立模式访问外网时启动自己的 Mihomo，空闲 60 秒后关闭；新增 OpenClash 联动模式复用已运行的核心，空闲只关闭本插件自己的连接。
 
-## 快速开始
+- **按需启停**：监听器开机自启，代理核心由外网请求唤醒。
+- **节点偏好**：自己的订阅支持自动地区回退、首选后回退或固定节点；可选登录后的 LuCI 页面。
+- **单设备接入**：通过 IP 白名单限制客户端，Portal 手动设置 HTTP 代理即可使用。
+- **OpenClash 联动**：只读发现回环入口，复用已有订阅、节点和规则，不启动/停止外部核心；节点管理留在 OpenClash
+- **独立运行**：使用独立的核心和配置，OpenClash 无需启动；局域网请求直接连接。
 
-### Android
+> 第二阶段仍需固定版本 Mihomo/OpenWrt/LuCI 实机验收，详见[节点偏好与验收](docs/node-preferences.zh-CN.md)。
 
-1. 安装匹配设备的测试 APK，在概览填写 HTTPS 订阅。
-2. 选择用途与分流方式，点击 **连接**；本机代理按系统提示申请 VPN 授权。
-3. 给其他设备共享时，打开 **共享** 查看地址，在设备 Wi-Fi 中设置手动 HTTP 代理。
+## 桌面与移动端开发版
 
-**游戏**只共享给局域网设备；**混合**同时代理手机；**Clash**只代理手机。节点操作在“节点”，后台运行与网络修复在“设置”，详细说明在右上角“帮助”。
+路由器有独立核心和外部 OpenClash 联动两种归属模式。Linux、Windows、macOS 请看[桌面使用说明](portable/docs/desktop.md)；共享原生引擎和移动端请看 [native/README.md](native/README.md)。不要在桌面系统执行路由器安装脚本。
 
-### 电脑
+桌面默认使用独立 Mihomo，也可在同一界面选择实验性的内置共享引擎。Android 由前台服务运行；iOS 默认前台托管；iOS 26+ 限时后台实验仍需实际授权与真机验收。请先看[当前验证结果与平台限制](docs/portable-status.zh-CN.md)。原生引擎遵循 GPL-3.0，原路由器与包装界面遵循 MIT；分发原生二进制须附带完整对应源码。
 
-粘贴一次导入订阅，再点击 **启动共享**。也可直接复用已有 Clash 的代理入口；联动时节点与核心仍由原客户端管理。Windows 默认自动选择 Mihomo，其他系统和实验引擎的准备方式见[桌面指南](portable/docs/desktop.md)。
+## OpenClash 联动快速开始
 
-## 使用须知
+从本草稿 PR 精确提交或 Actions 的 `starpass-router-source-…` 下载源码安装包；旧 main 压缩包尚不含本次更新。
+无需复制核心：`sh install.sh --openclash`，然后 `portalproxy setup` 选择 `openclash`。
+在 OpenClash 内先配置并启动订阅／节点；本插件仅设置 LAN 地址、单设备白名单、HTTP 端口与空闲时间。
+LuCI 中可选择归属模式，保存后明确应用。已有安装不会被安装参数静默改模式。
 
-局域网共享是 HTTP/HTTPS CONNECT TCP，不能保证任意游戏 UDP 或串流可用。只在可信局域网使用；结束后关闭设备的手动代理。Android 本机代理需要系统 VPN 授权；iOS 默认切后台即停止。更多能力差异见[平台对照](docs/starpass-platform-modes.zh-CN.md)。
+[详细联动指南、控制器认证、fake-IP 和验证边界](docs/openclash-linked.zh-CN.md)。
+OpenClash 的最终规则可以选 DIRECT，看到的来源通常是路由器。HTTP 入口不承载游戏 UDP。
+本次提供源码安装器及校验清单，尚未制作／验收 iStore 上架包、IPK 或 APK。
 
-## 文档与开发
+## 独立模式快速开始
 
-[Android 构建](native/android/README.md#build-unsigned-without-creating-credentials) · [桌面源码](portable/README.md) · [原生引擎](native/README.md) · [验证记录](VALIDATION-LOCAL.md) · [安全反馈](SECURITY.md) · [更新日志](CHANGELOG.md) · [应用更新](docs/updates.md)
+### 1. 准备
 
-构建通过、模拟器测试与真机网络验收分别记录，不用旧版测试数字代替当前提交结果。详细能力和历史记录移至[平台参考](docs/platform-reference.zh-CN.md)。
+- 一台 OpenWrt / iStoreOS 软路由，带 Lua 5.1、LuCI 和 procd。
+- 与设备架构匹配的 [Mihomo 核心](https://github.com/MetaCubeX/mihomo/releases)。已有 OpenClash 核心可以直接复用。
+- 自己的 HTTPS Clash/Mihomo YAML 订阅。
+- 在主路由 DHCP 中为 Portal 保留一个 IP 地址。
 
-## 开源与致谢
+### 2. 安装
 
-界面信息组织参考 [Clash Meta for Android](https://github.com/MetaCubeX/ClashMetaForAndroid)；文档结构参考 [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev) 和 [v2rayNG](https://github.com/2dust/v2rayNG)。保留星渡原有角色与图标。
+SSH 登录软路由，以 root 执行：
 
-路由器与桌面包装层采用 [MIT](LICENSE)；链接 Mihomo 的原生引擎/Android 应用采用 [GPL-3.0-only](native/LICENSE)。分发时保留匹配源码和依赖许可证。
+```sh
+cd /tmp
+curl -fL https://github.com/LONG10222/psportal-on-demand/archive/refs/heads/main.tar.gz -o portal-source.tar.gz
+tar -xzf portal-source.tar.gz
+cd psportal-on-demand-main
+sh install.sh
+portalproxy setup
+```
+
+安装器会查找已有项目核心、`/etc/openclash/core/clash_meta` 和 `/usr/bin/mihomo`。需要指定其他核心时，把安装命令换成：
+
+```sh
+sh install.sh --core /path/to/mihomo
+```
+
+缺少 Lua 依赖时安装：
+
+```sh
+opkg update
+opkg install lua luci-lib-nixio luci-lib-jsonc luci-lib-base libuci-lua curl ca-bundle
+```
+
+### 3. 配置
+
+运行 `portalproxy setup`，按提示填写。下面使用示例网段，地址换成自己的：
+
+| 向导提示 | 示例 |
+| --- | --- |
+| OpenWrt LAN IPv4 address | 软路由地址 `192.168.50.2` |
+| Portal reserved IPv4 address | Portal 保留地址 `192.168.50.30` |
+| LAN DNS server | 主路由 `192.168.50.1` |
+| Working bootstrap DNS | `192.168.50.1` |
+| HTTP proxy port | `10081` |
+| External idle timeout | `60` |
+| HTTPS subscription URL | 填自己的订阅，输入不回显 |
+| Optional local Clash/Mihomo YAML seed file | 可留空，或填已有配置文件路径 |
+| Outbound routing mark | 无 OpenClash 用 `0`；共存配置见[使用文档](docs/guide.zh-CN.md#openclash-共存) |
+
+完成后监听器立即运行，并在开机时启动。
+
+在 **Portal → Wi-Fi → 当前网络 → 高级设置** 中：
+
+- IP、网关、DNS 保持自动。
+- HTTP 代理改为手动，地址填软路由 IP，端口填上面设置的端口。
+- 按示例应填 `192.168.50.2:10081`。
+
+没有导入本地种子时，先执行 `portalproxy subscription-update` 下载节点缓存，再连接网络。更新改为明确操作，不再自动定时下载；运行中的核心可能立即载入更新并切换线路。
+
+## 常用命令
+
+```sh
+portalproxy status     # 查看运行状态
+portalproxy nodes      # 查看缓存节点（不唤醒）
+portalproxy prefer preferred '日本 A'  # 保存精确首选名称
+portalproxy apply      # 应用设置，会中断连接
+portalproxy subscription-update  # 明确下载，运行中可能换线
+portalproxy setup      # 修改配置
+portalproxy check      # 检查配置
+portalproxy restart    # 重启服务
+portalproxy stop       # 停止服务
+portalproxy disable    # 停止并取消开机启动
+portalproxy enable     # 启动并开启开机启动
+```
+
+配置文件：`/etc/config/portalproxy`。修改后执行 `portalproxy check` 和 `portalproxy restart`。
+
+## 更新与卸载
+
+下载新版源码，重新执行 `sh install.sh`，再运行 `portalproxy restart`。原配置保留，升级备份位于 `/etc/portalproxy-backups/`。
+
+```sh
+sh uninstall.sh          # 卸载，保留配置
+sh uninstall.sh --purge  # 卸载并删除配置
+```
+
+卸载后关闭 Portal 的手动代理设置。
+
+## 文档
+
+- [参数、OpenClash 共存、排查与测试](docs/guide.zh-CN.md)
+- [更新记录](CHANGELOG.md)
+- [安全问题与诊断信息](SECURITY.md)
+
+## 许可
+
+[MIT](LICENSE)。代理核心由 [Mihomo](https://github.com/MetaCubeX/mihomo) 提供，遵循其上游许可。

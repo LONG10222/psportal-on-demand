@@ -28,13 +28,6 @@ public enum ProductMode {
             default: return "Clash";
         }
     }
-    public String shortDescription(boolean english) {
-        switch (this) {
-            case GAME: return english ? "LAN devices only" : "仅共享给局域网设备";
-            case MIXED: return english ? "LAN + phone apps · VPN consent required" : "局域网与本机应用 · 需 VPN 授权";
-            default: return english ? "Phone apps only · VPN consent required" : "仅本机应用 · 需 VPN 授权";
-        }
-    }
     public String description(boolean english) {
         switch (this) {
             case GAME:

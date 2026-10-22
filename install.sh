@@ -29,108 +29,41 @@ if [ "$LINKED" = 0 ] && [ -z "$CORE" ]; then
 fi
 [ "$LINKED" = 1 ] || { [ -n "$CORE" ] && [ -x "$CORE" ]; } || { echo 'Provide a compatible Mihomo executable with --core.' >&2; exit 1; }
 umask 077
-# Prepare every payload before touching installed files or stopping a service.
-# A failed upgrade never starts a service automatically. Power loss still needs
-# manual recovery using the complete, private backup below.
-safe_target() {
-    check=$1
-    while [ "$check" != / ] && [ -n "$check" ]; do
-        [ ! -L "$check" ] || { echo 'Symlink install target refused.' >&2; exit 1; }
-        check=${check%/*}
-    done
-}
-for path in "$ROOT" "$ROOT/etc/config/portalproxy" "$ROOT/etc/portalproxy/providers" \
-    "$ROOT/etc/portalproxy-backups" "$ROOT/usr/libexec/portalproxy/mihomo"; do safe_target "$path"; done
-mkdir -p "${ROOT:-/tmp}"
-lock="${ROOT:-/tmp}/.starpass-install.lock"
-mkdir "$lock" 2>/dev/null || { echo 'Another install may be active; inspect the local install lock before retrying.' >&2; exit 1; }
-work="$(mktemp -d "${ROOT:-/tmp}/.starpass-install.XXXXXX")" || { rmdir "$lock"; exit 1; }
-changed=0
-committed=0
-cleanup() {
-    status=$?
-    trap - EXIT HUP INT TERM
-    if [ "$changed" = 1 ] && [ "$committed" = 0 ]; then
-        failed=0
-        while IFS= read -r path; do
-            if [ -f "$work/old/$path" ]; then
-                cp -p "$work/old/$path" "$ROOT/$path" || failed=1
-            else
-                rm -f "$ROOT/$path" || failed=1
-            fi
-        done < "$work/manifest"
-        if [ "$failed" = 0 ]; then
-            echo 'Update failed; previous files restored. Services remain stopped; verify configuration before starting.' >&2
-        else
-            echo "Update failed and rollback was incomplete. Keep services stopped; restore the local backup. Recovery files: $work" >&2
-            exit 1
-        fi
-    fi
-    rm -rf "$work"
-    rmdir "$lock"
-    exit "$status"
-}
-trap cleanup EXIT
-trap 'exit 1' HUP INT TERM
-mkdir -p "$work/new" "$work/old"
-: > "$work/manifest"
-stage() {
-    source=$1 destination=$2 mode=$3
-    [ -f "$source" ] && [ ! -L "$source" ] || { echo 'Missing or unsafe install source.' >&2; exit 1; }
-    # Reject symlink destinations/ancestors rather than write outside --root or
-    # into unrelated files. Existing configuration contents are never rewritten.
-    safe_target "$ROOT/$destination"
-    [ ! -e "$ROOT/$destination" ] || [ -f "$ROOT/$destination" ] || { echo 'Non-file install target refused.' >&2; exit 1; }
-    mkdir -p "$work/new/${destination%/*}" "$work/old/${destination%/*}"
-    cp "$source" "$work/new/$destination"
-    chmod "$mode" "$work/new/$destination"
-    if [ -f "$ROOT/$destination" ]; then cp -p "$ROOT/$destination" "$work/old/$destination"; fi
-    printf '%s\n' "$destination" >> "$work/manifest"
-}
-for file in "$BASE"/src/*.lua; do stage "$file" "usr/libexec/portalproxy/${file##*/}" 700; done
-stage "$BASE/files/portalproxy.init" etc/init.d/portalproxy 700
-stage "$BASE/files/portalproxy-core.init" etc/init.d/portalproxy-core 700
-stage "$BASE/files/portalproxy" usr/sbin/portalproxy 700
-if [ ! -f "$ROOT/etc/config/portalproxy" ]; then
-    stage "$BASE/files/portalproxy.config" etc/config/portalproxy 600
-    [ "$LINKED" = 0 ] || sed -i "s/option core_mode 'standalone'/option core_mode 'openclash'/" "$work/new/etc/config/portalproxy"
-fi
-if [ "$LINKED" = 0 ] && [ "$CORE" != "$ROOT/usr/libexec/portalproxy/mihomo" ]; then
-    stage "$CORE" usr/libexec/portalproxy/mihomo 700
-fi
-if [ -d "$ROOT/usr/lib/lua/luci" ]; then
-    stage "$BASE/luci/controller/portalproxy.lua" usr/lib/lua/luci/controller/portalproxy.lua 644
-    stage "$BASE/luci/model/cbi/portalproxy.lua" usr/lib/lua/luci/model/cbi/portalproxy.lua 644
-    stage "$BASE/luci/view/portalproxy/onboarding.htm" usr/lib/lua/luci/view/portalproxy/onboarding.htm 644
-fi
-# Preserve all installed project files, including old launchers and LuCI, not
-# just UCI/core data. Archive remains local and may contain subscription secrets.
-set --
-for path in etc/config/portalproxy etc/portalproxy usr/libexec/portalproxy \
-    etc/init.d/portalproxy etc/init.d/portalproxy-core usr/sbin/portalproxy \
-    usr/lib/lua/luci/controller/portalproxy.lua usr/lib/lua/luci/model/cbi/portalproxy.lua \
-    usr/lib/lua/luci/view/portalproxy; do
-    [ ! -e "$ROOT/$path" ] || set -- "$@" "$path"
-done
-if [ "$#" -gt 0 ]; then
-    [ ! -L "$ROOT/etc/portalproxy-backups" ] || { echo 'Symlink backup directory refused.' >&2; exit 1; }
+if [ -f "$ROOT/etc/config/portalproxy" ]; then
     mkdir -p "$ROOT/etc/portalproxy-backups"
     chmod 700 "$ROOT/etc/portalproxy-backups"
+    set -- etc/config/portalproxy
+    [ ! -d "$ROOT/etc/portalproxy" ] || set -- "$@" etc/portalproxy
+    [ ! -d "$ROOT/usr/libexec/portalproxy" ] || set -- "$@" usr/libexec/portalproxy
     archive="$ROOT/etc/portalproxy-backups/$(date -u +%Y%m%dT%H%M%SZ)-$$.tar.gz"
-    tar -czf "$archive.part" -C "${ROOT:-/}" "$@"
-    chmod 600 "$archive.part"
-    mv "$archive.part" "$archive"
+    tar -czf "$archive" -C "${ROOT:-/}" "$@"
+    chmod 600 "$archive"
     echo 'Existing project files backed up locally; the archive may contain credentials.'
 fi
 if [ -z "$ROOT" ] && [ -x /etc/init.d/portalproxy ]; then /etc/init.d/portalproxy stop; fi
-changed=1
-while IFS= read -r path; do
-    mkdir -p "$ROOT/${path%/*}"
-    cp -p "$work/new/$path" "$ROOT/$path"
-done < "$work/manifest"
-mkdir -p "$ROOT/etc/portalproxy/providers"
+mkdir -p "$ROOT/etc/config" "$ROOT/etc/init.d" "$ROOT/etc/portalproxy/providers" "$ROOT/usr/libexec/portalproxy" "$ROOT/usr/sbin"
 chmod 700 "$ROOT/etc/portalproxy" "$ROOT/etc/portalproxy/providers" "$ROOT/usr/libexec/portalproxy"
+for file in "$BASE"/src/*.lua; do cp "$file" "$ROOT/usr/libexec/portalproxy/"; done
+cp "$BASE/files/portalproxy.init" "$ROOT/etc/init.d/portalproxy"
+cp "$BASE/files/portalproxy-core.init" "$ROOT/etc/init.d/portalproxy-core"
+cp "$BASE/files/portalproxy" "$ROOT/usr/sbin/portalproxy"
+if [ ! -f "$ROOT/etc/config/portalproxy" ]; then
+    cp "$BASE/files/portalproxy.config" "$ROOT/etc/config/portalproxy"
+    [ "$LINKED" = 0 ] || sed -i "s/option core_mode 'standalone'/option core_mode 'openclash'/" "$ROOT/etc/config/portalproxy"
+fi
+if [ "$LINKED" = 0 ] && [ "$CORE" != "$ROOT/usr/libexec/portalproxy/mihomo" ]; then cp "$CORE" "$ROOT/usr/libexec/portalproxy/mihomo"; fi
+chmod 700 "$ROOT/usr/libexec/portalproxy/"* "$ROOT/etc/init.d/portalproxy" "$ROOT/etc/init.d/portalproxy-core" "$ROOT/usr/sbin/portalproxy"
 chmod 600 "$ROOT/etc/config/portalproxy"
+# Optional legacy LuCI interface; CLI works without luci-compat.
+if [ -d "$ROOT/usr/lib/lua/luci" ]; then
+    mkdir -p "$ROOT/usr/lib/lua/luci/controller" "$ROOT/usr/lib/lua/luci/model/cbi"
+    cp "$BASE/luci/controller/portalproxy.lua" "$ROOT/usr/lib/lua/luci/controller/portalproxy.lua"
+    cp "$BASE/luci/model/cbi/portalproxy.lua" "$ROOT/usr/lib/lua/luci/model/cbi/portalproxy.lua"
+    mkdir -p "$ROOT/usr/lib/lua/luci/view/portalproxy"
+    cp "$BASE/luci/view/portalproxy/onboarding.htm" "$ROOT/usr/lib/lua/luci/view/portalproxy/onboarding.htm"
+    chmod 644 "$ROOT/usr/lib/lua/luci/view/portalproxy/onboarding.htm"
+    chmod 644 "$ROOT/usr/lib/lua/luci/controller/portalproxy.lua" "$ROOT/usr/lib/lua/luci/model/cbi/portalproxy.lua"
+fi
 
 if [ -z "$ROOT" ]; then
     /etc/init.d/portalproxy-core disable
@@ -139,5 +72,3 @@ if [ -z "$ROOT" ]; then
 else
     echo 'Staging install complete. No services were started or enabled.'
 fi
-
-committed=1

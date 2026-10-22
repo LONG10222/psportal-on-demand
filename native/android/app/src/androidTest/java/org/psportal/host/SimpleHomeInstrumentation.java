@@ -27,10 +27,6 @@ public final class SimpleHomeInstrumentation extends Instrumentation {
         result.add(view);
         if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup)view).getChildCount(); i++) walk(((ViewGroup)view).getChildAt(i), result);
     }
-    private static View tagged(List<View> views, String name) {
-        for (View view : views) if (name.equals(view.getTag())) return view;
-        throw new AssertionError("Missing navigation target " + name);
-    }
     @Override public void onStart() {
         Bundle result = new Bundle(); Activity activity = null;
         android.content.SharedPreferences prefs = getTargetContext().getSharedPreferences("ui", 0);
@@ -71,13 +67,8 @@ public final class SimpleHomeInstrumentation extends Instrumentation {
                     require(!phoneApps.isChecked(), "Phone-app VPN defaults off on a fresh stopped session");
                     require(lan.isChecked() == lanEnabled, "Independent LAN preference restored");
                     Button startButton = null;
-                    for (View view : views) if (view instanceof Button && (((Button)view).getText().toString().equals("连接") || ((Button)view).getText().toString().equals("Connect"))) startButton = (Button)view;
+                    for (View view : views) if (view instanceof Button && (((Button)view).getText().toString().equals("一键准备并启动") || ((Button)view).getText().toString().equals("Prepare & start"))) startButton = (Button)view;
                     require(startButton != null, "Start control present");
-                    int visibleText = 0;
-                    for (View view : views) if (view instanceof android.widget.TextView && view.isShown()
-                            && !((android.widget.TextView)view).getText().toString().isEmpty()) visibleText++;
-                    require(visibleText <= 22, "Overview stays compact without tutorial paragraphs");
-                    require(!tagged(views, "page_settings").isShown() && !tagged(views, "page_nodes").isShown(), "Secondary controls are hidden on Overview");
                     lan.setChecked(false); phoneApps.setChecked(false);
                     require(!startButton.isEnabled(), "Both traffic options off disables Start");
                     phoneApps.setChecked(true);
@@ -95,15 +86,6 @@ public final class SimpleHomeInstrumentation extends Instrumentation {
                     require(secret.getTransformationMethod() instanceof PasswordTransformationMethod, "Password transformation retained after singleLine");
                     String dummy = "https://example.invalid/DUMMY-NOT-A-SECRET";
                     secret.setText(dummy);
-                    String[] pageTags = {"page_overview", "page_nodes", "page_sharing", "page_settings"};
-                    for (int page : new int[]{1, 2, 3, 0}) {
-                        ((Button)tagged(views, "tab_" + page)).performClick();
-                        require(tagged(views, pageTags[page]).isShown(), "Selected page is visible");
-                        int shown = 0; for (String tag : pageTags) if (tagged(views, tag).isShown()) shown++;
-                        require(shown == 1, "Only one page appears at a time");
-                        require(secret.getText().toString().equals(dummy), "Navigation preserves in-memory subscription");
-                        require(session.snapshot() == before, "Navigation never starts or stops the session");
-                    }
                     game.performClick();
                     require(lan.isChecked() && !phoneApps.isChecked() && game.isChecked(), "Game selects only LAN sharing");
                     mixed.performClick();

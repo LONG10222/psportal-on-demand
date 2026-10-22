@@ -9,8 +9,6 @@
     <!-- Android's connectedDevice FGS prerequisite. The app does not change network settings. -->
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- User-initiated, same-package updates from the Settings page only. -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- targetSdk 36: do not declare ACCESS_LOCAL_NETWORK. See README before upgrading to 37. -->
     <application
         android:name=".PortalApplication"
@@ -28,12 +26,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".UpdateActivity" android:exported="false" />
-        <provider android:name=".UpdateApkProvider"
-            android:authorities="org.psportal.host.updates"
-            android:exported="false" android:grantUriPermissions="true">
-            <grant-uri-permission android:pathPrefix="/update-" />
-        </provider>
         <!-- systemExempted uses the consent-granted VPN app-op, not alarm permissions.
              Lint 8.13.2 omits that runtime alternative. Both services recheck
              VpnService.prepare before using this type; see BACKGROUND.md. -->

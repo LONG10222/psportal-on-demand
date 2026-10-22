@@ -258,19 +258,3 @@ distribution; see `../THIRD_PARTY_NOTICES.md` and `../scripts/source_release.py`
 No GPL/Apple store-terms compatibility determination is made. This is a
 development build pending the remaining hardware, privacy, signing and
 distribution gates above.
-
-## Application updates
-
-Settings → Application updates shows the installed bundle version and a user-initiated
-link to this project's official GitHub Releases. It is explicitly **manual update
-information**, not an online version check: opening a page never means “latest version”
-or “update installed”. The link is disabled until sharing has stopped, avoiding an
-unexpected foreground-session interruption. Browser-open failure is reported; network
-availability and release compatibility must still be checked in the browser.
-
-Current CI simulator/unsigned-device artifacts are not an installable signed IPA.
-Use the original trusted installation channel with the same bundle identifier and
-signing identity. Save connection settings first; do not uninstall or clear data to
-work around a signature mismatch. Subscription URLs are deliberately session-only
-and require reimport after an update. No executable download, automatic replacement,
-new installation channel or automatic rollback is added here.

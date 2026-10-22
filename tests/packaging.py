@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import hashlib
-import shutil
 import tarfile
 import os
 from pathlib import Path
@@ -17,18 +16,6 @@ PUBLIC_UPSTREAM_CONFIGS = {
 }
 
 class PackagingTests(unittest.TestCase):
-    def test_router_update_guidance_is_read_only_and_preserves_config(self):
-        template = (ROOT / 'luci/view/portalproxy/onboarding.htm').read_text()
-        section = template.split('<details class="starpass-updates">', 1)[1].split('</details>', 1)[0]
-        for expected in ['https://github.com/LONG10222/psportal-on-demand/releases',
-                         'referrerpolicy="no-referrer"', 'rel="noopener noreferrer"',
-                         'does not check online versions', 'firmware and CPU architecture',
-                         'OpenClash manages its own core', 'Backups may contain credentials',
-                         'does not guarantee power-loss recovery', 'Do not purge configuration']:
-            self.assertIn(expected, section)
-        for forbidden in ['<script', '<form', 'onclick=', 'fetch(', 'XMLHttpRequest', '<%=', 'os.execute']:
-            self.assertNotIn(forbidden, section)
-
     def test_shell_syntax(self):
         files = [ROOT / 'install.sh', ROOT / 'uninstall.sh', ROOT / 'files/portalproxy']
         files += list((ROOT / 'files').glob('*.init'))
@@ -58,114 +45,6 @@ class PackagingTests(unittest.TestCase):
             self.assertFalse((target / 'usr/libexec/portalproxy').exists())
             subprocess.run(['sh', str(ROOT / 'uninstall.sh'), '--root', str(target), '--purge'], check=True, stdout=subprocess.PIPE)
             self.assertFalse(configuration.exists())
-
-    def test_upgrade_backup_contains_launchers_luci_and_private_configuration(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            target = Path(tmp) / 'root'
-            (target / 'usr/lib/lua/luci').mkdir(parents=True)
-            command = ['sh', str(ROOT / 'install.sh'), '--root', str(target), '--openclash']
-            subprocess.run(command, check=True, capture_output=True)
-            private = target / 'etc/portalproxy/providers/private.yml'
-            private.write_text('fixture-only-secret')
-            old_init = (target / 'etc/init.d/portalproxy').read_bytes()
-            subprocess.run(command, check=True, capture_output=True)
-            archives = list((target / 'etc/portalproxy-backups').glob('*.tar.gz'))
-            self.assertEqual(len(archives), 1)
-            with tarfile.open(archives[0]) as archive:
-                for path in ('etc/init.d/portalproxy', 'etc/init.d/portalproxy-core',
-                             'usr/sbin/portalproxy', 'usr/lib/lua/luci/controller/portalproxy.lua',
-                             'usr/lib/lua/luci/model/cbi/portalproxy.lua',
-                             'usr/lib/lua/luci/view/portalproxy/onboarding.htm',
-                             'etc/config/portalproxy', 'etc/portalproxy/providers/private.yml'):
-                    self.assertIn(path, archive.getnames())
-                self.assertEqual(archive.extractfile('etc/init.d/portalproxy').read(), old_init)
-            self.assertEqual(archives[0].stat().st_mode & 0o777, 0o600)
-            self.assertEqual(private.read_text(), 'fixture-only-secret')
-
-    def test_upgrade_copy_failure_restores_previous_files_and_removes_added_files(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            target = Path(tmp) / 'root'
-            command = ['sh', str(ROOT / 'install.sh'), '--root', str(target), '--openclash']
-            subprocess.run(command, check=True, capture_output=True)
-            # A preexisting launcher/core must survive a later partially written copy.
-            (target / 'etc/init.d/portalproxy').write_text('old init fixture')
-            next((target / 'usr/libexec/portalproxy').glob('*.lua')).unlink()
-            before = {p.relative_to(target): p.read_bytes() for p in target.rglob('*') if p.is_file()}
-            shim = Path(tmp) / 'bin'
-            shim.mkdir()
-            cp = shim / 'cp'
-            cp.write_text('#!/bin/sh\ncase "$1:$2" in -p:*/.starpass-install.*/new/etc/init.d/portalproxy)\n'
-                          '  printf broken > "$3"; exit 1;;\nesac\nexec ' + shutil.which('cp') + ' "$@"\n')
-            cp.chmod(0o700)
-            result = subprocess.run(command, env={**os.environ, 'PATH': str(shim) + ':' + os.environ['PATH']},
-                                    capture_output=True, text=True)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn('previous files restored', result.stderr)
-            after = {p.relative_to(target): p.read_bytes() for p in target.rglob('*')
-                     if p.is_file() and 'portalproxy-backups' not in p.parts}
-            self.assertEqual(after, before)
-            self.assertFalse((target / '.starpass-install.lock').exists())
-            self.assertFalse(list(target.glob('.starpass-install.*')))
-            self.assertFalse((target / 'etc/rc.d').exists())
-
-    def test_backup_failure_never_changes_installed_files(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            target = Path(tmp) / 'root'
-            command = ['sh', str(ROOT / 'install.sh'), '--root', str(target), '--openclash']
-            subprocess.run(command, check=True, capture_output=True)
-            before = {p.relative_to(target): p.read_bytes() for p in target.rglob('*') if p.is_file()}
-            shim = Path(tmp) / 'bin'
-            shim.mkdir()
-            tar = shim / 'tar'
-            tar.write_text('#!/bin/sh\nexit 1\n')
-            tar.chmod(0o700)
-            result = subprocess.run(command, env={**os.environ, 'PATH': str(shim) + ':' + os.environ['PATH']},
-                                    capture_output=True)
-            self.assertNotEqual(result.returncode, 0)
-            after = {p.relative_to(target): p.read_bytes() for p in target.rglob('*') if p.is_file()}
-            self.assertEqual(before, after)
-            self.assertFalse((target / '.starpass-install.lock').exists())
-            self.assertFalse(list((target / 'etc/portalproxy-backups').glob('*.tar.gz')))
-
-    def test_missing_payload_fails_before_installed_files_change(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            target = Path(tmp) / 'root'
-            subprocess.run(['sh', str(ROOT / 'install.sh'), '--root', str(target), '--openclash'],
-                           check=True, capture_output=True)
-            fixture = Path(tmp) / 'source'
-            fixture.mkdir()
-            shutil.copy(ROOT / 'install.sh', fixture)
-            for directory in ('src', 'files', 'luci'):
-                shutil.copytree(ROOT / directory, fixture / directory)
-            (fixture / 'files/portalproxy-core.init').unlink()
-            before = {p.relative_to(target): p.read_bytes() for p in target.rglob('*') if p.is_file()}
-            result = subprocess.run(['sh', str(fixture / 'install.sh'), '--root', str(target), '--openclash'],
-                                    capture_output=True)
-            self.assertNotEqual(result.returncode, 0)
-            after = {p.relative_to(target): p.read_bytes() for p in target.rglob('*') if p.is_file()}
-            self.assertEqual(before, after)
-            self.assertFalse((target / '.starpass-install.lock').exists())
-
-    def test_upgrade_refuses_symlink_config_and_concurrent_install(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            target = Path(tmp) / 'root'
-            (target / 'etc/config').mkdir(parents=True)
-            outside = Path(tmp) / 'outside'
-            outside.write_text('must not touch')
-            outside.chmod(0o644)
-            (target / 'etc/config/portalproxy').symlink_to(outside)
-            command = ['sh', str(ROOT / 'install.sh'), '--root', str(target), '--openclash']
-            result = subprocess.run(command, capture_output=True, text=True)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn('Symlink', result.stderr)
-            self.assertEqual(outside.read_text(), 'must not touch')
-            self.assertEqual(outside.stat().st_mode & 0o777, 0o644)
-            (target / 'etc/config/portalproxy').unlink()
-            (target / '.starpass-install.lock').mkdir()
-            result = subprocess.run(command, capture_output=True, text=True)
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn('Another install', result.stderr)
-            self.assertFalse((target / 'usr').exists())
 
     def test_linked_install_never_requires_or_copies_a_core(self):
         with tempfile.TemporaryDirectory() as tmp:
