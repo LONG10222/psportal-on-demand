@@ -258,6 +258,8 @@ class DesktopView:
         self.theme_combo.bind('<<ComboboxSelected>>', lambda _: app.set_theme(
             'dark' if self.theme_combo.current() == 0 else 'light'))
 
+        self.button(settings, 'Application updates', command=app.show_app_updates).grid(row=12, column=0, columnspan=3, sticky='w', pady=(18, 0))
+
         self._overview()
 
         devices = self.card(self.frames['Devices'], 'Proxy clients')

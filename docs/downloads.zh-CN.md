@@ -3,7 +3,7 @@
 ## 当前入口
 
 - [测试归档 Releases](https://github.com/LONG10222/psportal-on-demand/releases)：`starpass-test-20261020-c1d2d3a` 保留已验证的整合测试包及校验信息。
-- [当前分支 Actions](https://github.com/LONG10222/psportal-on-demand/actions)：新的 Android 四页精简界面由其 PR 构建，旧归档不包含该更新。原始 CI APK 未签名。
+- [当前分支 Actions](https://github.com/LONG10222/psportal-on-demand/actions)：Android 四页精简界面、升级校验和全平台更新入口由对应 PR 构建，旧归档不包含这些更新。原始 CI APK 未签名。
 
 以下列举早期交付方式及历史产物，不应作为最新版本入口。
 

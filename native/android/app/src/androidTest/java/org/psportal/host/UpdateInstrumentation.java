@@ -60,6 +60,8 @@ public final class UpdateInstrumentation extends Instrumentation {
             JSONObject data=release(new JSONArray().put(asset(6,"universal")).put(asset(6,"arm64-v8a")).put(asset(6,"x86_64")));
             Object selected=invoke(select,null,data,5L,arm);check(name.get(selected).equals("StarPass-Android-6-arm64-v8a.apk"),"preferred ABI");
             check(name.get(invoke(select,null,data,5L,new String[]{"x86_64"})).equals("StarPass-Android-6-x86_64.apk"),"x86 selection");
+            check(invoke(select,null,data,5L,new String[]{"armeabi-v7a", "armeabi"})==null,"universal excludes unsupported 32-bit ARM");
+            check(invoke(select,null,data,5L,new String[]{"x86"})==null,"universal excludes unsupported 32-bit x86");
             check(invoke(select,null,data,6L,arm)==null,"no downgrade/reinstall");
             data.put("prerelease",true);check(invoke(select,null,data,5L,arm)==null,"pre-release excluded");data.put("prerelease",false).put("draft",true);
             check(invoke(select,null,data,5L,arm)==null,"draft excluded");data.put("draft",false);
@@ -73,6 +75,15 @@ public final class UpdateInstrumentation extends Instrumentation {
                 JSONObject invalid=asset(6,"universal");invalid.put(key,key.equals("size")?-1:"invalid");
                 boolean rejected=false;try{invoke(select,null,release(new JSONArray().put(invalid)),5L,arm);}catch(Exception expected){rejected=true;}check(rejected,"reject malformed "+key);
             }
+            // Malformed applicable metadata is an explicit failure, never silently
+            // bypassed by another same-version release or a lower-version fallback.
+            JSONObject broken=asset(6,"arm64-v8a").put("digest","invalid");
+            JSONObject validRelease=release(new JSONArray().put(asset(6,"universal")));
+            JSONObject brokenRelease=release(new JSONArray().put(broken));
+            for (JSONArray versions : new JSONArray[]{new JSONArray().put(validRelease).put(brokenRelease), new JSONArray().put(brokenRelease).put(validRelease)}) {
+                boolean failed=false;try{invoke(selectAll,null,versions,5L,arm);}catch(Exception expected){failed=true;}
+                check(failed,"malformed applicable release fails closed independent of order");
+            }
             // Package parsing and private-provider tests only: no Activity lifecycle or window.
             final Object[] holder={null};
             runOnMainSync(() -> {try {
@@ -81,6 +92,22 @@ public final class UpdateInstrumentation extends Instrumentation {
                 attach.setAccessible(true);attach.invoke(holder[0],getTargetContext());
             }catch(Exception error){throw new RuntimeException(error);}});
             Object verifier=holder[0];
+            // Verify the cached-install failure reset without creating an Activity
+            // window, making a network request, or starting the system installer.
+            Method reset=updater.getDeclaredMethod("downloadRequired");reset.setAccessible(true);
+            java.lang.reflect.Field readyField=updater.getDeclaredField("ready"), actionField=updater.getDeclaredField("action"), englishField=updater.getDeclaredField("english");
+            readyField.setAccessible(true);actionField.setAccessible(true);englishField.setAccessible(true);
+            runOnMainSync(() -> {try {
+                Button retry=new Button(getTargetContext());actionField.set(verifier,retry);
+                for (boolean english : new boolean[]{false,true}) {
+                    englishField.setBoolean(verifier,english);
+                    readyField.set(verifier,new File(getTargetContext().getFilesDir(),"invalid.apk"));
+                    retry.setText(english ? "Install update" : "安装更新");
+                    invoke(reset,verifier);
+                    check(readyField.get(verifier)==null,"failed installer revalidation clears cached readiness");
+                    check(retry.getText().toString().equals(english ? "Download update" : "下载更新"),"retry button describes download in selected language");
+                }
+            }catch(Exception error){throw new RuntimeException(error);}});
             Method verify=updater.getDeclaredMethod("verifyApk",File.class,entry);verify.setAccessible(true);
             java.lang.reflect.Constructor<?> constructor=entry.getDeclaredConstructor(JSONObject.class,String.class,String.class,String.class);constructor.setAccessible(true);
             File installed=new File(getTargetContext().getApplicationInfo().sourceDir);

@@ -12,6 +12,23 @@ APP = ROOT / "PSPortalHost"
 
 
 class SourceGuardrails(unittest.TestCase):
+    def test_updates_are_explicit_read_only_guidance_not_fake_installation(self):
+        view = (APP / "ContentView.swift").read_text()
+        section = view.split('Text(t("当前版本：", "Installed version: ")', 1)
+        self.assertEqual(len(section), 2)
+        section = section[1].split('Text(t("关于星渡", "About StarPass"))', 1)[0]
+        for expected in ["no version check performed", "not an installable IPA", "Do not uninstall",
+                         "Subscription URLs are session-only", "automatic rollback is not provided",
+                         "No update or latest-version determination was made", "openURL(ApplicationUpdateInfo.releasesURL)", '}.disabled(!model.canEdit).accessibilityIdentifier("applicationUpdateReleases")']:
+            self.assertIn(expected, section)
+        for forbidden in ["URLSession", "model.stop()", "model.start()", "model.forgetSettings()", ".onAppear", "Timer"]:
+            self.assertNotIn(forbidden, section)
+        helper = (APP / "ApplicationUpdateInfo.swift").read_text()
+        self.assertIn("https://github.com/LONG10222/psportal-on-demand/releases", helper)
+        self.assertIn('"CFBundleShortVersionString"', helper)
+        self.assertIn('"CFBundleVersion"', helper)
+        self.assertNotIn("URLSession", helper)
+
     def test_game_setup_explains_evidence_and_scope_on_home(self):
         view = (APP / "ContentView.swift").read_text()
         home = view.split("private var sharingPage", 1)[1].split("private var", 1)[0]

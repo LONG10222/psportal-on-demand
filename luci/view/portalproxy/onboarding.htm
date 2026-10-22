@@ -39,4 +39,12 @@
   <li><strong><%:Connect and verify / 接入并验证%></strong><%:在允许接入的设备上手动填写路由器地址和代理端口，先验证网页，再测试目标游戏功能。 / Set the allowed device’s manual HTTP proxy. Verify a webpage, then the intended game feature.%></li>
  </ol>
  <p class="starpass-limit"><%:监听就绪或设备已连接不等于外网访问成功。仅 HTTP/TCP 共享，不提供游戏 UDP 或全设备路由；用完请关闭设备的 HTTP 代理。 / Listener ready is not proof of Internet access. No game UDP or whole-device routing; disable the device proxy when finished.%></p>
+ <details class="starpass-updates">
+  <summary><%:应用更新与配置保留 / Application updates and configuration%></summary>
+  <p><%:路由器采用手动更新；本页不检查在线版本、不下载或安装软件，也不会将网络失败显示为“最新版”。 / Router updates are manual. This page does not check online versions, download or install software, or treat a network failure as “up to date”.%></p>
+  <p><a href="https://github.com/LONG10222/psportal-on-demand/releases" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"><%:打开官方发布页（需联网） / Open official releases (Internet required)%></a></p>
+  <p><%:只使用与路由器固件和 CPU 架构匹配的来源可核验软件包；Android APK、桌面 ZIP 与 iOS 产物不能用于路由器。升级核心需单独确认对应架构与校验值；联动模式由 OpenClash 管理核心，本项目不会替换它。 / Use verifiable packages matching the router firmware and CPU architecture, not Android, desktop or iOS builds. Verify the core architecture and checksum separately. OpenClash manages its own core in linked mode; this project does not replace it.%></p>
+  <p><%:更新前保存配置并停止本项目共享。源码安装器保留现有 UCI 配置，并将已有配置、订阅缓存、项目核心、启动脚本和 LuCI 文件备份到本机 /etc/portalproxy-backups；备份可能包含凭据，不要公开上传。 / Save configuration and stop this project's sharing before updating. The source installer preserves existing UCI configuration and backs up existing configuration, subscription cache, project core, launchers and LuCI files locally to /etc/portalproxy-backups. Backups may contain credentials; do not publish them.%></p>
+  <p><%:源码安装器在可捕获的写入失败时尝试恢复旧文件；不保证断电恢复，备份也不是完整系统快照。保留旧版本源码和匹配核心。失败后保持服务停止，检查恢复结果与配置，再手动启动。若恢复不完整，按提示用本机备份恢复。不要卸载清除配置或盲目重试。 / The source installer attempts to restore old files after a caught write failure; it does not guarantee power-loss recovery or provide a full system snapshot. Keep old source and a compatible core. After failure, leave services stopped, verify recovery and configuration, then start manually. If recovery is incomplete, restore the local backup as instructed. Do not purge configuration or retry blindly.%></p>
+ </details>
 </section>

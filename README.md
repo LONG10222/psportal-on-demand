@@ -8,7 +8,7 @@
 ## 下载
 
 - **[已归档测试包](https://github.com/LONG10222/psportal-on-demand/releases)**：Windows、macOS、Linux、Android 与 iOS 模拟器产物。
-- **[当前分支构建](https://github.com/LONG10222/psportal-on-demand/actions)**：精简版 Android 界面由当前 PR 构建。旧版 `c1d2d3a` 归档不含这次界面更新。
+- **[当前分支构建](https://github.com/LONG10222/psportal-on-demand/actions)**：Android 精简界面、升级校验和全平台更新入口由对应 PR 构建；旧版 `c1d2d3a` 归档不含这些更新。
 - [选择版本与安装](docs/downloads.zh-CN.md)。Android CI 原始 APK 未签名；iOS 设备版需要自行签名，模拟器包不能装到手机。
 
 ## 功能
