@@ -259,6 +259,7 @@ public final class MainActivity extends Activity {
         appearance.setPadding(dp(8), dp(12), dp(8), dp(12)); settings.addView(appearance);
         appearance.setOnCheckedChangeListener((view, checked) -> { dark = checked; prefs().edit().putBoolean("dark", dark).apply(); applyTheme(shell); updateModes(selection.getSelectedItemPosition()); updateRoutingModes(routing.getSelectedItemPosition()); updateNavigation(); applySystemBars(); });
         engine = text(settings, "内置 Mihomo", "Embedded Mihomo", 13, false, true);
+        button(settings, "应用更新", "App updates", false, v -> startActivity(new Intent(this, UpdateActivity.class)));
         button(settings, "关于星渡", "About StarPass", false, v -> about.setVisibility(about.getVisibility() == View.GONE ? View.VISIBLE : View.GONE));
         about = card(settings); about.setVisibility(View.GONE); navigatorHero(about);
         button(about, "开源许可", "Open-source licenses", false, v -> showLicenses());

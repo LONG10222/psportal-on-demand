@@ -5,8 +5,8 @@ import json
 import re
 
 PACKAGE = 'org.psportal.host'
-VERSION_CODE = 4
-VERSION_NAME = '0.4.0-dev'
+VERSION_CODE = 5
+VERSION_NAME = '0.5.0-dev'
 VPN_PERMISSION = 'android.permission.BIND_VPN_SERVICE'
 EXPECTED_PERMISSIONS = {
     'android.permission.INTERNET',
@@ -16,6 +16,7 @@ EXPECTED_PERMISSIONS = {
     'android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED',
     'android.permission.CHANGE_NETWORK_STATE',
     'android.permission.POST_NOTIFICATIONS',
+    'android.permission.REQUEST_INSTALL_PACKAGES',
 }
 # Android ServiceInfo constants: connectedDevice=16, systemExempted=1024.
 CONNECTED_DEVICE = 0x10
@@ -139,6 +140,19 @@ def audit_manifest(text):
     assert 'android:process' not in app['attrs'], 'Unexpected separate application process'
     assert 'android:permission' not in app['attrs'], 'Binding permission must be service-specific'
     assert not _children(app, 'receiver'), 'No boot or other receivers are permitted'
+    activities = {_component(child['attrs'].get('android:name')): child for child in _children(app, 'activity')}
+    assert set(activities) == {PACKAGE + '.MainActivity', PACKAGE + '.UpdateActivity'}, 'Unexpected activity'
+    updater = activities[PACKAGE + '.UpdateActivity']
+    assert updater['attrs'].get('android:exported') is False and not updater['children'], 'Updater must be private'
+    providers = _children(app, 'provider')
+    assert len(providers) == 1, 'Expected one restricted APK provider'
+    provider = providers[0]
+    assert _component(provider['attrs'].get('android:name')) == PACKAGE + '.UpdateApkProvider'
+    assert provider['attrs'].get('android:authorities') == PACKAGE + '.updates'
+    assert provider['attrs'].get('android:exported') is False
+    assert provider['attrs'].get('android:grantUriPermissions') is True
+    assert 'android:process' not in provider['attrs'], 'Provider must use the app process'
+    assert provider['children'] == [{'tag': 'grant-uri-permission', 'attrs': {'android:pathPrefix': '/update-'}, 'children': []}], 'Only update URI grants allowed'
     services = {}
     for service in _children(app, 'service'):
         name = _component(service['attrs'].get('android:name'))

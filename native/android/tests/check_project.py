@@ -271,3 +271,15 @@ assert 'shareSteps.setVisibility(showAddress ? View.VISIBLE : View.GONE)' in act
 assert 'boolean showAddress = snapshot.phase == SessionController.Phase.RUNNING && Boolean.TRUE.equals(running)' in activity
 assert 'showAccountingDetails()' in activity
 print('PASS: compact four-page navigation, deferred help and readiness-only sharing address')
+
+# Installer revalidation failures must restore a download action on the UI thread.
+# This is a wiring guard; UpdateInstrumentation exercises the actual button/state.
+updater = (root/'app/src/main/java/org/psportal/host/UpdateActivity.java').read_text()
+reset = updater.split('private void downloadRequired() {', 1)[1].split('private boolean running()', 1)[0]
+assert 'ready = null;' in reset
+assert 'action.setText(t("下载更新", "Download update"));' in reset
+install = updater.split('private void installRequested()', 1)[1].split('@Override public void onDestroy()', 1)[0]
+assert 'ui(this::downloadRequired);' in install
+assert 'if (ready == null) download(); else installRequested();' in updater
+assert 'catch (Exception error)' in install and 'fail(error);' in install
+print('PASS: failed installer revalidation restores the UI-thread download action (structural guard)')

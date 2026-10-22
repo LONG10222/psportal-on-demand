@@ -10,10 +10,12 @@ struct ContentView: View {
     @State private var confirmForget = false
     @State private var showLicenses = false
     @State private var settingsFeedback = false
+    @State private var updateLinkFailed = false
     @State private var nodeSearch = ""
     @State private var healthyOnly = false
     @State private var sortByDelay = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.openURL) private var openURL
     @FocusState private var subscriptionFocused: Bool
     private let refresh = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
@@ -531,6 +533,32 @@ struct ContentView: View {
             } header: { Text(t("接入与存储", "Connection & storage")) } footer: {
                 Text(t("订阅链接只在本次会话中使用，不保存到设置。默认端口 10081，被占用时才更换。", "The subscription link is session-only and is not saved. Port 10081 is preferred; another is used only if occupied."))
             }
+            Section {
+                Text(t("当前版本：", "Installed version: ") + ApplicationUpdateInfo.installedVersion())
+                    .accessibilityIdentifier("installedApplicationVersion")
+                Text(t("手动更新 · 尚未检查新版本", "Manual updates · no version check performed"))
+                    .font(.subheadline).accessibilityIdentifier("applicationUpdateStatus")
+                Button(t("打开官方发布页", "Open official releases")) {
+                    updateLinkFailed = false
+                    openURL(ApplicationUpdateInfo.releasesURL) { accepted in
+                        updateLinkFailed = !accepted
+                    }
+                }.disabled(!model.canEdit).accessibilityIdentifier("applicationUpdateReleases")
+                if !model.canEdit {
+                    Text(t("请先停止共享，再打开发布页。", "Stop sharing before opening releases."))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                DisclosureGroup(t("更新方式与配置保留", "Update method and configuration")) {
+                    Text(t("需联网查看发布页；打开网页不代表已找到适用更新。当前 CI 为模拟器及未签名设备构建，不能直接安装为 IPA。请通过原可信安装渠道获取相同应用标识及签名身份的版本；应用内不下载或自动替换 iOS 程序。", "Internet access is needed to view releases; opening the page does not confirm an applicable update. Current CI contains simulator and unsigned device builds, not an installable IPA. Use the original trusted installation channel and the same app identifier and signing identity. This app does not download or replace iOS applications."))
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text(t("先保存接入设置并停止共享，再离开应用更新。不要卸载旧版或清除配置；订阅链接仅保留在会话中，更新后需重新导入。若签名或安装失败，保留旧版并检查安装渠道，不承诺自动回退。", "Save connection settings and stop sharing before leaving the app to update. Do not uninstall or clear configuration. Subscription URLs are session-only and must be imported again after updating. If signing or installation fails, retain the old app and check the installation channel; automatic rollback is not provided."))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if updateLinkFailed {
+                    Text(t("无法打开发布页，请检查浏览器限制后重试。未执行更新，也未判断是否为最新版。", "Could not open the releases page. Check browser restrictions and retry. No update or latest-version determination was made."))
+                        .foregroundStyle(.red).accessibilityIdentifier("applicationUpdateLinkError")
+                }
+            } header: { Text(t("应用更新", "Application updates")) }
             Section {
                 Button(t("开源许可与开发限制", "Licenses and development limits")) { showLicenses = true }
                 Text(t("手机仅需导入订阅，无需另开代理应用。默认前台共享；iOS 26+ 真机可主动申请限时后台实验，系统可提前结束。真实热点与游戏机尚待验证。", "Import a subscription; no second proxy app is needed. Sharing is foreground by default; real iOS 26+ devices can request a timed background experiment that the system may end early. Physical hotspots and game consoles remain unverified."))

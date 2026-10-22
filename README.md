@@ -8,7 +8,7 @@
 ## 下载
 
 - **[已归档测试包](https://github.com/LONG10222/psportal-on-demand/releases)**：Windows、macOS、Linux、Android 与 iOS 模拟器产物。
-- **[当前分支构建](https://github.com/LONG10222/psportal-on-demand/actions)**：精简版 Android 界面由当前 PR 构建。旧版 `c1d2d3a` 归档不含这次界面更新。
+- **[当前分支构建](https://github.com/LONG10222/psportal-on-demand/actions)**：Android 精简界面、升级校验和全平台更新入口由对应 PR 构建；旧版 `c1d2d3a` 归档不含这些更新。
 - [选择版本与安装](docs/downloads.zh-CN.md)。Android CI 原始 APK 未签名；iOS 设备版需要自行签名，模拟器包不能装到手机。
 
 ## 功能
@@ -45,7 +45,7 @@
 
 ## 文档与开发
 
-[Android 构建](native/android/README.md#build-unsigned-without-creating-credentials) · [桌面源码](portable/README.md) · [原生引擎](native/README.md) · [验证记录](VALIDATION-LOCAL.md) · [安全反馈](SECURITY.md) · [更新日志](CHANGELOG.md)
+[Android 构建](native/android/README.md#build-unsigned-without-creating-credentials) · [桌面源码](portable/README.md) · [原生引擎](native/README.md) · [验证记录](VALIDATION-LOCAL.md) · [安全反馈](SECURITY.md) · [更新日志](CHANGELOG.md) · [应用更新](docs/updates.md)
 
 构建通过、模拟器测试与真机网络验收分别记录，不用旧版测试数字代替当前提交结果。详细能力和历史记录移至[平台参考](docs/platform-reference.zh-CN.md)。
 

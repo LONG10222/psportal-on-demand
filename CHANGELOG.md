@@ -1,4 +1,18 @@
+## 2026-10-21 — 全平台升级入口与失败恢复（开发候选）
+
+- 保留最新 Android 四页界面及已验证更新功能，修复 universal APK 对不支持的 32 位设备误匹配，以及安装前复检失败后的按钮状态。
+- Windows/macOS/Linux 共享用户主动检查与完整包校验下载，独立桌面版本/架构选择；不自动执行、替换程序或覆盖配置。窄窗口保留可滚动更新说明，长保存路径不挤掉操作。
+- iOS 设置显示实际版本和官方更新入口，LuCI 增只读更新说明；不虚构 IPA 安装或路由器自动下载。
+- 路由器更新先预检/暂存，扩大完整本地备份并在文件写入失败时恢复；失败保持服务停止供人工核查，断电恢复仍有边界。
+- 现有测试归档不变，正式更新通道仍需单独签名和发布验收。实际测试及平台限制见本次验证记录。
+
 ## 2026-10-21 — Android 界面精简
+
+## 2026-10-21 Android Settings updates
+
+- Settings now checks stable GitHub releases, selects the device APK and downloads with progress.
+- Verify digest, size, package, newer version and current signer before opening the Android installer; active connections must stop first.
+- Keep CI unsigned and document the signed-release contract; no production key is generated or uploaded.
 
 - 概览、节点、共享、设置四页导航；首页保留状态、订阅、用途、分流和单一连接/停止操作。
 - 协议、VPN、后台与排障说明移入帮助；空套餐数据和未启用 VPN 状态默认隐藏，共享地址只在监听就绪后显示。
