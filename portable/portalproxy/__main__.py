@@ -9,6 +9,38 @@ from .config import load
 from .core import CoreError, CoreManager
 
 
+def validate_existing_proxy(config):
+    """Freshly verify saved Xianniu links; generic HTTP upstreams are unchanged."""
+    if config.get('existing_proxy_provider') != 'xianniu':
+        return
+    port = config.get('existing_proxy_port')
+    if type(port) is not int or not 1024 <= port <= 65535:
+        raise ValueError('Xianniu sharing requires a saved loopback proxy port. Detect and link Xianniu again.')
+    from .windows_accelerator import detect_xianniu
+    failure = ('Xianniu proxy verification failed. Keep Xianniu acceleration running and retry. '
+               'This relay requires a verified HTTP CONNECT TCP proxy.')
+    try:
+        result = detect_xianniu(probe=True)
+    except Exception:
+        # Never print process output, client settings or exception details.
+        raise ValueError(failure) from None
+    if not isinstance(result, dict):
+        raise ValueError(failure)
+    if result.get('running') is not True:
+        raise ValueError('Xianniu is not running. Open it and enable the intended acceleration, then retry.')
+    endpoint = result.get('verified_endpoint')
+    owners = result.get('process_ids')
+    if (result.get('installed') is not True or result.get('probe_passed') is not True
+            or not isinstance(endpoint, dict) or endpoint.get('host') != '127.0.0.1'
+            or endpoint.get('protocol') != 'http-connect' or type(endpoint.get('port')) is not int
+            or type(endpoint.get('pid')) is not int or not isinstance(owners, list)
+            or endpoint['pid'] not in owners):
+        raise ValueError(failure)
+    if endpoint['port'] != port:
+        raise ValueError('The saved Xianniu proxy port no longer matches the verified endpoint. '
+                         'Detect and link Xianniu again in the desktop app; the saved port was not changed.')
+
+
 async def serve(config, desktop_child=False):
     from .proxy import ProxyServer
     stopped = asyncio.Event()
@@ -24,7 +56,30 @@ async def serve(config, desktop_child=False):
     proxy = None
     control = None
     publisher = None
+    if desktop_child:
+        from .runtime import MAX_COMMAND_BYTES
+        def accept_when_ready(line):
+            if control is not None:
+                control.accept(line)
+        def watch_parent():
+            try:
+                while True:
+                    line = sys.stdin.readline(MAX_COMMAND_BYTES + 2)
+                    if not line or line.strip() == 'stop' or len(line) > MAX_COMMAND_BYTES:
+                        return
+                    loop.call_soon_threadsafe(accept_when_ready, line)
+            except (OSError, UnicodeError):
+                pass
+            finally:
+                stop()
+        # EOF/Stop must cancel ownership even while a fresh Xianniu capability
+        # check is in flight. No listener should appear after the parent exits.
+        threading.Thread(target=watch_parent, daemon=True).start()
     try:
+        if config.get('existing_proxy_provider') == 'xianniu':
+            await asyncio.to_thread(validate_existing_proxy, config)
+            if stopped.is_set():
+                return
         if config.get('existing_proxy_port'):
             from .existing_proxy import ExistingProxy
             core = ExistingProxy(config)
@@ -34,25 +89,8 @@ async def serve(config, desktop_child=False):
         await proxy.start()
         core.start_monitor()
         if desktop_child:
-            from .runtime import RuntimeControl, MAX_COMMAND_BYTES
+            from .runtime import RuntimeControl
             control = RuntimeControl(proxy, core)
-            def watch_parent():
-                try:
-                    while True:
-                        line = sys.stdin.readline(MAX_COMMAND_BYTES + 2)
-                        if not line or line.strip() == 'stop':
-                            return
-                        if len(line) > MAX_COMMAND_BYTES:
-                            # Refuse oversized input; never interpret its suffix.
-                            return
-                        loop.call_soon_threadsafe(control.accept, line)
-                except (OSError, UnicodeError):
-                    # A broken/invalid private control pipe ends ownership.
-                    # Never leave the listener running after its reader exits.
-                    pass
-                finally:
-                    stop()
-            threading.Thread(target=watch_parent, daemon=True).start()
             async def publish_status():
                 while True:
                     control.publish()

@@ -12,6 +12,12 @@ changed. See [engine selection and compatibility limits](docs/desktop.md#choose-
 
 Windows GUI users do not need to select a core: a packaged default is discovered automatically, and Start sharing prepares the pinned default if absent. Paste/import and Start remain separate. Linked Clash uses only Game mode and does not spawn another core. See [desktop workflow](docs/desktop.md).
 
+This branch also includes a Windows **Detect and share Xianniu proxy** action.
+It reuses only an identified loopback HTTP CONNECT endpoint that passes a TLS
+certificate check. Driver-only acceleration and UDP are not supported; a passed
+proxy check does not establish game acceleration. See the
+[Xianniu Windows integration notes](docs/xianniu-windows.zh-CN.md).
+
 ## Run from source
 
 Requires Python 3.10+ and a separately obtained, trusted Mihomo executable for your

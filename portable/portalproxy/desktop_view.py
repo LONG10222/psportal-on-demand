@@ -528,6 +528,14 @@ class DesktopView:
         self.link_button.pack(side='left')
         self.link_var = tk.StringVar()
         ttk.Label(link, textvariable=self.link_var, style='Portal.CardNote.TLabel', wraplength=350).pack(side='left', padx=12)
+        if sys.platform == 'win32':
+            accelerator = ttk.Frame(quick, style='Portal.Card.TFrame')
+            accelerator.grid(row=14, column=0, columnspan=3, sticky='ew', pady=(12, 0))
+            self.xianniu_button = self.button(accelerator, 'Detect and share Xianniu proxy', command=self.app.use_xianniu_proxy)
+            self.xianniu_button.pack(anchor='w')
+            self.xianniu_note_var = tk.StringVar()
+            ttk.Label(accelerator, textvariable=self.xianniu_note_var, style='Portal.CardNote.TLabel',
+                      wraplength=680, justify='left').pack(anchor='w', pady=(8, 0))
         help_row = ttk.Frame(quick, style='Portal.Card.TFrame')
         help_row.grid(row=12, column=0, columnspan=3, sticky='w', pady=(12, 0))
         self.unlink_button = self.button(help_row, 'Use independent core', command=self.app.unlink_proxy)
@@ -818,7 +826,12 @@ class DesktopView:
             self._preview_rendered = self.preview
         product_mode = self.app.product_mode()
         linked = bool(self.app.raw.get('existing_proxy_port'))
-        idle = not self.app.importing and not self.app.setting_up and self.app.backend.process is None
+        idle = (not self.app.importing and not self.app.setting_up and self.app.backend.process is None
+                and not getattr(self.app, 'xianniu_checking', False))
+        if hasattr(self, 'xianniu_button'):
+            self.xianniu_button.configure(state='normal' if idle else 'disabled')
+            self.xianniu_note_var.set(self.tr(getattr(self.app, 'xianniu_message', '') or
+                'Start Xianniu acceleration, then check its proxy. TCP relay only; UDP and transparent gateway are unavailable.'))
         for mode, button in self.product_mode_buttons.items():
             button.configure(text=self.tr(product_modes.LABELS[mode]),
                 state='normal' if idle and (not linked or mode == 'game') else 'disabled')
@@ -829,7 +842,9 @@ class DesktopView:
             'Paste once to import and save. Sharing starts only when you click Start sharing.'))
         from pathlib import Path
         executable = self.app.vars['native_path' if self.app.vars['engine_mode'].get() == 'embedded' else 'core_path'].get().strip()
-        self.core_note_var.set(self.tr('Existing proxy selected; nodes and core are managed in Clash.') if linked else
+        self.core_note_var.set(self.tr('Xianniu proxy selected. Keep its acceleration running; TCP relay only.')
+            if linked and self.app.raw.get('existing_proxy_provider') == 'xianniu' else
+            self.tr('Existing proxy selected; nodes and core are managed in Clash.') if linked else
             self.tr(self.app.core_message) if self.app.core_message else
             self.tr(core_readiness_note(self.app.vars['engine_mode'].get(), executable)))
         auto_link = bool(self.app.existing_proxy and not self.app.vars['subscription_url'].get().strip()
@@ -860,7 +875,7 @@ class DesktopView:
             self.quota_bar.configure(value=percent)
             self.quota_bar.grid()
         existing = self.app.existing_proxy
-        if existing or linked:
+        if (existing or linked) and self.app.raw.get('existing_proxy_provider') != 'xianniu':
             self.clash_card.grid()
             self.clash_var.set(self.tr('Existing proxy selected; nodes and core are managed in Clash.' if linked else
                 'Local proxy detected. Start sharing to reuse it without importing a subscription or choosing a core.') +

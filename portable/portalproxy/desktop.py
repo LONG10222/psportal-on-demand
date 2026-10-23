@@ -360,6 +360,10 @@ class DesktopApp:
         self.subscription_message = ''
         self.core_message = ''
         self.setting_up = False
+        self.xianniu_checking = False
+        self.xianniu_message = ''
+        self.xianniu_events = queue.Queue()
+        self._xianniu_generation = 0
         self.setup_events = queue.Queue()
         self.discovery_events = queue.Queue()
         self._discovery_pending = False
@@ -535,6 +539,7 @@ class DesktopApp:
         if self.closing or self.importing or self.setting_up or self.backend.process is not None:
             return
         self.raw.pop('existing_proxy_port', None)
+        self.raw.pop('existing_proxy_provider', None)
         self.raw.pop('source_provenance', None)
         previous = self.raw.pop('linked_previous_source', None)
         if isinstance(previous, dict):
@@ -628,7 +633,7 @@ class DesktopApp:
                     self.view.subscription_info = read_config(metadata)
             except (ValueError, OSError):
                 pass
-        elif self.raw.get('existing_proxy_port'):
+        elif self.raw.get('existing_proxy_port') and self.raw.get('existing_proxy_provider') != 'xianniu':
             self.view.subscription_info = self.clash_info
         self.loading = True
         for key, variable in self.vars.items():
@@ -786,7 +791,7 @@ class DesktopApp:
         else:
             self._discovery_pending = False
             self.existing_proxy, self.clash_info = proxy, info
-            if self.raw.get('existing_proxy_port'):
+            if self.raw.get('existing_proxy_port') and self.raw.get('existing_proxy_provider') != 'xianniu':
                 self.view.subscription_info = info
             self.view.refresh()
         if not self.closing and not self._discovery_pending and time.monotonic() >= self._next_discovery:
@@ -852,6 +857,7 @@ class DesktopApp:
             if str(path.absolute()) != (self.raw.get('profile_file') or self.raw.get('subscription_file')):
                 self.raw.pop('node_policies', None)
             self.raw.pop('existing_proxy_port', None)
+            self.raw.pop('existing_proxy_provider', None)
             self.raw['source_provenance'] = dict(kind='local', path=str(path.absolute()))
             if origin_url is not None:
                 self.raw['source_provenance'].update(kind='subscription', url=origin_url)
@@ -879,6 +885,10 @@ class DesktopApp:
 
     def quick_start(self):
         if self.importing or getattr(self, 'setting_up', False) or self.backend.process is not None:
+            return
+        if getattr(self, 'xianniu_checking', False): return
+        if self.raw.get('existing_proxy_provider') == 'xianniu':
+            self.use_xianniu_proxy()
             return
         current_url = self.vars['subscription_url'].get().strip()
         if self.raw.get('existing_proxy_port') and not current_url:
@@ -990,13 +1000,86 @@ class DesktopApp:
 
     def use_existing_proxy(self):
         if self.importing or getattr(self, 'setting_up', False) or self.backend.process is not None: return
-        from .existing_proxy import detect_system_proxy, read_clash_accounting
+        if getattr(self, 'xianniu_checking', False): return
+        from .existing_proxy import detect_system_proxy
         self.existing_proxy = detect_system_proxy()
         if not self.existing_proxy:
             from tkinter import messagebox
             messagebox.showinfo(self._t('Existing proxy'), self._t('No active loopback HTTP system proxy was detected.'), parent=self.root)
             return
-        port = self.existing_proxy['port']
+        self._link_existing_proxy(self.existing_proxy)
+
+    def use_xianniu_proxy(self, action='link'):
+        """Verify one identified client's proxy off the UI thread before sharing."""
+        if (self.closing or self.importing or self.setting_up or self.backend.process is not None
+                or getattr(self, 'xianniu_checking', False)):
+            return
+        self.xianniu_checking = True
+        self._xianniu_generation = getattr(self, '_xianniu_generation', 0) + 1
+        generation = self._xianniu_generation
+        self.xianniu_message = 'Checking Xianniu proxy…'
+        owner = self.path
+        self.running_controls(True)
+        def worker():
+            from .windows_accelerator import detect_xianniu
+            try:
+                result = detect_xianniu(probe=True)
+            except Exception:
+                # Do not expose command output, application settings or credentials.
+                result = {'reason': 'Xianniu inspection failed. Check the client and retry.'}
+            self.xianniu_events.put((owner, generation, action, result))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _poll_xianniu(self):
+        if not hasattr(self, 'xianniu_events'):
+            return
+        try:
+            owner, generation, action, result = self.xianniu_events.get_nowait()
+        except queue.Empty:
+            return
+        if generation != self._xianniu_generation:
+            return
+        self.xianniu_checking = False
+        if self.closing:
+            return
+        self.running_controls(False)
+        if owner != self.path or self.backend.process is not None:
+            return
+        endpoint = result.get('verified_endpoint')
+        valid = (result.get('probe_passed') is True and isinstance(endpoint, dict)
+                 and endpoint.get('host') == '127.0.0.1'
+                 and type(endpoint.get('port')) is int and 1024 <= endpoint['port'] <= 65535)
+        if not valid:
+            from tkinter import messagebox
+            self.xianniu_message = ('Start Xianniu and enable the intended game or console acceleration first.'
+                if not result.get('running') else
+                'No verified HTTP CONNECT proxy was found. Driver or SOCKS mode cannot be shared by this relay.')
+            self.view.refresh()
+            messagebox.showinfo(self._t('Xianniu LAN relay'), self._t(self.xianniu_message), parent=self.root)
+            return
+        self.xianniu_message = 'Proxy tunnel verified. TCP only; game acceleration and UDP are not verified.'
+        self._xianniu_starting = True
+        try:
+            if action == 'manual':
+                # Advanced Start preserves the selected LAN adapter and allowlist.
+                from tkinter import messagebox
+                try:
+                    self._quick_rollback = self._quick_snapshot(None)
+                except (OSError, ValueError):
+                    messagebox.showerror(self._t('Cannot save configuration'),
+                        self._t('The configuration could not be saved. Choose a writable location and check file permissions.'), parent=self.root)
+                    return
+                self.raw['existing_proxy_port'] = endpoint['port']
+                if self.start() is False:
+                    self._rollback_quick_start()
+            else:
+                self._link_existing_proxy(endpoint, provider='xianniu')
+        finally:
+            self._xianniu_starting = False
+
+    def _link_existing_proxy(self, endpoint, provider='system'):
+        from .existing_proxy import read_clash_accounting
+        port = endpoint['port']
         try:
             snapshot = self._quick_snapshot(None)
         except (OSError, ValueError):
@@ -1027,7 +1110,8 @@ class DesktopApp:
         self.vars['selection_mode'].set('auto')
         self.vars['preferred_node'].set('')
         self.raw['existing_proxy_port'] = port
-        self.clash_info = read_clash_accounting()
+        self.raw['existing_proxy_provider'] = provider
+        self.clash_info = read_clash_accounting() if provider == 'system' else None
         self.view.subscription_info = self.clash_info
         self.view.refresh()
         if self.start() is False:
@@ -1317,6 +1401,8 @@ class DesktopApp:
     def running_controls(self, running: bool):
         self.view.quick_button.configure(state='disabled' if running else 'normal')
         self.view.link_button.configure(state='disabled' if running else 'normal')
+        if hasattr(self.view, 'xianniu_button'):
+            self.view.xianniu_button.configure(state='disabled' if running else 'normal')
         self.start_button.configure(state='disabled' if running else 'normal')
         self.save_button.configure(state='disabled' if running else 'normal')
         self.choose_button.configure(state='disabled' if running else 'normal')
@@ -1329,9 +1415,13 @@ class DesktopApp:
 
     def start(self):
         from tkinter import messagebox
-        if self.closing or self.importing or getattr(self, 'setting_up', False):
+        if (self.closing or self.importing or getattr(self, 'setting_up', False)
+                or getattr(self, 'xianniu_checking', False)):
             return False
         if self.backend.process is not None and self.backend.process.poll() is None:
+            return False
+        if self.raw.get('existing_proxy_provider') == 'xianniu' and not getattr(self, '_xianniu_starting', False):
+            self.use_xianniu_proxy(action='manual')
             return False
         if self.vars['subscription_url'].get().strip() and not self.subscription_ready():
             self.subscription_message = 'Link changed. Press Enter or paste to import before starting.'
@@ -1367,6 +1457,12 @@ class DesktopApp:
         return True
 
     def stop(self):
+        if getattr(self, 'xianniu_checking', False):
+            self._xianniu_generation += 1
+            self.xianniu_checking = False
+            self.xianniu_message = 'Xianniu check cancelled.'
+            self.running_controls(False)
+            return
         if self.importing:
             self.cancel_preparation()
             return
@@ -1428,6 +1524,7 @@ class DesktopApp:
 
     def poll(self):
         self._poll_setup()
+        self._poll_xianniu()
         self._poll_discovery()
         self._poll_import()
         self._poll_updates()
