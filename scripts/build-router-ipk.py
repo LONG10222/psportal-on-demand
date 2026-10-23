@@ -55,7 +55,8 @@ def build(destination, version):
                            ('portalproxy-core.init', 'etc/init.d/portalproxy-core')]:
         add('files/' + source, target, 0o700)
     add('files/portalproxy.config', 'etc/config/portalproxy', 0o600)
-    for source in ('controller/portalproxy.lua', 'model/cbi/portalproxy.lua', 'view/portalproxy/onboarding.htm'):
+    for source in ('controller/portalproxy.lua', 'model/cbi/portalproxy.lua',
+                   'view/portalproxy/onboarding.htm', 'view/portalproxy/dashboard.htm'):
         add('luci/' + source, 'usr/lib/lua/luci/' + source, 0o644)
     add('LICENSE', 'usr/share/licenses/starpass/LICENSE', 0o644)
     payload = tar_gz(entries)

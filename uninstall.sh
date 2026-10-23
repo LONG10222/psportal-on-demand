@@ -22,7 +22,8 @@ safe_target() {
 for path in "$ROOT" "$ROOT/etc/init.d/portalproxy" "$ROOT/etc/init.d/portalproxy-core" \
     "$ROOT/usr/sbin/portalproxy" "$ROOT/usr/libexec/portalproxy" \
     "$ROOT/usr/lib/lua/luci/controller/portalproxy.lua" "$ROOT/usr/lib/lua/luci/model/cbi/portalproxy.lua" \
-    "$ROOT/usr/lib/lua/luci/view/portalproxy/onboarding.htm" "$ROOT/etc/config/portalproxy" "$ROOT/etc/portalproxy"; do
+    "$ROOT/usr/lib/lua/luci/view/portalproxy/onboarding.htm" "$ROOT/usr/lib/lua/luci/view/portalproxy/dashboard.htm" \
+    "$ROOT/etc/config/portalproxy" "$ROOT/etc/portalproxy"; do
     safe_target "$path"
 done
 mkdir -p "${ROOT:-/tmp}"
@@ -42,6 +43,7 @@ rm -f "$ROOT/etc/init.d/portalproxy" "$ROOT/etc/init.d/portalproxy-core" "$ROOT/
 rm -rf "$ROOT/usr/libexec/portalproxy"
 rm -f "$ROOT/usr/lib/lua/luci/controller/portalproxy.lua" "$ROOT/usr/lib/lua/luci/model/cbi/portalproxy.lua"
 rm -f "$ROOT/usr/lib/lua/luci/view/portalproxy/onboarding.htm"
+rm -f "$ROOT/usr/lib/lua/luci/view/portalproxy/dashboard.htm"
 if [ "$PURGE" = 1 ]; then
     rm -f "$ROOT/etc/config/portalproxy"
     rm -rf "$ROOT/etc/portalproxy"

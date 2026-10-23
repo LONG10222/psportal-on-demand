@@ -85,6 +85,11 @@ equal(#scenario.commands,0); equal(scenario.commit,0)
 for _,key in ipairs({'listen_ip','client_ip','local_dns','listen_port','idle_seconds','bootstrap_dns'}) do
     assert(f.fields[key], 'first-install field missing: '..key)
 end
+equal(f.template, 'portalproxy/dashboard')
+equal(f.fields.client_ip.datatype, 'ip4addr')
+equal(f.fields.listen_port.datatype, 'range(1024,65535)')
+equal(f.fields.idle_seconds.datatype, 'range(10,3600)')
+equal(f.portal_fields._start, f.fields._start)
 equal(f.fields._game_mode.kind, DummyValue)
 equal(f.fields._game_mode.template, 'portalproxy/onboarding')
 assert(f.fields._game_mode.value:find('does not prove Internet access',1,true))
@@ -92,11 +97,11 @@ assert(f.fields._game_mode.value:find('Game UDP and whole-device routing are not
 assert(f.fields._game_mode.value:find('Turn off the device HTTP proxy when finished',1,true))
 equal(f.fields.subscription_url:cfgvalue(), '')
 assert(not f.description:find('token-secret',1,true))
-assert(f.fields._status.value:find('Sleeping',1,true))
+assert(f.fields._status.value:find('核心休眠',1,true))
 equal(#f.fields.preferred_node.choices,2)
 equal(f.fields.preferred_node.default,'JP exact')
 equal(f:handle(FORM_NODATA,{}),true); equal(#scenario.commands,0)
-assert(f.fields._update.description:find('interrupt active Portal connections',1,true))
+assert(f.fields._update.description:find('中断连接',1,true))
 
 f=load({user='nobody'})
 equal(scenario.status,403); equal(next(f.fields),nil); equal(f.handle,nil)
@@ -127,7 +132,7 @@ assert(not scenario.redirect:find('secret',1,true))
 f=load(); post('_save'); data={selection_mode='fixed',preferred_node='',subscription_url='https://private.example/secret'}
 f:handle(FORM_VALID,data)
 equal(scenario.commit,0); equal(next(scenario.writes),nil); equal(data.subscription_url,nil)
-assert(f.errmessage:find('No changes were saved',1,true))
+assert(f.errmessage:find('未保存',1,true))
 f=load({changes={portalproxy={main={preferred_node='pending'}}}}); post('_save')
 f:handle(FORM_VALID,{selection_mode='auto',preferred_node='HK'})
 equal(scenario.commit,0); equal(next(scenario.writes),nil)
@@ -145,26 +150,26 @@ f=load({callerror=true}); post('_apply'); f:handle(FORM_VALID,{})
 assert(scenario.redirect:find('result=apply_failed',1,true))
 
 f=load({snapshot={updated_at='bad',current='bad',nodes={false,{}, {name='safe'}}}})
-assert(f.fields._status.value:find('stale cache',1,true))
+assert(f.fields._status.value:find('历史缓存',1,true))
 equal(#f.fields.preferred_node.choices,1)
-f=load({snapshot={updated_at=0/0}}); equal(f.fields._updated.value,'No cached status')
-f=load({snapshot={updated_at=123.5}}); equal(f.fields._updated.value,'No cached status')
+f=load({snapshot={updated_at=0/0}}); equal(f.fields._updated.value,'尚无快照')
+f=load({snapshot={updated_at=123.5}}); equal(f.fields._updated.value,'尚无快照')
 f=load({params={result='updated'}})
-equal(#scenario.commands,0); assert(f.message:find('Subscription cache updated',1,true))
-assert(f.message:find('change live routes',1,true))
+equal(#scenario.commands,0); assert(f.message:find('订阅缓存已更新',1,true))
+assert(f.message:find('重载节点',1,true))
 
 f=load({options={core_mode='openclash',selection_mode='auto',preferred_node='',subscription_url=''},
     snapshot={core_mode='openclash',updated_at=os.time(),ready=true,route_policy='rule',groups={{name='GLOBAL',type='Selector',selected='DIRECT'}},nodes={}}})
 equal(#scenario.commands,0); equal(scenario.commit,0)
 equal(f.fields.subscription_url:cfgvalue(),''); equal(f.fields.subscription_url.dependency[2],'standalone'); equal(f.fields.preferred_node.dependency[2],'standalone'); equal(f.fields._current,nil)
 equal(f.fields._update,nil); equal(f.fields._routing.value,'rule')
-assert(f.fields._status.value:find('Internet and node health unknown',1,true))
+assert(f.fields._status.value:find('外网与节点健康待验证',1,true))
 assert(f.fields._openclash.value:find('OpenClash',1,true))
 post('_update'); f:handle(FORM_VALID,{})
 equal(#scenario.commands,0); equal(scenario.commit,0)
 assert(scenario.redirect:find('result=update_failed',1,true))
 f=load({options={core_mode='openclash'},snapshot={updated_at=os.time(),ready=true,current={name='old'}}})
-assert(f.fields._status.value:find('stale cache',1,true))
+assert(f.fields._status.value:find('历史缓存',1,true))
 equal(f.fields._current,nil)
 f=load(); post('_save'); f:handle(FORM_VALID,{core_mode='openclash'})
 equal(scenario.writes.core_mode,'openclash'); equal(scenario.writes.preferred_node,'JP exact')
@@ -185,6 +190,27 @@ for _,action in ipairs({'_start','_stop','_refresh'}) do
     f=load(); post(action,'wrong'); f:handle(FORM_VALID,{})
     equal(#scenario.commands,0); equal(scenario.status,403)
 end
+
+-- Empty optional values are absent from SimpleForm.data after CBI parsing.
+f=load(); post('_save')
+scenario.params['cbid.portalproxy_ui.1.preferred_node']=''
+f:handle(FORM_VALID,{core_mode='standalone',selection_mode='auto'})
+equal(scenario.writes.preferred_node,''); equal(scenario.commit,1)
+f=load(); post('_save')
+scenario.params['cbid.portalproxy_ui.1.preferred_node']=''
+f:handle(FORM_VALID,{core_mode='standalone',selection_mode='fixed'})
+equal(scenario.commit,0); assert(f.errmessage:find('未保存',1,true))
+f=load({options={core_mode='openclash',preferred_node='keep hidden',subscription_url='https://fixture.example/sub'}})
+post('_save'); scenario.params['cbid.portalproxy_ui.1.preferred_node']=''
+f:handle(FORM_VALID,{core_mode='openclash'})
+equal(scenario.writes.preferred_node,'keep hidden')
+f=load({options={core_mode='standalone',selection_mode='auto',preferred_node='',subscription_url='https://fixture.example/sub',bootstrap_dns='8.8.8.8',local_dns='192.168.50.1'}})
+post('_save'); scenario.params['cbid.portalproxy_ui.1.bootstrap_dns']=''
+f:handle(FORM_VALID,{core_mode='standalone',local_dns='192.168.50.1'})
+equal(scenario.writes.bootstrap_dns,'192.168.50.1')
+f=load(); post('_save'); f:handle(FORM_INVALID,{})
+equal(scenario.commit,0); equal(#scenario.commands,0)
+assert(f.errmessage:find('IP',1,true))
 
 loadfile, io.open = real_loadfile, real_open
 assert(loadfile('luci/controller/portalproxy.lua')) -- syntax only; no live controller

@@ -115,6 +115,7 @@ if [ -d "$ROOT/usr/lib/lua/luci" ]; then
     stage "$BASE/luci/controller/portalproxy.lua" usr/lib/lua/luci/controller/portalproxy.lua 644
     stage "$BASE/luci/model/cbi/portalproxy.lua" usr/lib/lua/luci/model/cbi/portalproxy.lua 644
     stage "$BASE/luci/view/portalproxy/onboarding.htm" usr/lib/lua/luci/view/portalproxy/onboarding.htm 644
+    stage "$BASE/luci/view/portalproxy/dashboard.htm" usr/lib/lua/luci/view/portalproxy/dashboard.htm 644
 fi
 # Preserve all installed project files, including old launchers and LuCI, not
 # just UCI/core data. Archive remains local and may contain subscription secrets.

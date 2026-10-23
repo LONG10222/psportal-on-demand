@@ -4,6 +4,38 @@
 `fix/router-install-validation-20261023`。问题记录：[Issue #26](https://github.com/LONG10222/psportal-on-demand/issues/26)。
 保留累计功能，不合并旧 main，不改 Android、Windows 或 Apple 客户端。
 
+## Windows 工作流参考与本轮界面简化
+
+参考 `portable/portalproxy/desktop_view.py` 的概览、局域网共享、节点与高级选项分区；只调整路由器界面。
+首页保留真实共享状态、保存的设备代理地址和启停。接入设置、策略组/节点快照和帮助默认折叠；
+长表限高滚动、节点名称本地筛选，新增中文短文案。保留原有保存、应用、订阅更新、快照刷新和独立节点策略。
+OpenClash 联动继续只读，不用独立订阅字段混淆联动设置。
+
+保留 CBI 的会话/POST/CSRF、动态依赖和类型校验；自定义布局显式赋予字段渲染序号和稳定父容器。
+未保存提示在 LuCI 异步控件就绪后建立基线，避免首次加载误报；未保存时暂停启动/应用/刷新/更新，停止始终可用。
+回车默认保存，不会隐式启动。保存不启停；应用可能中断已启用的共享。可选节点名和引导 DNS 的显式空值不再被旧值吞掉，
+联动时隐藏的独立节点偏好仍保留。真实浏览器验证了模式动态显示、未保存保护、首次加载以及窄屏布局。
+
+## 安卓模拟器的实际应用层测试
+
+用户暂时不在实体设备旁，改用本机已有 MuMu 的专用 `StarPassValidation` 实例（Android 15，虚拟 WLAN/NAT）。
+`tests/android_proxy_probe.py` 使用已有官方 SDK/JDK 构建无界面的临时 Instrumentation 应用；
+不是 shell curl，也未给 URL.openConnection 显式指定代理。它检查系统 ProxySelector 的 HTTP 代理及正常请求的 usingProxy，
+使用正常 TLS 校验访问固定公共测试端点。未安装游戏、登录账号或导入证书。
+
+| 阶段 | 实际结果 |
+| --- | --- |
+| 共享开启 | Android HttpURLConnection：HTTP 200、HTTPS 204，usingProxy=true |
+| 共享停止 | 系统仍配置代理，但这个客户端的 HTTP 和 HTTPS 都回退直连 |
+| 重新启动 | HTTP 200、HTTPS 204，再次 usingProxy=true |
+| 清理 | 每轮核对 5 个全局代理键恢复原值，卸载临时探针；路由器共享停止，OpenClash 原进程不变 |
+
+最初的停止测试按“应阻断”断言失败，进一步定位为 Android 客户端直连回退。后续 `--outage` 模式记录这个观测，
+不再把停止代理等同断网保护；不能把探针成功解释成“停止时不会漏流量”。虚拟机经宿主机接入 N1，
+没有把虚拟 IP 当成实体设备地址，也未修改物理 Wi-Fi、网关、DNS或扩大白名单。
+手动系统代理只覆盖遵守它的应用，不代表游戏 UDP、PS Remote Play、Quest 串流或物理无线质量。
+系统代理与模拟器底层代理的区别可参考 [Android 官方代理说明](https://developer.android.com/studio/run/emulator-networking-proxy)。
+
 ## 已复现并修复
 
 - **首次唤醒失败**：真实 nixio 的 WNOHANG 未结束结果为 `false`，并非仅为 `0`。保留等待，避免误判退出。
