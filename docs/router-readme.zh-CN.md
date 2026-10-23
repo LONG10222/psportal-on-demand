@@ -1,145 +1,145 @@
-# 星渡 StarPass
+# 星渡 StarPass · 软路由
 
-[![CI](https://github.com/LONG10222/psportal-on-demand/actions/workflows/check.yml/badge.svg)](https://github.com/LONG10222/psportal-on-demand/actions/workflows/check.yml)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
+在 OpenWrt / iStoreOS 上，为支持手动 HTTP 代理的设备提供按需共享。
 
-简体中文 | [English](../README.md)
+简体中文 · [English](router-readme.en.md) · [项目首页](../README.md) · [实机验收](router-validation-2026-10-23.zh-CN.md)
 
-**星渡 StarPass** 是从 PS Portal 局域网代理延伸出的跨平台按需代理开发版，
-保留仓库、程序标识和原项目来源。新界面将**游戏设备、混合、本机 Clash**用途分开；
-用途模式不等于规则／全局／直连，也不代表任意游戏 UDP 加速。
-详见[三种用途、平台对照与验证边界](../docs/starpass-platform-modes.zh-CN.md)。
-桌面不会自动修改系统代理、VPN、DNS 或防火墙；Android 本机代理仍需系统 VPN 授权。
+## 选择模式
 
+| 模式 | 核心与节点 | 空闲时 |
+| --- | --- | --- |
+| 独立按需核心 | 星渡管理自己的 Mihomo、HTTPS 订阅和节点策略 | 回收自己的核心；外网请求再次唤醒 |
+| 复用 OpenClash | 复用已运行的代理；订阅、节点、规则和测速在 OpenClash 管理 | 只回收星渡自己的会话，OpenClash 继续运行 |
 
-PS Portal 的 OpenWrt / iStoreOS 按需代理。独立模式访问外网时启动自己的 Mihomo，空闲 60 秒后关闭；新增 OpenClash 联动模式复用已运行的核心，空闲只关闭本插件自己的连接。
+两种模式都限制为一个允许的设备 IPv4，默认端口 `10081`、空闲超时 `60` 秒。安装和保存只做准备，点击“启动共享”才启动并启用开机自启。
 
-- **按需启停**：监听器开机自启，代理核心由外网请求唤醒。
-- **节点偏好**：自己的订阅支持自动地区回退、首选后回退或固定节点；可选登录后的 LuCI 页面。
-- **单设备接入**：通过 IP 白名单限制客户端，Portal 手动设置 HTTP 代理即可使用。
-- **OpenClash 联动**：只读发现回环入口，复用已有订阅、节点和规则，不启动/停止外部核心；节点管理留在 OpenClash
-- **独立运行**：使用独立的核心和配置，OpenClash 无需启动；局域网请求直接连接。
+## 下载
 
-> 第二阶段仍需固定版本 Mihomo/OpenWrt/LuCI 实机验收，详见[节点偏好与验收](../docs/node-preferences.zh-CN.md)。
+- [已验证代码 5da0753 的构建](https://github.com/LONG10222/psportal-on-demand/actions/runs/39958952749)：在页面底部 Artifacts 下载 `starpass-router-source-5da075302716ec1199bdefcb110d6ae43aff1d46`，解开外层 ZIP。
+- [当前开发分支构建](https://github.com/LONG10222/psportal-on-demand/actions/workflows/check.yml?query=branch%3Afix%2Frouter-install-validation-20261023)：确认目标提交的 checks 成功；文档更新不等于重新完成设备验收。
+- [完整匹配源码](https://github.com/LONG10222/psportal-on-demand/archive/5da075302716ec1199bdefcb110d6ae43aff1d46.zip) · [草稿 PR #27](https://github.com/LONG10222/psportal-on-demand/pull/27)。
 
-## 桌面与移动端开发版
+GitHub 下载产物可能需要登录，Actions 产物有保存期限。过期后可从对应提交重新构建，步骤见下文；[Releases](https://github.com/LONG10222/psportal-on-demand/releases) 中的旧测试归档不包含本轮软路由改动。
 
-路由器有独立核心和外部 OpenClash 联动两种归属模式。Linux、Windows、macOS 请看[桌面使用说明](../portable/docs/desktop.md)；共享原生引擎和移动端请看 [native/README.md](../native/README.md)。不要在桌面系统执行路由器安装脚本。
+| 文件 | 用途 |
+| --- | --- |
+| `luci-app-starpass.ipk` / `.sha256` | opkg 固件的无核心 LuCI 包及校验值 |
+| `starpass-router-source.tar.gz` / `.sha256` | 源码安装器、测试和文档及校验值 |
 
-桌面默认使用独立 Mihomo，也可在同一界面选择实验性的内置共享引擎。Android 由前台服务运行；iOS 默认前台托管；iOS 26+ 限时后台实验仍需实际授权与真机验收。请先看[当前验证结果与平台限制](../docs/portable-status.zh-CN.md)。原生引擎遵循 GPL-3.0，原路由器与包装界面遵循 MIT；分发原生二进制须附带完整对应源码。
+IPK 由包管理器安装 Lua/LuCI 依赖，不包含 Mihomo。OpenWrt apk 固件使用源码安装器；本轮没有原生 OpenWrt APK 或 iStore 上架包。
 
-## OpenClash 联动快速开始
+## 安装
 
-从本草稿 PR 精确提交或 Actions 的 `starpass-router-source-…` 下载源码安装包；旧 main 压缩包尚不含本次更新。
-无需复制核心：`sh install.sh --openclash`，然后 `portalproxy setup` 选择 `openclash`。
-在 OpenClash 内先配置并启动订阅／节点；本插件仅设置 LAN 地址、单设备白名单、HTTP 端口与空闲时间。
-LuCI 中可选择归属模式，保存后明确应用。已有安装不会被安装参数静默改模式。
+### opkg 固件
 
-[详细联动指南、控制器认证、fake-IP 和验证边界](../docs/openclash-linked.zh-CN.md)。
-OpenClash 的最终规则可以选 DIRECT，看到的来源通常是路由器。HTTP 入口不承载游戏 UDP。
-本次提供无核心的 `luci-app-starpass` IPK（仅 opkg 固件）和源码安装器。OpenWrt 25.12/apk 固件使用源码安装器，不能重命名 IPK。尚未上架 iStore；[2026-10-23 实机验证与剩余项](router-validation-2026-10-23.zh-CN.md)。
-
-已有 opkg 固件可先核对校验值，再执行 `opkg install /tmp/luci-app-starpass.ipk`，在“服务 → StarPass / 星渡”选择归属、填设备地址并保存，之后单独点“启动共享”。安装和保存均不隐式启动。
-
-## 独立模式快速开始
-
-### 1. 准备
-
-- 一台 OpenWrt / iStoreOS 软路由，带 Lua 5.1、LuCI 和 procd。
-- 与设备架构匹配的 [Mihomo 核心](https://github.com/MetaCubeX/mihomo/releases)。已有 OpenClash 核心可以直接复用。
-- 自己的 HTTPS Clash/Mihomo YAML 订阅。
-- 在主路由 DHCP 中为 Portal 保留一个 IP 地址。
-
-### 2. 安装
-
-SSH 登录软路由，以 root 执行：
+把 IPK 和配套校验文件上传到路由器 `/tmp`，以 root SSH 执行：
 
 ```sh
 cd /tmp
-# 从本开发分支 Actions 下载并核对 starpass-router-source.tar.gz
-tar -xzf starpass-router-source.tar.gz
-cd starpass-router-source
-sh install.sh
-portalproxy setup
+sha256sum -c luci-app-starpass.sha256
+opkg install ./luci-app-starpass.ipk
 ```
 
-安装器会查找已有项目核心、`/etc/openclash/core/clash_meta` 和 `/usr/bin/mihomo`。需要指定其他核心时，把安装命令换成：
+在包管理器按固件源安装依赖后，打开 **服务 → StarPass / 星渡**。LuCI 使用 legacy CBI，需要 `luci-compat`；安装器会检查现有环境。首次安装不启动共享。
 
-```sh
-sh install.sh --core /path/to/mihomo
-```
+### 源码安装器
 
-缺少 Lua 依赖时安装：
+适用于源码管理的安装，或使用 apk 的固件。先按当前固件的软件源准备 Lua、LuCI/procd、nixio、jsonc、UCI Lua、curl 和 CA 依赖；不同包管理器的源和包不能混用。opkg 固件所需包名为：
 
 ```sh
 opkg update
 opkg install lua luci-compat luci-lib-nixio luci-lib-jsonc luci-lib-base libuci-lua curl ca-bundle
-# apk 固件使用 apk update / apk add 同名依赖，不混装 opkg 包
 ```
 
-### 3. 配置
+把源码 tar 和校验文件上传到 `/tmp` 后执行：
 
-运行 `portalproxy setup`，按提示填写。下面使用示例网段，地址换成自己的：
+```sh
+cd /tmp
+sha256sum -c starpass-router-source.sha256
+tar -xzf starpass-router-source.tar.gz
+cd starpass-router-source
+sh install.sh --openclash
+```
 
-| 向导提示 | 示例 |
+独立模式首次安装使用 `sh install.sh`；可用 `--core /可信路径/mihomo` 指定匹配架构的可执行核心。缺少核心时仍可先安装和保存；独立启动前会检查核心。已知的 `/usr/bin/mihomo`、`/etc/openclash/core/clash_meta` 可自动发现，详见[高级配置](guide.zh-CN.md)。联动时只复用已运行的 OpenClash 入口。
+
+已有 opkg 安装用 IPK 升级，源码安装器会拒绝直接覆盖包管理器文件。已有配置保持原模式，安装参数不会把它静默切换为联动。
+
+## 接入设备
+
+1. **先准备上游。** 复用模式先在 OpenClash 配好订阅、节点并启动；独立模式准备匹配架构的可信 Mihomo 和自己的 HTTPS Clash/Mihomo 订阅。
+2. **展开“接入设置”。** 选择核心模式并填写地址；为目标设备保留稳定的 DHCP 地址。下表仅为示例，不是你的实际网络。
+
+   | 字段 | 示例 |
+   | --- | --- |
+   | 允许接入的设备 IP | `192.168.50.30` |
+   | 路由器地址 | `192.168.50.2` |
+   | 代理端口 | `10081` |
+   | 局域网 DNS | 主路由或可用 LAN DNS，例如 `192.168.50.1` |
+
+3. **保存配置。** 独立模式的新订阅链接不会回显；留空保留原链接，保存后点“更新订阅”。有本地种子时也可用 CLI 导入，见[配置指南](guide.zh-CN.md)。
+4. **启动共享。** 页面明确显示监听状态。在设备的手动 HTTP 代理中填 `192.168.50.2:10081`，保持设备原有 IP、网关、DNS 设置。
+5. **验证目标功能。** 先确认设备网页访问，再测试具体游戏或串流。结束后点击“停止共享”，并关闭设备上的手动代理。
+
+首页保留共享状态、保存的代理地址和启停；“节点与策略”展示历史快照，可本地筛选。高级设置放空闲时间/引导 DNS，帮助保留接入和更新说明。
+
+| 操作 | 行为 |
 | --- | --- |
-| OpenWrt LAN IPv4 address | 软路由地址 `192.168.50.2` |
-| Portal reserved IPv4 address | Portal 保留地址 `192.168.50.30` |
-| LAN DNS server | 主路由 `192.168.50.1` |
-| Working bootstrap DNS | `192.168.50.1` |
-| HTTP proxy port | `10081` |
-| External idle timeout | `60` |
-| HTTPS subscription URL | 填自己的订阅，输入不回显 |
-| Optional local Clash/Mihomo YAML seed file | 可留空，或填已有配置文件路径 |
-| Outbound routing mark | 无 OpenClash 用 `0`；共存配置见[使用文档](../docs/guide.zh-CN.md#openclash-共存) |
+| 保存配置 | 校验并保存；不下载、不启停 |
+| 应用已保存配置 | 重启已启用的共享，可能中断连接；已停止的共享保持停止 |
+| 启动共享 / 停止共享 | 启动并启用自启 / 停止并取消自启 |
+| 刷新快照 | 读取就绪核心；不唤醒休眠核心，不测速 |
+| 更新订阅 | 独立模式显式下载缓存；运行中的核心可能重载节点并中断连接 |
 
-完成后仅保存配置，不启动、不重启。独立模式先导入种子或明确执行订阅更新，再运行 `portalproxy enable`（启动并开机自启）。已有监听器保存后仍使用先前应用的配置，明确 `apply` 才重启。
+未保存的修改会提示先保存，停止仍可用。独立节点策略支持自动地区回退、首选后回退和仅固定节点；名称需精确匹配。固定节点不可用时拒绝星渡转发的外网请求。联动节点和测速在 OpenClash 操作。
 
-在 **Portal → Wi-Fi → 当前网络 → 高级设置** 中：
+## 已验证与边界
 
-- IP、网关、DNS 保持自动。
-- HTTP 代理改为手动，地址填软路由 IP，端口填上面设置的端口。
-- 按示例应填 `192.168.50.2:10081`。
+N1 / iStoreOS 24.10.8 ARM64 已完成实际 LuCI 操作、opkg 安装/升级、真实 HTTP/HTTPS、并发、空闲恢复及 procd 故障恢复。最终 `5da0753` 的 28 个静态文件逐字节核对，CI 与本机安装包一致。
 
-没有导入本地种子时，先执行 `portalproxy subscription-update` 下载节点缓存，再连接网络。更新改为明确操作，不再自动定时下载；运行中的核心可能立即载入更新并切换线路。
+MuMu Android 15 的临时应用通过系统代理完成 HTTP 200、HTTPS 204，重启共享后恢复。停止共享时，该客户端回退直连；手动代理不能当作断网保护。每轮均还原模拟器代理并移除临时应用。
 
-## 常用命令
+HTTP/HTTPS CONNECT 只承载 TCP。实体 PS Portal／Quest 的游戏/串流、物理 Wi-Fi 质量、目标 N1 整机重启、长期运行和独立真实订阅恢复仍待验收。监听就绪、有连接或节点快照不等于外网/游戏成功。[完整证据与未完成项](router-validation-2026-10-23.zh-CN.md)。
 
-```sh
-portalproxy status     # 查看运行状态
-portalproxy nodes      # 查看缓存节点（不唤醒）
-portalproxy prefer preferred '日本 A'  # 保存精确首选名称
-portalproxy apply      # 应用设置，会中断连接
-portalproxy subscription-update  # 明确下载，运行中可能换线
-portalproxy logs       # 只读清洗后的本插件日志
-portalproxy diagnose   # 配置、状态与日志；不启动
-portalproxy setup      # 只保存配置
-portalproxy check      # 检查配置
-portalproxy restart    # 重启服务
-portalproxy stop       # 停止服务
-portalproxy disable    # 停止并取消开机启动
-portalproxy enable     # 启动并开启开机启动
-```
+## 更新与回退
 
-配置文件：`/etc/config/portalproxy`。修改后执行 `portalproxy check` 和 `portalproxy restart`。
+更新前停止共享，保留旧包/源码与配置。IPK 使用 `opkg install /tmp/新版.ipk`；源码安装使用匹配版本的 `sh install.sh`。两者均保留现有配置并在本机 `/etc/portalproxy-backups/` 保存私有升级备份；备份可能含订阅凭据，不要公开上传。
 
-## 更新与卸载
-
-IPK 安装使用 `opkg install /tmp/新版.ipk` 升级，`opkg remove luci-app-starpass` 卸载并保留私有配置。不要用源码安装器覆盖包管理器文件。源码安装使用新版 `sh install.sh`，再明确启动；两种升级均不自动重启，原配置保留，私有备份位于 `/etc/portalproxy-backups/`。更新前停止共享、保留旧安装包/源码与配置，验证备份后再操作；opkg 的 `-opkg` 文件是新默认配置，不要覆盖自己的配置。
+升级不自动启动。opkg 的 `portalproxy-opkg` 是另存的新默认配置，不要覆盖自己的配置。若需回退，先停止共享、核对备份与旧包，再恢复匹配版本；不要盲目覆盖程序文件。源码安装器可恢复可捕获的写入失败，备份不是系统快照，也不保证断电恢复。
 
 ```sh
-sh uninstall.sh          # 卸载，保留配置
-sh uninstall.sh --purge  # 卸载并删除配置
+opkg remove luci-app-starpass  # opkg 安装：卸载并保留配置/provider/私有备份
+sh uninstall.sh               # 源码安装：卸载并保留配置
 ```
 
-卸载后关闭 Portal 的手动代理设置。
+明确要清除保留配置时，先卸载 opkg 包，再使用匹配源码的 `sh uninstall.sh --purge`；独立备份仍保留。卸载后关闭设备的手动代理，外部 OpenClash 由自身管理。
 
-## 文档
+## 命令与排查
 
-- [参数、OpenClash 共存、排查与测试](../docs/guide.zh-CN.md)
-- [更新记录](../CHANGELOG.md)
-- [安全问题与诊断信息](../SECURITY.md)
+```sh
+portalproxy setup                  # 交互配置，仅保存
+portalproxy check                  # 检查配置和依赖
+portalproxy enable                 # 启动并开启自启
+portalproxy disable                # 停止并关闭自启
+portalproxy apply                  # 应用已保存配置
+portalproxy status                 # 状态，不代表外网测试
+portalproxy nodes                  # 本地节点快照
+portalproxy nodes-refresh          # 显式刷新；不唤醒
+portalproxy prefer preferred '日本 A' # 保存精确首选名称
+portalproxy subscription-update    # 独立订阅更新
+portalproxy logs                   # 清洗后的本插件日志
+portalproxy diagnose               # 配置检查、状态与日志
+```
 
-## 许可
+手动修改 `/etc/config/portalproxy` 后先 `portalproxy check`，再明确 `portalproxy apply`。日志、截图和 Issue 不要附带订阅、认证头、私钥或私有备份。
 
-[MIT](../LICENSE)。代理核心由 [Mihomo](https://github.com/MetaCubeX/mihomo) 提供，遵循其上游许可。
+## 从匹配源码构建
+
+在完整仓库源码根目录运行（需要 Python 3；包不含核心）：
+
+```sh
+python3 scripts/build-router-ipk.py luci-app-starpass.ipk --version 0.1.0+git5da075302716-1
+python3 scripts/build-router-source.py starpass-router-source.tar.gz
+```
+
+检查构建脚本输出的 SHA-256。[构建、测试与高级配置](guide.zh-CN.md) · [OpenClash 联动细节](openclash-linked.zh-CN.md) · [更新日志](../CHANGELOG.md) · [安全反馈](../SECURITY.md)。路由器包装层为 [MIT](../LICENSE)，Mihomo 核心遵循其[上游许可](https://github.com/MetaCubeX/mihomo)。

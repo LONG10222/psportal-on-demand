@@ -8,6 +8,7 @@
 ## 下载
 
 - **[已归档测试包](https://github.com/LONG10222/psportal-on-demand/releases)**：Windows、macOS、Linux、Android 与 iOS 模拟器产物。
+- **[软路由测试包 · 5da0753](https://github.com/LONG10222/psportal-on-demand/actions/runs/39958952749)**：LuCI 简化界面、opkg IPK、源码安装器及校验文件；[安装与使用](docs/router-readme.zh-CN.md)。
 - **[当前分支构建](https://github.com/LONG10222/psportal-on-demand/actions)**：Android 精简界面、升级校验和全平台更新入口由对应 PR 构建；旧版 `c1d2d3a` 归档不含这些更新。
 - [选择版本与安装](docs/downloads.zh-CN.md)。Android CI 原始 APK 未签名；iOS 设备版需要自行签名，模拟器包不能装到手机。
 
@@ -17,7 +18,7 @@
 - **手机或设备共享**：Android 内置 Mihomo；电脑可独立运行或复用已有 Clash。
 - **节点与状态**：查看实际连接、选择支持的节点/策略组并测速。
 - **清爽界面**：Android 分为概览、节点、共享、设置，操作说明按需展开。
-- **软路由**：提供 opkg IPK 与源码安装器，LuCI 保存/启动分离、真实状态及 OpenClash 只读联动；[实机验证与边界](docs/router-validation-2026-10-23.zh-CN.md)。
+- **软路由**：提供 opkg IPK 与源码安装器，首页概览与折叠设置、保存/启动分离、真实状态及 OpenClash 只读联动；[实机验证与边界](docs/router-validation-2026-10-23.zh-CN.md)。
 
 | 平台 | 入口 | 使用说明 |
 | --- | --- | --- |
@@ -40,13 +41,21 @@
 
 粘贴一次导入订阅，再点击 **启动共享**。也可直接复用已有 Clash 的代理入口；联动时节点与核心仍由原客户端管理。Windows 默认自动选择 Mihomo，其他系统和实验引擎的准备方式见[桌面指南](portable/docs/desktop.md)。
 
+### 软路由
+
+1. 下载测试包，按[路由器指南](docs/router-readme.zh-CN.md#安装)校验并安装；opkg 固件用 IPK，apk 固件用源码安装器。
+2. 打开 **服务 → StarPass / 星渡 → 接入设置**，选择独立核心或复用 OpenClash，填写允许设备的 IP 并 **保存配置**。独立模式还需先更新订阅。
+3. 点击 **启动共享**，在目标设备的手动 HTTP 代理中填写页面显示的路由器地址和端口。
+
+节点、订阅和测速在联动模式下由 OpenClash 管理。详细参数放在高级设置，接入与更新说明放在帮助。
+
 ## 使用须知
 
-局域网共享是 HTTP/HTTPS CONNECT TCP，不能保证任意游戏 UDP 或串流可用。只在可信局域网使用；结束后关闭设备的手动代理。Android 本机代理需要系统 VPN 授权；iOS 默认切后台即停止。更多能力差异见[平台对照](docs/starpass-platform-modes.zh-CN.md)。
+局域网共享是 HTTP/HTTPS CONNECT TCP，不能保证任意游戏 UDP 或串流可用。只在可信局域网使用；结束后关闭设备的手动代理。Android 本机代理需要系统 VPN 授权；iOS 默认切后台即停止。本轮安卓模拟器中的 HTTP 客户端在代理不可达时会回退直连，手动代理不能作为断网保护。更多能力差异见[平台对照](docs/starpass-platform-modes.zh-CN.md)。
 
 ## 文档与开发
 
-[Android 构建](native/android/README.md#build-unsigned-without-creating-credentials) · [桌面源码](portable/README.md) · [原生引擎](native/README.md) · [验证记录](VALIDATION-LOCAL.md) · [安全反馈](SECURITY.md) · [更新日志](CHANGELOG.md) · [应用更新](docs/updates.md)
+[Android 构建](native/android/README.md#build-unsigned-without-creating-credentials) · [桌面源码](portable/README.md) · [原生引擎](native/README.md) · [平台验证](VALIDATION-LOCAL.md) · [软路由实机与安卓代理验证](docs/router-validation-2026-10-23.zh-CN.md) · [安全反馈](SECURITY.md) · [更新日志](CHANGELOG.md) · [应用更新](docs/updates.md)
 
 构建通过、模拟器测试与真机网络验收分别记录，不用旧版测试数字代替当前提交结果。详细能力和历史记录移至[平台参考](docs/platform-reference.zh-CN.md)。
 
