@@ -106,15 +106,20 @@ def reusable_source(values: dict, source: str, url: str) -> bool:
 
 def secret_values(values: dict) -> tuple[str, ...]:
     secrets = set()
-    for key in ('subscription_url', 'health_url'):
-        value = values.get(key)
-        if not isinstance(value, str) or not value:
-            continue
-        secrets.update((value, unquote(value)))
-        try:
-            secrets.update(v for _, v in parse_qsl(urlsplit(value).query) if v)
-        except ValueError:
-            pass
+    sources = [values]
+    previous = values.get('accelerator_previous_config')
+    if isinstance(previous, dict):
+        sources.extend(previous[key] for key in ('raw', 'values') if isinstance(previous.get(key), dict))
+    for source in sources:
+        for key in ('subscription_url', 'health_url'):
+            value = source.get(key)
+            if not isinstance(value, str) or not value:
+                continue
+            secrets.update((value, unquote(value)))
+            try:
+                secrets.update(v for _, v in parse_qsl(urlsplit(value).query) if v)
+            except ValueError:
+                pass
     return tuple(sorted(secrets, key=len, reverse=True))
 
 
@@ -526,20 +531,112 @@ class DesktopApp:
             self.backend.log('Appearance preference could not be saved.')
 
     def set_product_mode(self, mode):
+        previous = getattr(self, '_selected_product_mode', self.raw.get('product_mode', 'game'))
         if (mode not in product_modes.MODES or self.closing or self.importing
-                or getattr(self, 'setting_up', False) or self.backend.process is not None
-                or self.raw.get('existing_proxy_port') and mode != 'game'):
-            if self.raw.get('existing_proxy_port'):
-                self.vars['product_mode'].set('game')
+                or getattr(self, 'setting_up', False) or getattr(self, 'xianniu_checking', False)
+                or self.backend.process is not None):
+            self.vars['product_mode'].set(previous)
             self.view.refresh()
             return
+        if mode == 'accelerator' and previous != 'accelerator':
+            if sys.platform != 'win32':
+                self.vars['product_mode'].set(previous)
+                return
+            self._enter_accelerator(previous)
+        elif previous == 'accelerator' and mode != 'accelerator':
+            self._leave_accelerator()
+        if mode != 'accelerator' and self.raw.get('existing_proxy_port') and mode != 'game':
+            mode = 'game'
         self.vars['product_mode'].set(mode)
+        self._selected_product_mode = mode
+        self.dirty = True
+        self.engine_controls()
+        self.view.refresh()
+
+    def _accelerator_preferences(self):
+        keys = ('listen_host', 'allowed_clients', 'listen_port', 'backend_port', 'api_port', 'idle_seconds')
+        result = dict(values={key: self.vars[key].get() for key in keys if key in self.vars},
+                      automatic=getattr(self, '_lan_automatic', False))
+        if hasattr(self.view, 'accelerator_source_var'):
+            result.update(transport=self.view.accelerator_source_var.get(), port=self.view.accelerator_port_var.get())
+        return result
+
+    def _enter_accelerator(self, previous):
+        """Keep the complete normal configuration in the same private file."""
+        old = copy.deepcopy(self.raw)
+        old.pop('accelerator_previous_config', None)
+        fields = {key: variable.get() for key, variable in self.vars.items()}
+        fields['product_mode'] = previous
+        saved = dict(raw=old, values=fields, automatic=getattr(self, '_lan_automatic', False))
+        preferences = self.raw.get('accelerator_preferences')
+        self.raw['accelerator_previous_config'] = saved
+        for key in ('existing_proxy_port', 'existing_proxy_provider', 'source_provenance',
+                    'node_policies', 'host_profile_overlay', 'linked_previous_source', 'accelerator_proxy'):
+            self.raw.pop(key, None)
+        self.raw.update(host_relay='steam', live_node_controls=False)
+        self.loading = True
+        try:
+            if hasattr(self.view, 'load_accelerator_source'):
+                self.view.load_accelerator_source({'accelerator_preferences': preferences})
+            for key, value in (('engine_mode', 'external'), ('profile_file', ''),
+                               ('subscription_file', ''), ('subscription_url', ''),
+                               ('selection_mode', 'auto'), ('preferred_node', '')):
+                if key in self.vars:
+                    self.vars[key].set(value)
+            if isinstance(preferences, dict) and isinstance(preferences.get('values'), dict):
+                for key, value in preferences['values'].items():
+                    if key in self._accelerator_preferences()['values'] and isinstance(value, str):
+                        self.vars[key].set(value)
+                self._lan_automatic = preferences.get('automatic') is True
+        finally:
+            self.loading = False
+        self.view.preview = None
+        self.view.subscription_info = None
+
+    def _leave_accelerator(self):
+        preferences = self._accelerator_preferences()
+        saved = self.raw.pop('accelerator_previous_config', None)
+        if isinstance(saved, dict) and isinstance(saved.get('raw'), dict) and isinstance(saved.get('values'), dict):
+            self.raw = copy.deepcopy(saved['raw'])
+            self.loading = True
+            try:
+                for key, value in saved['values'].items():
+                    if key in self.vars and isinstance(value, str):
+                        self.vars[key].set(value)
+            finally:
+                self.loading = False
+            self._lan_automatic = saved.get('automatic') is True
+        else:
+            # Migrate the earlier preview's shared game/accelerator source.
+            self.raw.pop('host_relay', None)
+            self.raw.pop('accelerator_proxy', None)
+            self.raw.pop('existing_proxy_port', None)
+            self.raw.pop('existing_proxy_provider', None)
+            previous = self.raw.pop('linked_previous_source', {})
+            if isinstance(previous, dict):
+                for key, value in previous.items():
+                    if key in self.vars and isinstance(value, str):
+                        self.vars[key].set(value)
+                    elif key in ('source_provenance', 'node_policies', 'host_profile_overlay'):
+                        self.raw[key] = copy.deepcopy(value)
+        self.raw['accelerator_preferences'] = preferences
+        self.view.preview = None
+        self.view.subscription_info = None
+        if self.subscription_ready():
+            self._read_source_accounting()
 
     def unlink_proxy(self):
         if self.closing or self.importing or self.setting_up or self.backend.process is not None:
             return
+        if self.product_mode() == 'accelerator':
+            saved = self.raw.get('accelerator_previous_config', {})
+            previous = saved.get('values', {}).get('product_mode', 'game') if isinstance(saved, dict) else 'game'
+            self.set_product_mode(previous if previous in ('game', 'mixed', 'clash') else 'game')
+            return
         self.raw.pop('existing_proxy_port', None)
         self.raw.pop('existing_proxy_provider', None)
+        self.raw.pop('host_relay', None)
+        self.raw.pop('accelerator_proxy', None)
         self.raw.pop('source_provenance', None)
         previous = self.raw.pop('linked_previous_source', None)
         if isinstance(previous, dict):
@@ -578,7 +675,7 @@ class DesktopApp:
                    or self.importing or getattr(self, 'setting_up', False))
         mode = self.vars['engine_mode'].get() if 'engine_mode' in self.vars else 'external'
         for key, widgets in self.engine_inputs.items():
-            active = mode == ('embedded' if key == 'native_path' else 'external')
+            active = mode == ('embedded' if key == 'native_path' else 'external') and self.product_mode() != 'accelerator'
             for widget in widgets:
                 widget.configure(state='normal' if active and not running else 'disabled')
         full_profile = bool(self.vars.get('profile_file') and self.vars['profile_file'].get().strip())
@@ -609,7 +706,9 @@ class DesktopApp:
         if not defaults.get('native_path'):
             defaults['native_path'] = str(config.bundled_native_path() or '')
         defaults.update(product_modes.editable_config(defaults))
-        if self.raw.get('existing_proxy_port'):
+        if self.raw.get('host_relay') == 'steam' or self.raw.get('existing_proxy_provider') == 'xianniu':
+            defaults['product_mode'] = 'accelerator'
+        elif self.raw.get('existing_proxy_port'):
             defaults['product_mode'] = 'game'
         from .core_setup import discover_core
         discovered = discover_core(self.path, defaults.get('core_path', ''))
@@ -636,12 +735,14 @@ class DesktopApp:
         elif self.raw.get('existing_proxy_port') and self.raw.get('existing_proxy_provider') != 'xianniu':
             self.view.subscription_info = self.clash_info
         self.loading = True
+        self.view.load_accelerator_source(self.raw)
         for key, variable in self.vars.items():
             value = defaults.get(key, '')
             if key == 'allowed_clients':
                 value = ', '.join(str(item) for item in value) if isinstance(value, list) else ''
             variable.set(str(value))
         self.loading = False
+        self._selected_product_mode = defaults.get('product_mode', 'game')
         self.dirty = False
         if source and not self.subscription_ready():
             self.view.subscription_info = None
@@ -670,6 +771,8 @@ class DesktopApp:
             self.view.subscription_info = None
 
     def paste_subscription(self, event=None):
+        if self.product_mode() == 'accelerator':
+            return 'break'
         if self.closing or self.importing or self.setting_up or self.backend.process is not None:
             return 'break'
         try:
@@ -825,12 +928,16 @@ class DesktopApp:
             self.vars['core_path'].set(name)
 
     def choose_provider(self):
+        if self.product_mode() == 'accelerator':
+            return
         from tkinter import filedialog
         name = filedialog.askopenfilename(title=self._t('Choose local Clash/Mihomo provider YAML'), filetypes=[('YAML provider', '*.yaml *.yml'), ('All files', '*')], parent=self.root)
         if name:
             self._use_imported_file(Path(name))
 
     def choose_profile(self):
+        if self.product_mode() == 'accelerator':
+            return
         from tkinter import filedialog
         name = filedialog.askopenfilename(title=self._t('Complete Clash/Mihomo profile'),
             filetypes=[('YAML', '*.yaml *.yml *.json'), ('All files', '*')], parent=self.root)
@@ -838,6 +945,8 @@ class DesktopApp:
             self._use_imported_file(Path(name), full=True)
 
     def _use_imported_file(self, path, full=False, *, origin_url=None):
+        if self.product_mode() == 'accelerator':
+            return False
         from tkinter import messagebox
         from .profiles import inspect_profile, read_profile, validate_host_profile, host_overlay
         try:
@@ -858,6 +967,7 @@ class DesktopApp:
                 self.raw.pop('node_policies', None)
             self.raw.pop('existing_proxy_port', None)
             self.raw.pop('existing_proxy_provider', None)
+            self.raw.pop('host_relay', None)
             self.raw['source_provenance'] = dict(kind='local', path=str(path.absolute()))
             if origin_url is not None:
                 self.raw['source_provenance'].update(kind='subscription', url=origin_url)
@@ -880,6 +990,7 @@ class DesktopApp:
         from .onboarding import preparation_notes
         values = {key: variable.get().strip() for key, variable in self.vars.items()}
         values['existing_proxy_port'] = self.raw.get('existing_proxy_port')
+        values['host_relay'] = self.raw.get('host_relay')
         messagebox.showinfo(self._t('Before you start'),
             '\n\n'.join(self._t(note) for note in preparation_notes(values)), parent=self.root)
 
@@ -887,6 +998,12 @@ class DesktopApp:
         if self.importing or getattr(self, 'setting_up', False) or self.backend.process is not None:
             return
         if getattr(self, 'xianniu_checking', False): return
+        if self.product_mode() == 'accelerator':
+            self.start_accelerator()
+            return
+        if self.raw.get('host_relay') == 'steam' and not self.vars['subscription_url'].get().strip():
+            self.use_steam_host()
+            return
         if self.raw.get('existing_proxy_provider') == 'xianniu':
             self.use_xianniu_proxy()
             return
@@ -1009,6 +1126,60 @@ class DesktopApp:
             return
         self._link_existing_proxy(self.existing_proxy)
 
+    def use_steam_host(self):
+        if hasattr(self.view, 'accelerator_source_var'):
+            self.view.accelerator_source_var.set('host')
+        return self.start_accelerator()
+
+    def start_accelerator(self):
+        """Share this Windows host's TCP network for Steam web destinations."""
+        from tkinter import messagebox
+        if (self.closing or self.importing or self.setting_up or self.backend.process is not None
+                or getattr(self, 'xianniu_checking', False)):
+            return
+        if (self.raw.get('existing_proxy_provider') == 'xianniu'
+                and hasattr(self.view, 'accelerator_source_var')
+                and self.view.accelerator_source_var.get() == 'http'
+                and self.view.accelerator_port_var.get().strip() == str(self.raw.get('existing_proxy_port'))):
+            self.use_xianniu_proxy()
+            return
+        if sys.platform != 'win32':
+            messagebox.showinfo(self._t('Steam mobile relay'),
+                self._t('Steam mobile relay through the PC network requires Windows.'), parent=self.root)
+            return
+        try:
+            snapshot = self._quick_snapshot(None)
+        except (OSError, ValueError):
+            messagebox.showerror(self._t('Cannot save configuration'),
+                self._t('The configuration could not be saved. Choose a writable location and check file permissions.'), parent=self.root)
+            return
+        previous_mode = self.vars['product_mode'].get()
+        self._quick_rollback = snapshot
+        if previous_mode != 'accelerator':
+            self.set_product_mode('accelerator')
+        plan = self._configure_lan(commit=False)
+        if not plan:
+            self._rollback_quick_start()
+            return
+        self._apply_lan(plan)
+        for key, value in (('engine_mode', 'external'), ('profile_file', ''),
+                           ('subscription_file', ''), ('subscription_url', ''),
+                           ('selection_mode', 'auto'), ('preferred_node', '')):
+            self.vars[key].set(value)
+        self.raw.pop('existing_proxy_port', None)
+        self.raw.pop('existing_proxy_provider', None)
+        self.raw.pop('accelerator_proxy', None)
+        self.raw['host_relay'] = 'steam'
+        self.raw['live_node_controls'] = False
+        self.view.subscription_info = None
+        self.view.preview = None
+        self.xianniu_message = ''
+        self.view.refresh()
+        if self.start() is False:
+            self._rollback_quick_start()
+            return
+        self.view.show('LAN sharing')
+
     def use_xianniu_proxy(self, action='link'):
         """Verify one identified client's proxy off the UI thread before sharing."""
         if (self.closing or self.importing or self.setting_up or self.backend.process is not None
@@ -1086,17 +1257,21 @@ class DesktopApp:
             from tkinter import messagebox
             messagebox.showerror(self._t('Cannot save configuration'), self._t('The configuration could not be saved. Choose a writable location and check file permissions.'), parent=self.root)
             return
+        self._quick_rollback = snapshot
         previous_mode = self.vars['product_mode'].get() if 'product_mode' in self.vars else None
         if previous_mode is not None:
-            self.vars['product_mode'].set('game')
+            target_mode = 'accelerator' if provider == 'xianniu' else 'game'
+            if self.product_mode() != target_mode and hasattr(self, '_selected_product_mode'):
+                self.set_product_mode(target_mode)
+            else:
+                self.vars['product_mode'].set(target_mode)
         plan = self._configure_lan((port,), commit=False)
         if not plan:
-            if previous_mode is not None:
-                self.vars['product_mode'].set(previous_mode)
+            self._rollback_quick_start()
             return
         self._quick_rollback = snapshot
         self._apply_lan(plan)
-        if not self.raw.get('existing_proxy_port'):
+        if not (self.raw.get('existing_proxy_port') or self.raw.get('host_relay') == 'steam'):
             previous = {key: variable.get() for key, variable in self.vars.items()
                         if key in ('profile_file', 'subscription_file', 'subscription_url', 'engine_mode')}
             previous['product_mode'] = previous_mode or 'game'
@@ -1110,7 +1285,12 @@ class DesktopApp:
         self.vars['selection_mode'].set('auto')
         self.vars['preferred_node'].set('')
         self.raw['existing_proxy_port'] = port
+        self.raw.pop('host_relay', None)
+        self.raw.pop('accelerator_proxy', None)
         self.raw['existing_proxy_provider'] = provider
+        if provider == 'xianniu' and hasattr(self.view, 'accelerator_source_var'):
+            self.view.accelerator_source_var.set('http')
+            self.view.accelerator_port_var.set(str(port))
         self.clash_info = read_clash_accounting() if provider == 'system' else None
         self.view.subscription_info = self.clash_info
         self.view.refresh()
@@ -1132,6 +1312,10 @@ class DesktopApp:
             messagebox.showerror(self._t('Cannot inspect provider'), self._t(str(error)), parent=self.root)
 
     def import_subscription(self, force=False):
+        if self.product_mode() == 'accelerator':
+            self.subscription_message = 'Switch to a normal mode to import subscriptions. Accelerator settings are separate.'
+            self.view.refresh()
+            return
         if self.closing or self.importing or getattr(self, 'setting_up', False) or self.backend.process is not None:
             return
         from tkinter import messagebox
@@ -1283,7 +1467,9 @@ class DesktopApp:
                     values={key: variable.get() for key, variable in self.vars.items()},
                     preview=self.view.preview, subscription_info=self.view.subscription_info,
                     setup_network=self.view.setup_network, dirty=self.dirty, imported=imported_path,
-                    automatic=getattr(self, '_lan_automatic', False))
+                    automatic=getattr(self, '_lan_automatic', False),
+                    selected_mode=getattr(self, '_selected_product_mode', self.product_mode()),
+                    accelerator_ui=self._accelerator_preferences())
 
     def _rollback_quick_start(self):
         snapshot = getattr(self, '_quick_rollback', None)
@@ -1316,6 +1502,14 @@ class DesktopApp:
             setattr(self.view, key, snapshot[key])
         self.dirty = snapshot['dirty']
         self._lan_automatic = snapshot['automatic']
+        self._selected_product_mode = snapshot.get('selected_mode', self.product_mode())
+        if hasattr(self.view, 'load_accelerator_source') and snapshot.get('accelerator_ui'):
+            loading = self.loading
+            self.loading = True
+            try:
+                self.view.load_accelerator_source({'accelerator_preferences': snapshot['accelerator_ui']})
+            finally:
+                self.loading = loading
         if restored:
             self._discard_import(snapshot['imported'])
         self.backend.secrets = secret_values(self.raw)
@@ -1372,10 +1566,37 @@ class DesktopApp:
             elif key == 'allowed_clients':
                 value = [part.strip() for part in value.split(',') if part.strip()]
             values[key] = value
-        if values.get('engine_mode') == 'external' and not values.get('existing_proxy_port'):
+        if values.get('product_mode') == 'accelerator':
+            transport = self.view.accelerator_source_var.get() if hasattr(self.view, 'accelerator_source_var') else 'host'
+            values['accelerator_preferences'] = self._accelerator_preferences()
+            values['engine_mode'] = 'external'
+            values['live_node_controls'] = False
+            for key in ('subscription_url', 'subscription_file', 'profile_file'):
+                values[key] = ''
+            if transport == 'host':
+                values['host_relay'] = 'steam'
+                for key in ('accelerator_proxy', 'existing_proxy_port', 'existing_proxy_provider'):
+                    values.pop(key, None)
+            else:
+                port_text = self.view.accelerator_port_var.get().strip()
+                if (transport not in ('http', 'socks5') or not re.fullmatch(r'[0-9]{1,5}', port_text, re.ASCII)
+                        or not 1024 <= int(port_text) <= 65535):
+                    raise ValueError('Enter a local proxy port from 1024 to 65535.')
+                port = int(port_text)
+                values.pop('host_relay', None)
+                if transport == 'http' and values.get('existing_proxy_provider') == 'xianniu' and values.get('existing_proxy_port') == port:
+                    values.pop('accelerator_proxy', None)
+                else:
+                    values.pop('existing_proxy_port', None)
+                    values.pop('existing_proxy_provider', None)
+                    values['accelerator_proxy'] = dict(host='127.0.0.1', port=port, protocol=transport)
+        if (values.get('engine_mode') == 'external' and not values.get('existing_proxy_port')
+                and values.get('host_relay') != 'steam' and not values.get('accelerator_proxy')):
             values['live_node_controls'] = True
         if 'product_mode' in self.vars:
-            if values.get('existing_proxy_port') and values.get('product_mode') != 'game':
+            allowed_modes = ('game', 'accelerator') if (values.get('host_relay') == 'steam'
+                or values.get('existing_proxy_provider') == 'xianniu') else ('game',)
+            if (values.get('existing_proxy_port') or values.get('host_relay') == 'steam') and values.get('product_mode') not in allowed_modes:
                 raise ValueError('Linked proxy supports game mode only. Other modes remain in the existing Clash client.')
             values['product_lan_automatic'] = getattr(self, '_lan_automatic', product_modes.infer_automatic(self.raw))
             values = product_modes.effective_config(values)
@@ -1403,6 +1624,8 @@ class DesktopApp:
         self.view.link_button.configure(state='disabled' if running else 'normal')
         if hasattr(self.view, 'xianniu_button'):
             self.view.xianniu_button.configure(state='disabled' if running else 'normal')
+        if hasattr(self.view, 'steam_button'):
+            self.view.steam_button.configure(state='disabled' if running else 'normal')
         self.start_button.configure(state='disabled' if running else 'normal')
         self.save_button.configure(state='disabled' if running else 'normal')
         self.choose_button.configure(state='disabled' if running else 'normal')
@@ -1428,7 +1651,9 @@ class DesktopApp:
             self.view.refresh()
             return False
         if (self.vars.get('engine_mode') and self.vars['engine_mode'].get() == 'external'
-                and not self.raw.get('existing_proxy_port') and not Path(self.vars['core_path'].get()).is_file()):
+                and not self.raw.get('existing_proxy_port') and self.raw.get('host_relay') != 'steam'
+                and self.product_mode() != 'accelerator'
+                and not Path(self.vars['core_path'].get()).is_file()):
             self.setup_core(start_after='manual')
             return False
         if not self.save():

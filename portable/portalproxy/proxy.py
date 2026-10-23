@@ -278,6 +278,43 @@ class ProxyServer:
         with contextlib.suppress(Exception):
             await asyncio.wait_for(writer.drain(), self.timeout)
 
+    def _pac_request(self, header, writer):
+        """Recognize only our accelerator PAC; retain normal HTTP validation."""
+        if self.config.get('product_mode') != 'accelerator':
+            return None
+        lines = _header_lines(header)
+        match = _REQUEST_LINE.fullmatch(lines[0]) if lines else None
+        if not match:
+            return None
+        method, target, version = match.groups()
+        bound = writer.get_extra_info('sockname')
+        if not bound or len(bound) < 2:
+            return None
+        host, port = bound[:2]
+        if target == '/accelerator.pac':
+            first = f'{method} http://{host}:{port}/accelerator.pac {version}\r\n'.encode('ascii')
+            request = parse_request(first + header.split(b'\r\n', 1)[1])
+        elif target.startswith('http://'):
+            request = parse_request(header)
+            if request.path != '/accelerator.pac':
+                return None
+        else:
+            return None
+        if request.host != host or request.port != port:
+            raise ProtocolError('PAC Host must match this listener')
+        if (request.method != 'GET' or request.content_length not in (None, 0)
+                or request.chunked or request.expect_continue):
+            raise ProtocolError('PAC accepts GET without a request body only')
+        return host, port
+
+    async def _serve_pac(self, writer, endpoint):
+        from .accelerator_pac import make_accelerator_pac
+        body = make_accelerator_pac(*endpoint)
+        writer.write((f'HTTP/1.1 200 OK\r\nContent-Type: application/x-ns-proxy-autoconfig\r\n'
+                      f'Content-Length: {len(body)}\r\nCache-Control: no-store\r\n'
+                      f'Connection: close\r\n\r\n').encode('ascii') + body)
+        await self._drain(writer)
+
     def _accept(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         task = asyncio.create_task(self._handle(reader, writer))
         self._tasks.add(task)
@@ -408,8 +445,19 @@ class ProxyServer:
             client['last_seen'] = time.time()
             peer_ip = str(ipaddress.ip_address(peer[0]))
             self._clients[peer_ip] = self._clients.get(peer_ip, 0) + 1
-            request = parse_request(await self._header(reader))
-            route = await asyncio.wait_for(resolve_destination(request.host, request.port), self.timeout)
+            header = await self._header(reader)
+            pac_endpoint = self._pac_request(header, writer)
+            if pac_endpoint is not None:
+                self.stats['local_requests'] += 1
+                await self._serve_pac(writer, pac_endpoint)
+                return
+            request = parse_request(header)
+            host_relay = self.config.get('host_relay') == 'steam'
+            generic_proxy = self.config.get('accelerator_proxy') is not None
+            socks_proxy = generic_proxy and self.core.protocol == 'socks5'
+            direct_request = host_relay or socks_proxy
+            resolver = self.core.resolve_target if host_relay or generic_proxy else resolve_destination
+            route = await asyncio.wait_for(resolver(request.host, request.port), self.timeout)
             if route.kind == "external":
                 self.stats["waking"] += 1
                 try:
@@ -418,7 +466,12 @@ class ProxyServer:
                     self.stats["waking"] -= 1
                 acquired = True
                 self.stats["external_requests"] += 1
-                host, port = endpoint
+                if host_relay:
+                    if route.address is None:
+                        raise DestinationDenied('Steam host relay needs a verified numeric destination')
+                    host, port = route.address, request.port
+                else:
+                    host, port = endpoint
             elif route.kind == "local" and route.address is not None:
                 host, port = route.address, request.port
                 self.stats["local_requests"] += 1
@@ -426,11 +479,14 @@ class ProxyServer:
                 raise DestinationDenied("invalid route")
             upstream_reader, upstream_writer = await asyncio.wait_for(
                 asyncio.open_connection(host, port, limit=MAX_HEADER_BYTES), self.timeout)
+            if socks_proxy:
+                await asyncio.wait_for(self.core.prepare_connection(upstream_reader, upstream_writer,
+                    request.host, request.port), self.timeout)
             forwarding = True
             self.stats["forwarding"] += 1
             self.last_error = ""
             if request.method == "CONNECT":
-                if route.kind == "external":
+                if route.kind == "external" and not direct_request:
                     upstream_writer.write(request.forwarded_header(True))
                     await self._drain(upstream_writer)
                     try:
@@ -447,7 +503,7 @@ class ProxyServer:
                 await self._drain(writer)
                 await self._duplex(self._pump(reader, upstream_writer), self._pump(upstream_reader, writer))
             else:
-                upstream_writer.write(request.forwarded_header(route.kind == "external"))
+                upstream_writer.write(request.forwarded_header(route.kind == "external" and not direct_request))
                 await self._drain(upstream_writer)
                 if request.expect_continue:
                     writer.write(b"HTTP/1.1 100 Continue\r\n\r\n")

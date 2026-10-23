@@ -18,6 +18,12 @@ certificate check. Driver-only acceleration and UDP are not supported; a passed
 proxy check does not establish game acceleration. See the
 [Xianniu Windows integration notes](docs/xianniu-windows.zh-CN.md).
 
+The independent **Accelerator mode** now offers Windows host egress or an explicit
+local HTTP/SOCKS5 endpoint for Steam web traffic. It preserves the other modes'
+source settings and keeps its LAN preferences separately. Standard proxy checks
+do not establish that a vendor's accelerator handled the traffic. See the
+[accelerator mode and Android setup guide](docs/accelerator-mode.zh-CN.md).
+
 ## Run from source
 
 Requires Python 3.10+ and a separately obtained, trusted Mihomo executable for your

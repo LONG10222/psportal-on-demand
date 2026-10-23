@@ -215,8 +215,12 @@ def connection_details(values: dict) -> dict:
             raise ValueError()
     except (KeyError, ValueError, TypeError):
         raise ProfileError('Configure an address and port first.') from None
-    return dict(protocol='http', host=host, port=port, local_test_only=host.startswith('127.'),
-                allowed_clients=list(values.get('allowed_clients', [])))
+    result = dict(protocol='http', host=host, port=port, local_test_only=host.startswith('127.'),
+                  allowed_clients=list(values.get('allowed_clients', [])))
+    if values.get('product_mode') == 'accelerator':
+        result.update(auto_proxy_url=f'http://{host}:{port}/accelerator.pac',
+                      service_profile='steam-web', acceleration_verified=False)
+    return result
 
 
 def client_config(values: dict) -> dict:

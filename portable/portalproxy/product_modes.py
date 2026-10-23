@@ -9,12 +9,14 @@ from __future__ import annotations
 
 import ipaddress
 
-MODES = ('game', 'mixed', 'clash')
-LABELS = {'game': 'Game mode', 'mixed': 'Mixed mode', 'clash': 'Clash mode'}
+MODES = ('game', 'mixed', 'clash', 'accelerator')
+LABELS = {'game': 'Game mode', 'mixed': 'Mixed mode', 'clash': 'Clash mode',
+          'accelerator': 'Accelerator mode'}
 NOTES = {
     'game': 'Game devices only: LAN HTTP/CONNECT proxy; the listener host IP is excluded. UDP game acceleration is not provided.',
     'mixed': 'Game devices + local apps: LAN HTTP/CONNECT proxy, including this computer. Configure each app manually.',
     'clash': 'Local apps only: HTTP/CONNECT on 127.0.0.1, with no LAN access. Full profiles require external Mihomo; embedded support is limited.',
+    'accelerator': 'Separate accelerator sharing: explicitly choose the Windows Steam web relay or a verified local HTTP/SOCKS5 proxy. LAN devices only; acceleration, voice and game UDP are not verified.',
 }
 _PRIVATE = tuple(ipaddress.IPv4Network(net) for net in ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'))
 
@@ -31,7 +33,7 @@ def infer_mode(values):
     """Migrate old listeners without widening their existing access policy."""
     if 'product_mode' in values:
         if values['product_mode'] not in MODES:
-            raise ValueError('Choose Game, Mixed or Clash mode.')
+            raise ValueError('Choose Game, Mixed, Clash or Accelerator mode.')
         return values['product_mode']
     host, clients = values.get('listen_host'), values.get('allowed_clients', [])
     if host == '127.0.0.1' and clients == ['127.0.0.1']:
@@ -56,18 +58,19 @@ def editable_config(values):
 def listener_policy(mode, host, clients):
     """Return the actual bind address and exact accepted source addresses."""
     if mode not in MODES:
-        raise ValueError('Choose Game, Mixed or Clash mode.')
+        raise ValueError('Choose Game, Mixed, Clash or Accelerator mode.')
     if mode == 'clash':
         return '127.0.0.1', ['127.0.0.1']
     if not is_lan(host):
-        raise ValueError('Game and Mixed modes need a private LAN IPv4 address. Use Start sharing or Advanced settings.')
+        raise ValueError('Game, Mixed and Accelerator modes need a private LAN IPv4 address. Use Start sharing or Advanced settings.')
     if not isinstance(clients, list) or not all(is_lan(client) for client in clients):
         raise ValueError('Allowed devices must be specific private LAN IPv4 addresses.')
     allowed = list(dict.fromkeys(client for client in clients if client != host))
     if mode == 'mixed':
         allowed.append(host)
     if not allowed:
-        raise ValueError('Game mode needs at least one allowed device other than this computer.')
+        raise ValueError(('Accelerator mode' if mode == 'accelerator' else 'Game mode') +
+                         ' needs at least one allowed device other than this computer.')
     if len(allowed) > 256:
         raise ValueError('Choose at most 256 allowed device addresses.')
     return host, allowed

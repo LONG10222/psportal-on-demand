@@ -44,13 +44,53 @@ def validate(raw, path):
     cfg['node_policies'] = validate_policies(cfg.get('node_policies', {}))
     if type(cfg.get('live_node_controls', False)) is not bool:
         raise ValueError('live_node_controls must be a boolean')
+    host_relay = cfg.get('host_relay')
+    accelerator_proxy = cfg.get('accelerator_proxy')
+    if accelerator_proxy is not None:
+        from .accelerator_proxy import validate_proxy_settings
+        cfg['accelerator_proxy'] = accelerator_proxy = validate_proxy_settings(accelerator_proxy)
+        if cfg['engine_mode'] != 'external' or cfg.get('product_mode') != 'accelerator':
+            raise ValueError('A generic accelerator proxy requires external engine and accelerator mode')
+        if accelerator_proxy['port'] == cfg['listen_port']:
+            raise ValueError('The accelerator proxy and LAN listener ports must differ')
+        for key in ('host_relay', 'existing_proxy_port', 'existing_proxy_provider',
+                    'profile_file', 'subscription_file', 'subscription_url'):
+            if cfg.get(key) not in (None, ''):
+                raise ValueError('A generic accelerator proxy cannot be combined with ' + key)
+    if host_relay is not None:
+        if host_relay != 'steam':
+            raise ValueError('host_relay must be steam or null')
+        # The old Steam preview labelled its device-only listener as game mode.
+        # Migrate only that explicit source, on a copy, without changing its ACL.
+        # Pre-mode CLI configurations remain legacy: in particular a loopback
+        # test listener must not acquire new LAN-only constraints implicitly.
+        if cfg.get('product_mode') == 'game':
+            cfg['product_mode'] = 'accelerator'
+        if (cfg['engine_mode'] != 'external'
+                or 'product_mode' in cfg and cfg['product_mode'] != 'accelerator'):
+            raise ValueError('Steam host relay requires external engine and accelerator mode')
+        for key in ('accelerator_proxy', 'existing_proxy_port', 'profile_file', 'subscription_file', 'subscription_url'):
+            if cfg.get(key) not in (None, ''):
+                raise ValueError('Steam host relay cannot be combined with ' + key)
     existing = cfg.get('existing_proxy_port')
+    if cfg.get('product_mode') == 'accelerator':
+        if cfg['engine_mode'] != 'external':
+            raise ValueError('Accelerator mode requires the external engine')
+        if not (host_relay == 'steam' or accelerator_proxy is not None
+                or existing is not None and cfg.get('existing_proxy_provider') == 'xianniu'):
+            raise ValueError('Accelerator mode requires an explicit Steam host relay, a verified Xianniu proxy or a configured HTTP/SOCKS5 proxy source')
+        for key in ('profile_file', 'subscription_file', 'subscription_url'):
+            if cfg.get(key) not in (None, ''):
+                raise ValueError('Accelerator mode cannot be combined with ' + key)
     if existing is not None:
         if type(existing) is not int or not 1024 <= existing <= 65535 or existing == cfg['listen_port']:
             raise ValueError('Existing proxy must use a distinct unprivileged loopback port')
         if cfg['engine_mode'] != 'external':
             raise ValueError('Existing proxy sharing requires external mode')
-        if cfg.get('product_mode', 'game') != 'game':
+        if cfg.get('existing_proxy_provider') == 'xianniu':
+            if cfg.get('product_mode', 'game') not in ('accelerator', 'game'):
+                raise ValueError('Xianniu proxy sharing supports accelerator mode or legacy game mode only')
+        elif cfg.get('product_mode', 'game') != 'game':
             raise ValueError('Linked proxy supports game mode only. Other modes remain in the existing Clash client.')
     if cfg['engine_mode'] not in ('external', 'embedded'):
         raise ValueError('engine_mode must be external or embedded')
@@ -121,7 +161,10 @@ def validate(raw, path):
     else:
         seed = None
         cfg.pop('subscription_file', None)
-    for key in (('health_url',) if seed or profile or existing else ('subscription_url', 'health_url')):
+    url_fields = () if host_relay or accelerator_proxy else ('health_url',)
+    if not (host_relay or accelerator_proxy) and not (seed or profile or existing):
+        url_fields = ('subscription_url', 'health_url')
+    for key in url_fields:
         value = cfg.get(key)
         try:
             url = urlsplit(value)
@@ -133,7 +176,7 @@ def validate(raw, path):
             valid = False
         if not valid:
             raise ValueError(key + ' must be an HTTPS URL without userinfo or fragment')
-    if cfg['engine_mode'] == 'external' and not existing:
+    if cfg['engine_mode'] == 'external' and not existing and not host_relay and not accelerator_proxy:
         core = Path(cfg.get('core_path', '')).expanduser()
         if not core.is_absolute() or not core.is_file():
             raise ValueError('core_path must be an absolute path to an existing Mihomo executable')

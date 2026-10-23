@@ -41,6 +41,21 @@ def validate_existing_proxy(config):
                          'Detect and link Xianniu again in the desktop app; the saved port was not changed.')
 
 
+def validate_generic_accelerator_proxy(config):
+    """Never expose an unverified configured local service to LAN clients."""
+    from .accelerator_proxy import verify_accelerator_proxy
+    failure = ('The accelerator proxy could not be verified. Enable its selected HTTP or SOCKS5 '
+               'listener without authentication, check the port, and retry. No fallback was started.')
+    try:
+        checked = verify_accelerator_proxy(config['accelerator_proxy'])
+    except Exception:
+        raise ValueError(failure) from None
+    if (not isinstance(checked, dict) or checked.get('probe_passed') is not True
+            or checked.get('tls_verified') is not True
+            or checked.get('verified_endpoint') != config['accelerator_proxy']):
+        raise ValueError(failure)
+
+
 async def serve(config, desktop_child=False):
     from .proxy import ProxyServer
     stopped = asyncio.Event()
@@ -76,15 +91,27 @@ async def serve(config, desktop_child=False):
         # check is in flight. No listener should appear after the parent exits.
         threading.Thread(target=watch_parent, daemon=True).start()
     try:
-        if config.get('existing_proxy_provider') == 'xianniu':
-            await asyncio.to_thread(validate_existing_proxy, config)
+        host_relay = config.get('host_relay') == 'steam'
+        generic_proxy = config.get('accelerator_proxy') is not None
+        if generic_proxy:
+            from .accelerator_proxy import GenericAcceleratorProxy
+            core = GenericAcceleratorProxy(config)
+            await asyncio.to_thread(validate_generic_accelerator_proxy, config)
             if stopped.is_set():
                 return
-        if config.get('existing_proxy_port'):
-            from .existing_proxy import ExistingProxy
-            core = ExistingProxy(config)
+        elif host_relay:
+            from .steam_host import SteamHostCore
+            core = SteamHostCore(config)
         else:
-            core = CoreManager(config)
+            if config.get('existing_proxy_provider') == 'xianniu':
+                await asyncio.to_thread(validate_existing_proxy, config)
+                if stopped.is_set():
+                    return
+            if config.get('existing_proxy_port'):
+                from .existing_proxy import ExistingProxy
+                core = ExistingProxy(config)
+            else:
+                core = CoreManager(config)
         proxy = ProxyServer(config, core)
         await proxy.start()
         core.start_monitor()
@@ -102,7 +129,9 @@ async def serve(config, desktop_child=False):
                         emit(core.nodes.snapshot(core.owned_inventory))
                     await asyncio.sleep(1)
             publisher = asyncio.create_task(publish_status())
-        print(f"Proxy ready at {config['listen_host']}:{config['listen_port']}; core starts on demand", flush=True)
+        route_note = ('Verified local accelerator proxy; acceleration is not verified' if generic_proxy else
+                      'Windows host egress; acceleration is not verified' if host_relay else 'core starts on demand')
+        print(f"Proxy ready at {config['listen_host']}:{config['listen_port']}; {route_note}", flush=True)
         await stopped.wait()
     finally:
         if publisher:

@@ -36,6 +36,8 @@ def engine_ready(values):
 def preparation_notes(values):
     """Fixed messages only: never echo a secret URL, path or exception."""
     from .core_setup import can_install
+    if values.get('host_relay') == 'steam':
+        return ['Steam relay uses the PC network; no subscription or Mihomo core is needed.']
     if values.get('existing_proxy_port'):
         return ['Sharing an existing client: keep that client running with its proxy enabled. StarPass does not need a separate subscription or core; verify access on the connected device.']
     notes = []
@@ -54,6 +56,10 @@ def preparation_notes(values):
 
 
 def next_step(mode, ready, devices, errors=0):
+    if mode == 'accelerator':
+        if not ready:
+            return 'Choose the accelerator service, enable it in its own app, then start the accelerator relay. No subscription is required.'
+        return 'On Android, set this Wi-Fi network HTTP proxy to the displayed PC address and port. Verify Steam store, community and text chat separately.'
     if not ready:
         from .core_setup import can_install
         return ('1. Paste once to import and save, then click Start sharing. The default Mihomo core is prepared automatically, or reuse an existing Clash client.'

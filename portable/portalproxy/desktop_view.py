@@ -148,7 +148,12 @@ class DesktopView:
             page.columnconfigure(0, weight=1)
             self.frames[name] = page
 
-        profile = self.card(self.frames['Profiles'], 'Subscription and provider')
+        profile = self.profile_card = self.card(self.frames['Profiles'], 'Subscription and provider')
+        self.accelerator_profiles_note = self.label(self.frames['Profiles'],
+            'Switch to a normal mode to import subscriptions. Accelerator settings are separate.',
+            style='Portal.CardNote.TLabel', wraplength=680)
+        self.accelerator_profiles_note.grid(row=0, column=0, sticky='w', padx=24, pady=24)
+        self.accelerator_profiles_note.grid_remove()
         self.fields(profile, ('subscription_url', 'subscription_file', 'profile_file'))
         self.label(profile, 'Full profile preserves outbound nodes, groups and rules. This host manages only its listener and controller overlay.',
                    wraplength=680, style='Portal.CardNote.TLabel').grid(row=8, column=0, columnspan=3, sticky='w', pady=(10, 0))
@@ -483,6 +488,8 @@ class DesktopView:
         variable.trace_add('write', self.app._changed)
         self.product_mode_buttons = {}
         for mode in product_modes.MODES:
+            if mode == 'accelerator' and sys.platform != 'win32':
+                continue
             button = ttk.Radiobutton(product, text=self.tr(product_modes.LABELS[mode]),
                 variable=variable, value=mode, style='Portal.Mode.TRadiobutton', command=lambda value=mode: self.app.set_product_mode(value))
             button.pack(side='left', padx=(0, 12))
@@ -529,13 +536,34 @@ class DesktopView:
         self.link_var = tk.StringVar()
         ttk.Label(link, textvariable=self.link_var, style='Portal.CardNote.TLabel', wraplength=350).pack(side='left', padx=12)
         if sys.platform == 'win32':
-            accelerator = ttk.Frame(quick, style='Portal.Card.TFrame')
+            accelerator = self.accelerator_card = ttk.Frame(quick, style='Portal.Card.TFrame')
             accelerator.grid(row=14, column=0, columnspan=3, sticky='ew', pady=(12, 0))
+            self.label(accelerator, 'Accelerator connection', style='Portal.Section.TLabel').pack(anchor='w', pady=(0, 8))
+            source_row = ttk.Frame(accelerator, style='Portal.Card.TFrame')
+            source_row.pack(fill='x', pady=(0, 10))
+            self.accelerator_source_var = tk.StringVar(value='host')
+            self.accelerator_port_var = tk.StringVar(value='7890')
+            self.accelerator_source_combo = ttk.Combobox(source_row, state='readonly', width=24)
+            self.accelerator_source_combo.pack(side='left', padx=(0, 12))
+            self.accelerator_source_combo.bind('<<ComboboxSelected>>', self._accelerator_source_selected)
+            self.accelerator_port_label = self.label(source_row, 'Local proxy port')
+            self.accelerator_port_entry = ttk.Entry(source_row, textvariable=self.accelerator_port_var, width=8)
+            self.accelerator_port_var.trace_add('write', self.app._changed)
+            self.label(accelerator, 'Current service: Steam store, community and supported text chat.',
+                       style='Portal.CardNote.TLabel').pack(anchor='w', pady=(0, 8))
             self.xianniu_button = self.button(accelerator, 'Detect and share Xianniu proxy', command=self.app.use_xianniu_proxy)
             self.xianniu_button.pack(anchor='w')
             self.xianniu_note_var = tk.StringVar()
             ttk.Label(accelerator, textvariable=self.xianniu_note_var, style='Portal.CardNote.TLabel',
                       wraplength=680, justify='left').pack(anchor='w', pady=(8, 0))
+            self.steam_button = self.button(accelerator, 'Start accelerator relay', command=self.app.start_accelerator)
+            self.steam_button.pack(anchor='w', pady=(12, 0))
+            self.label(accelerator,
+                'Phone Steam web traffic uses this PC network. Verify Xianniu acceleration separately; no voice or game UDP.',
+                style='Portal.CardNote.TLabel', wraplength=680, justify='left').pack(anchor='w', pady=(8, 0))
+            accelerator.grid_remove()
+        self.normal_source_widgets = [widget for widget in quick.grid_slaves()
+            if int(widget.grid_info().get('row', -1)) in (3, 4, 5, 6, 7, 9, 10, 11, 12)]
         help_row = ttk.Frame(quick, style='Portal.Card.TFrame')
         help_row.grid(row=12, column=0, columnspan=3, sticky='w', pady=(12, 0))
         self.unlink_button = self.button(help_row, 'Use independent core', command=self.app.unlink_proxy)
@@ -672,9 +700,32 @@ class DesktopView:
             variable.set(self.tr(key))
         self.refresh()
 
+    def _accelerator_source_selected(self, _event=None):
+        index = self.accelerator_source_combo.current()
+        if 0 <= index < 3:
+            self.accelerator_source_var.set(('host', 'http', 'socks5')[index])
+            self.app._changed()
+
+    def load_accelerator_source(self, values):
+        if not hasattr(self, 'accelerator_source_var'):
+            return
+        saved = values.get('accelerator_preferences', {})
+        transport = saved.get('transport', 'host') if isinstance(saved, dict) else 'host'
+        port = saved.get('port', '7890') if isinstance(saved, dict) else '7890'
+        proxy = values.get('accelerator_proxy')
+        if isinstance(proxy, dict):
+            transport, port = proxy.get('protocol'), str(proxy.get('port', '7890'))
+        elif values.get('existing_proxy_provider') == 'xianniu' and values.get('existing_proxy_port'):
+            transport, port = 'http', str(values['existing_proxy_port'])
+        elif values.get('host_relay') == 'steam':
+            transport = 'host'
+        self.accelerator_source_var.set(transport if transport in ('host', 'http', 'socks5') else 'host')
+        self.accelerator_port_var.set(port if isinstance(port, str) else '7890')
+
     def _direct_subscription(self):
         values = self.app.vars
-        return (not self.app.raw.get('existing_proxy_port')
+        return (not self.app.raw.get('existing_proxy_port') and self.app.raw.get('host_relay') != 'steam'
+                and not self.app.raw.get('accelerator_proxy')
                 and any(values.get(key) and values[key].get()
                         for key in ('subscription_file', 'subscription_url', 'profile_file')))
 
@@ -726,7 +777,7 @@ class DesktopView:
     def _refresh_nodes(self):
         direct = self._direct_subscription()
         runtime = self._node_runtime()
-        linked = bool(self.app.raw.get('existing_proxy_port'))
+        linked = bool(self.app.raw.get('existing_proxy_port') or self.app.product_mode() == 'accelerator')
         full_profile = bool(self.app.vars.get('profile_file') and self.app.vars['profile_file'].get())
         groups = tuple(group['name'] for group in runtime.get('groups', ()))
         self.group_combo.configure(values=groups)
@@ -773,7 +824,9 @@ class DesktopView:
             if scroll:
                 self.node_table.yview_moveto(scroll[0])
             self._node_rows_rendered = rows
-        if linked:
+        if self.app.product_mode() == 'accelerator':
+            description = note = self.tr('Steam relay uses the PC network; there are no subscription nodes or node latency tests.')
+        elif linked:
             description = note = self.tr('Node selection and latency tests are managed by the existing Clash client.')
         elif full_profile and not runtime.get('node_management'):
             description = self.tr('Full profile uses its original groups and rules; provider selection fields do not override them.')
@@ -825,24 +878,40 @@ class DesktopView:
                     self.rule_table.insert('', 'end', values=(rule,))
             self._preview_rendered = self.preview
         product_mode = self.app.product_mode()
-        linked = bool(self.app.raw.get('existing_proxy_port'))
+        accelerator_mode = product_mode == 'accelerator'
+        host_relay = self.app.raw.get('host_relay') == 'steam'
+        linked = bool(self.app.raw.get('existing_proxy_port') or accelerator_mode)
         idle = (not self.app.importing and not self.app.setting_up and self.app.backend.process is None
                 and not getattr(self.app, 'xianniu_checking', False))
         if hasattr(self, 'xianniu_button'):
             self.xianniu_button.configure(state='normal' if idle else 'disabled')
             self.xianniu_note_var.set(self.tr(getattr(self.app, 'xianniu_message', '') or
                 'Start Xianniu acceleration, then check its proxy. TCP relay only; UDP and transparent gateway are unavailable.'))
+        if hasattr(self, 'steam_button'):
+            self.steam_button.configure(state='normal' if idle else 'disabled')
+            sources = ('PC network', 'HTTP proxy', 'SOCKS5 proxy')
+            self.accelerator_source_combo.configure(values=tuple(self.tr(item) for item in sources),
+                                                    state='readonly' if idle else 'disabled')
+            selected = self.accelerator_source_var.get()
+            self.accelerator_source_combo.current(('host', 'http', 'socks5').index(selected) if selected in ('host', 'http', 'socks5') else 0)
+            self.accelerator_port_entry.configure(state='normal' if idle else 'disabled')
+            for widget in (self.accelerator_port_label, self.accelerator_port_entry):
+                widget.pack(side='left', padx=(0, 8)) if selected != 'host' else widget.pack_forget()
         for mode, button in self.product_mode_buttons.items():
             button.configure(text=self.tr(product_modes.LABELS[mode]),
-                state='normal' if idle and (not linked or mode == 'game') else 'disabled')
-        self.product_mode_note.set(self.tr('Linked proxy supports game mode only. Other modes remain in the existing Clash client.'
+                state='normal' if idle and (accelerator_mode or mode == 'accelerator' or not linked or mode == 'game') else 'disabled')
+        self.product_mode_note.set(self.tr(product_modes.NOTES['accelerator']
+            if accelerator_mode else 'Linked proxy supports game mode only. Other modes remain in the existing Clash client.'
             if linked else product_modes.NOTES.get(product_mode, product_modes.NOTES['game'])))
         self.start_var.set(self.tr('Start listener' if self.advanced else 'Start sharing'))
+        if accelerator_mode:
+            self.start_var.set(self.tr('Start accelerator relay'))
         self.import_note_var.set(self.tr(self.app.subscription_message or
             'Paste once to import and save. Sharing starts only when you click Start sharing.'))
         from pathlib import Path
         executable = self.app.vars['native_path' if self.app.vars['engine_mode'].get() == 'embedded' else 'core_path'].get().strip()
-        self.core_note_var.set(self.tr('Xianniu proxy selected. Keep its acceleration running; TCP relay only.')
+        self.core_note_var.set(self.tr('Accelerator relay uses its selected connection; no subscription or Mihomo core is needed.') if accelerator_mode else
+            self.tr('Xianniu proxy selected. Keep its acceleration running; TCP relay only.')
             if linked and self.app.raw.get('existing_proxy_provider') == 'xianniu' else
             self.tr('Existing proxy selected; nodes and core are managed in Clash.') if linked else
             self.tr(self.app.core_message) if self.app.core_message else
@@ -864,6 +933,14 @@ class DesktopView:
         for button in (self.guide_copy_button, self.guide_export_button):
             button.configure(state='normal' if sharing else 'disabled')
         self.import_card.grid()
+        # The normal modes retain their source workflow; accelerator controls
+        # and source configuration are a separate, reversible mode.
+        if hasattr(self, 'accelerator_card'):
+            self.accelerator_card.grid() if accelerator_mode else self.accelerator_card.grid_remove()
+            self.profile_card.grid_remove() if accelerator_mode else self.profile_card.grid()
+            self.accelerator_profiles_note.grid() if accelerator_mode else self.accelerator_profiles_note.grid_remove()
+            for widget in self.normal_source_widgets:
+                widget.grid_remove() if accelerator_mode else widget.grid()
         self.advanced_var.set(self.tr('Simple view' if self.advanced else 'Advanced settings…'))
         self.stop_var.set(self.tr('Cancel preparation' if self.app.importing else 'Stop'))
         from .subscription_info import display, usage_percent
@@ -874,8 +951,10 @@ class DesktopView:
         else:
             self.quota_bar.configure(value=percent)
             self.quota_bar.grid()
+        if accelerator_mode:
+            self.quota_bar.grid_remove()
         existing = self.app.existing_proxy
-        if (existing or linked) and self.app.raw.get('existing_proxy_provider') != 'xianniu':
+        if (existing or linked) and self.app.raw.get('existing_proxy_provider') != 'xianniu' and not accelerator_mode:
             self.clash_card.grid()
             self.clash_var.set(self.tr('Existing proxy selected; nodes and core are managed in Clash.' if linked else
                 'Local proxy detected. Start sharing to reuse it without importing a subscription or choosing a core.') +
@@ -904,7 +983,10 @@ class DesktopView:
         else:
             self.core_setup_button.pack(side='left', padx=8)
         self.metric_vars['Current engine'].set(self.tr('Embedded · experimental' if mode and mode.get() == 'embedded' else 'External Mihomo'))
-        if self.app.raw.get('existing_proxy_port'):
+        if accelerator_mode:
+            self.metric_vars['Current engine'].set(self.tr('Accelerator mode'))
+            self.metric_vars['Upstream core'].set(self.tr('Connection selected; acceleration unverified'))
+        elif self.app.raw.get('existing_proxy_port'):
             self.metric_vars['Current engine'].set(self.tr('Existing proxy'))
             self.metric_vars['Upstream core'].set(self.tr('Managed by existing client'))
         host = self.app.vars.get('listen_host'); port = self.app.vars.get('listen_port')
@@ -921,6 +1003,10 @@ class DesktopView:
                            if self.app.backend.ready and effective_host and port and port.get() else self.tr('Start sharing to see the connection address.'))
         self.guide_instructions_var.set(self.tr('Configure apps manually with the local address below. System proxy and VPN settings stay unchanged.'
             if product_mode == 'clash' else 'Join the same Wi-Fi. In the device Wi-Fi settings choose HTTP Proxy → Manual, enter the server and port above, and leave authentication off.'))
+        if accelerator_mode and self.app.backend.ready and effective_host and port and port.get():
+            self.guide_instructions_var.set(self.tr(
+                'Android: choose Wi-Fi proxy Auto-config when available and enter {url}. Steam web domains use StarPass; other domains connect directly. If Auto-config is unavailable, use the manual address above.',
+                url=f'http://{effective_host}:{port.get()}/accelerator.pac'))
         self.guide_instructions_var.set(self.guide_instructions_var.get() + '\n\n' + self.tr(
             'When finished, turn off the proxy setting on the device before stopping StarPass. Do not disable firewall or certificate protection.'))
         if self.preview:
@@ -946,7 +1032,8 @@ class DesktopView:
         self.hero_var.set(self.tr(title))
         from .onboarding import next_step
         guidance = self.tr(next_step(app.product_mode(), ready, devices, statistics.get('errors', 0)))
-        core_label = self.tr('Managed by existing client' if app.raw.get('existing_proxy_port') else self.core_state)
+        core_label = self.tr('PC network; acceleration unverified' if app.raw.get('host_relay') == 'steam' else
+            'Managed by existing client' if app.raw.get('existing_proxy_port') else self.core_state)
         self.hero_note_var.set(core_label + ' · ' + guidance)
         self.connection_count_var.set(counts)
         self.lan_runtime_var.set(counts)

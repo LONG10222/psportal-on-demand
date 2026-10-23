@@ -96,7 +96,7 @@ class ProductModePolicyTests(unittest.TestCase):
             path = Path(directory) / 'config.json'
             effective = product_modes.effective_config(dict(values, product_mode='clash'))
             save_config(path, effective)
-            saved = json.loads(path.read_text())
+            saved = json.loads(path.read_text(encoding='utf-8'))
             self.assertEqual(saved['listen_host'], '127.0.0.1')
             editable = product_modes.editable_config(saved)
             self.assertEqual(editable['listen_host'], values['listen_host'])
@@ -159,7 +159,7 @@ class ProductModeDesktopTests(unittest.TestCase):
                 self.assertEqual(app.vars['product_mode'].get(), 'game')
 
     def test_actual_start_passes_effective_policy_and_keeps_preferences_on_failed_spawn(self):
-        for mode in product_modes.MODES:
+        for mode in ('game', 'mixed', 'clash'):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
                 app = self.app(Path(directory) / 'config.json')
                 app.set_product_mode(mode)
@@ -224,7 +224,7 @@ class ProductModeDesktopTests(unittest.TestCase):
             self.assertFalse(app.collect()['product_lan_automatic'])
 
     def test_quick_mode_switch_reuses_existing_source_without_download(self):
-        for mode in product_modes.MODES:
+        for mode in ('game', 'mixed', 'clash'):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
                 app = self.app(Path(directory) / 'config.json')
                 app.set_product_mode(mode)

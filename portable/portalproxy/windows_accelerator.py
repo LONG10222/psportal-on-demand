@@ -22,7 +22,7 @@ import time
 
 MAIN_NAME = 'xianniu.exe'
 HELPER_NAMES = frozenset(('socksengine.exe', 'socksenginehelper.exe', 'networktunnelx64helper.exe'))
-TEST_HOSTS = ('example.com', 'www.playstation.com')
+TEST_HOSTS = ('example.com', 'www.playstation.com', 'store.steampowered.com')
 MAX_CANDIDATES = 8
 MAX_INVENTORY_BYTES = 65536
 
