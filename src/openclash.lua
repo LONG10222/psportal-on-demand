@@ -36,6 +36,36 @@ function M.auth(cfg,uci)
     -- Empty upstream secret is allowed only on the hard-coded loopback socket.
     return secret == '' and '' or 'Authorization: Bearer '..secret
 end
+local function base64(value)
+    local alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    local result={}
+    for i=1,#value,3 do
+        local a,b,c=value:byte(i,i+2)
+        local word=a*65536+(b or 0)*256+(c or 0)
+        result[#result+1]=alphabet:sub(math.floor(word/262144)%64+1,math.floor(word/262144)%64+1)
+            ..alphabet:sub(math.floor(word/4096)%64+1,math.floor(word/4096)%64+1)
+            ..(b and alphabet:sub(math.floor(word/64)%64+1,math.floor(word/64)%64+1) or '=')
+            ..(c and alphabet:sub(word%64+1,word%64+1) or '=')
+    end
+    return table.concat(result)
+end
+-- Read only already-enabled OpenClash HTTP credentials into listener memory.
+-- No second saved password, config copy, cache, logging, or external mutation.
+function M.proxy_authorization(uci)
+    uci=uci or cursor()
+    if type(uci.foreach)~='function' then return nil end
+    local candidates={}
+    uci:foreach('openclash','authentication',function(section)
+        local user,password=section.username,section.password
+        if section.enabled=='1' and type(user)=='string' and #user>0 and #user<=256
+            and not user:find('[:%c]') and type(password)=='string' and #password>0
+            and #password<=1024 and not password:find('%c') then
+            candidates[#candidates+1]={name=user,header='Proxy-Authorization: Basic '..base64(user..':'..password)}
+        end
+    end)
+    table.sort(candidates,function(a,b) return a.name<b.name end)
+    if candidates[1] then return candidates[1].header,candidates[1].name end
+end
 function M.runtime(config,cfg)
     if type(config) ~= 'table' then return nil,'invalid OpenClash runtime state' end
     if config.mode ~= 'rule' and config.mode ~= 'global' and config.mode ~= 'direct' then
@@ -43,9 +73,8 @@ function M.runtime(config,cfg)
     end
     local key = cfg.proxy_kind == 'mixed' and 'mixed-port' or 'port'
     if config[key] ~= cfg.backend_port then return nil,'OpenClash runtime port differs; apply settings again' end
-    -- Do not copy proxy usernames/passwords or inject them into client traffic.
-    -- A configured authenticated proxy is supported only with an explicit
-    -- loopback exemption; otherwise fail before releasing a client request.
+    -- /configs reports usernames only. Match the in-memory UCI credential;
+    -- never treat its controller Bearer token as an HTTP proxy password.
     local auth = config.authentication
     if auth ~= nil and type(auth) ~= 'table' then return nil,'invalid OpenClash proxy authentication state' end
     if auth and next(auth) ~= nil then
@@ -53,7 +82,13 @@ function M.runtime(config,cfg)
         for _,prefix in ipairs(type(config['skip-auth-prefixes']) == 'table' and config['skip-auth-prefixes'] or {}) do
             if prefix == '127.0.0.1/32' or prefix == '127.0.0.0/8' or prefix == '127.0.0.1/8' then exempt = true end
         end
-        if not exempt then return nil,'OpenClash proxy requires authentication; configure its loopback exemption yourself' end
+        if not exempt then
+            local matched=false
+            for _,user in ipairs(auth) do if user==cfg.proxy_username then matched=true end end
+            if not matched or type(cfg.proxy_authorization)~='string' then
+                return nil,'OpenClash proxy authentication unavailable; use an enabled matching OpenClash authentication entry or an explicit loopback exemption'
+            end
+        end
     end
     return config.mode
 end

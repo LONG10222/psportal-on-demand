@@ -1,5 +1,7 @@
 # 订阅与节点偏好：第二阶段
 
+> 下面保留第二阶段的设计及历史边界。2026-10-23 已新增 N1 实机与隔离真实 Mihomo 验证，当前结果及未完成项以[最新验收记录](router-validation-2026-10-23.zh-CN.md)为准。
+
 本阶段基于第一阶段修复，仍是 OpenWrt/iStoreOS 的 Lua/procd 实现，不是 Windows、macOS 或手机独立客户端。新增可选 LuCI 旧版 CBI 页面和 root/SSH 命令。测试使用模拟核心/系统接口，没有真实路由器、LuCI 浏览器或 Mihomo 核心验收。
 
 ## 三种模式

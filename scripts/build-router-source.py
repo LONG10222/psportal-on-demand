@@ -9,7 +9,7 @@ import tarfile
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ('install.sh', 'uninstall.sh', 'LICENSE', 'README.zh-CN.md', 'CHANGELOG.md',
-         'SECURITY.md', 'scripts/build-router-source.py')
+         'SECURITY.md', 'scripts/build-router-source.py', 'scripts/build-router-ipk.py')
 DIRS = ('src', 'files', 'luci', 'tests', 'docs')
 
 
@@ -24,7 +24,8 @@ def build(destination):
         if path.is_symlink():
             raise ValueError('Router bundle does not permit symlinks')
         relative = path.relative_to(ROOT).as_posix()
-        entries[relative] = (path.read_bytes(), 0o755 if path.stat().st_mode & 0o111 else 0o644)
+        executable = relative.endswith(('.sh', '.init')) or relative == 'files/portalproxy'
+        entries[relative] = (path.read_bytes().replace(b'\r\n', b'\n'), 0o755 if executable else 0o644)
     entries['SHA256SUMS'] = (''.join(f'{hashlib.sha256(data).hexdigest()}  {name}\n'
                                    for name, (data, _) in sorted(entries.items())).encode(), 0o644)
     destination.parent.mkdir(parents=True, exist_ok=True)

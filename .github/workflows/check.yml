@@ -29,6 +29,9 @@ jobs:
           lua5.1 tests/node_api.lua
           lua5.1 tests/openclash.lua
           lua5.1 tests/luci.lua
+          lua5.1 tests/status.lua
+          lua5.1 tests/configure.lua
+          lua5.1 tests/service_status.lua
       - name: Installer and repository checks
         run: python3 tests/packaging.py
       - name: Verify StarPass icons and platform branding
@@ -40,6 +43,9 @@ jobs:
           python3 scripts/build-router-source.py "$RUNNER_TEMP/starpass-router-source.tar.gz" > "$RUNNER_TEMP/starpass-router-source.sha256"
           python3 scripts/build-router-source.py "$RUNNER_TEMP/starpass-router-source-second.tar.gz"
           cmp "$RUNNER_TEMP/starpass-router-source.tar.gz" "$RUNNER_TEMP/starpass-router-source-second.tar.gz"
+          python3 scripts/build-router-ipk.py "$RUNNER_TEMP/luci-app-starpass.ipk" --version "0.1.0+git${PSPORTAL_SOURCE_COMMIT:0:12}-1" > "$RUNNER_TEMP/luci-app-starpass.sha256"
+          python3 scripts/build-router-ipk.py "$RUNNER_TEMP/luci-app-starpass-second.ipk" --version "0.1.0+git${PSPORTAL_SOURCE_COMMIT:0:12}-1"
+          cmp "$RUNNER_TEMP/luci-app-starpass.ipk" "$RUNNER_TEMP/luci-app-starpass-second.ipk"
       - name: Upload reviewed router source installer
         uses: actions/upload-artifact@v4
         with:
@@ -47,5 +53,7 @@ jobs:
           path: |
             ${{ runner.temp }}/starpass-router-source.tar.gz
             ${{ runner.temp }}/starpass-router-source.sha256
+            ${{ runner.temp }}/luci-app-starpass.ipk
+            ${{ runner.temp }}/luci-app-starpass.sha256
           retention-days: 7
           if-no-files-found: error

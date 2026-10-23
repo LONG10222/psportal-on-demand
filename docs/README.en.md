@@ -8,11 +8,15 @@ On-demand proxying for phones and LAN devices.
 
 Releases contain archived development builds. The compact Android UI is built by the current pull request; the older c1d2d3a archive does not include it. See [installation details](downloads.zh-CN.md). CI Android APKs are unsigned; iOS device builds require signing.
 
+The [validated router build, 5da0753](https://github.com/LONG10222/psportal-on-demand/actions/runs/39958952749) contains the compact LuCI dashboard, a core-free opkg IPK, source installer and checksum files. [Router installation](router-readme.en.md). Actions artifacts have a retention limit; the run is not a permanent release download.
+
 ## Quick start
 
 **Android:** enter a public HTTPS subscription, choose Game / Mixed / Clash and routing, then tap **Connect**. Grant Android VPN consent when phone proxying is selected. Use **Sharing** for a LAN device's manual HTTP proxy address, **Proxies** for live node controls, **Settings** for background/recovery options, and **Help** for details.
 
 **Desktop:** paste once to import, then select **Start sharing**, or reuse an existing Clash proxy. Linked mode leaves the original client's nodes and core under its control. Windows chooses the default Mihomo automatically. See the [desktop guide](../portable/docs/desktop.md).
+
+**Router:** verify and install the matching package, open **Services → StarPass / 星渡 → 接入设置**, choose standalone or OpenClash linkage, enter the allowed device IP, and **Save**. Standalone mode also needs an explicit subscription update. Then **Start sharing** and enter the displayed address in the device's manual HTTP proxy settings. Node and subscription management stays in OpenClash when linked. [Full router guide](router-readme.en.md).
 
 ## Platforms
 
@@ -21,7 +25,7 @@ Releases contain archived development builds. The compact Android UI is built by
 - [iOS](../native/ios/README.md): foreground sharing, with separately documented background limits.
 - [OpenWrt / iStoreOS](router-readme.en.md): standalone or OpenClash linkage.
 
-LAN HTTP/HTTPS CONNECT forwards TCP, not arbitrary game UDP. Use trusted networks and remove a device's manual proxy when finished. Build, emulator and physical-device evidence remain separate; see [validation](../VALIDATION-LOCAL.md).
+LAN HTTP/HTTPS CONNECT forwards TCP, not arbitrary game UDP. Use trusted networks and remove a device's manual proxy when finished. The tested Android HTTP client fell back to direct connections when the proxy stopped; manual proxy settings are not a kill switch. Build, emulator and physical-device evidence remain separate; see [validation](../VALIDATION-LOCAL.md).
 
 ## Development and license
 

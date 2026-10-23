@@ -213,11 +213,11 @@ local function run(spec)
                     return nil, job.spec.wait_error
                 end
                 if job.killed_at then
-                    if w.time < job.killed_at+(job.spec.reap_delay or 0) then return 0 end
+                    if w.time < job.killed_at+(job.spec.reap_delay or 0) then return false end
                     job.reaped=true; job.reaped_at=w.time; event('reap',pid)
                     return pid,'signaled',constants.SIGKILL
                 end
-                if w.time<job.ready_at then return 0 end
+                if w.time<job.ready_at then return false end
                 job.reaped=true; job.reaped_at=w.time; event('reap',pid)
                 if job.spec.signal then return pid,'signaled',job.spec.signal end
                 return pid,'exited',job.spec.success==false and 1 or 0
@@ -327,7 +327,7 @@ local function run(spec)
             if spec.child and w.child_started_at then w.child_exit=code; error(CHILD_EXIT,0) end
             error(spec.name..': launcher unexpectedly exited with '..tostring(code),0)
         end}
-    local modules={uci={cursor=function() return {get=function(_,config,section,key)
+    local modules={service_status={pid=function() return w.core_running and 2000 or nil end},uci={cursor=function() return {get=function(_,config,section,key)
         assert(config=='openclash','linked UCI reads only OpenClash')
         if section=='@overwrite[0]' then return nil end
         return ({enable='1',http_port=tostring(cfg.backend_port),cn_port=tostring(cfg.api_port),dashboard_password='fake-test-only'})[key]

@@ -2,6 +2,11 @@
 
 ## 当前入口
 
+- **[软路由已验证代码 · 5da0753](https://github.com/LONG10222/psportal-on-demand/actions/runs/39958952749)**：进入成功的 checks 运行页面，在 Artifacts 下载 `starpass-router-source-5da075302716ec1199bdefcb110d6ae43aff1d46` 并解开外层 ZIP。内有 `luci-app-starpass.ipk`、`starpass-router-source.tar.gz` 和各自 `.sha256`。[安装与使用](router-readme.zh-CN.md) · [实机与安卓验证](router-validation-2026-10-23.zh-CN.md)。
+- **[软路由当前分支构建](https://github.com/LONG10222/psportal-on-demand/actions/workflows/check.yml?query=branch%3Afix%2Frouter-install-validation-20261023)**：按提交确认 checks 通过。Actions 产物会过期；过期后从[匹配源码](https://github.com/LONG10222/psportal-on-demand/archive/5da075302716ec1199bdefcb110d6ae43aff1d46.zip)按[构建步骤](router-readme.zh-CN.md#从匹配源码构建)生成。文档提交和后续 CI 不代表重新完成实体设备验收。
+
+IPK 仅供 opkg 固件，由包管理器安装 Lua/LuCI 依赖，包内没有代理核心。apk 固件使用源码安装器。软路由页面提供概览与折叠设置、独立/联动模式、保存/启停、节点快照和帮助；实体 PS Portal／Quest 游戏与串流仍待验收。
+
 - [测试归档 Releases](https://github.com/LONG10222/psportal-on-demand/releases)：`starpass-test-20261020-c1d2d3a` 保留已验证的整合测试包及校验信息。
 - [当前分支 Actions](https://github.com/LONG10222/psportal-on-demand/actions)：Android 四页精简界面、升级校验和全平台更新入口由对应 PR 构建，旧归档不包含这些更新。原始 CI APK 未签名。
 

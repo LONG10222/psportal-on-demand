@@ -8,13 +8,13 @@ start_service() {
     /usr/bin/lua -e 'local f=require "nixio.fs"; local j=require "luci.jsonc"; local c=j.parse(f.readfile("/etc/portalproxy/policy.json") or ""); os.exit(c and c.core_mode~="openclash" and 0 or 1)' || return 1
     umask 077
     local core
-    core="$(uci -q get portalproxy.main.core_path)"
+    core="$(/usr/bin/lua -e 'local f=require "nixio.fs"; local j=require "luci.jsonc"; local c=j.parse(f.readfile("/etc/portalproxy/policy.json") or ""); if c and type(c.core_path)=="string" and c.core_path:match("^/[%w%._/%-]+$") then print(c.core_path) end')"
     [ -n "$core" ] || core=/usr/libexec/portalproxy/mihomo
     [ -x "$core" ] && [ -s /etc/portalproxy/config.yaml ] || return 1
     procd_open_instance main
     procd_set_param command "$core" -d /etc/portalproxy -f /etc/portalproxy/config.yaml
     procd_set_param user root
-    [ "$(uci -q get portalproxy.main.routing_mark)" = 6666 ] && procd_set_param group nogroup
+    [ "$(/usr/bin/lua -e 'local f=require "nixio.fs"; local j=require "luci.jsonc"; local c=j.parse(f.readfile("/etc/portalproxy/policy.json") or ""); print(c and c.routing_mark or 0)')" = 6666 ] && procd_set_param group nogroup
     procd_set_param respawn 3600 5 0
     procd_set_param term_timeout 2
     procd_set_param stdout 1

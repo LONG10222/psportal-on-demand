@@ -1,6 +1,18 @@
 # This upstream notice is compared byte-for-byte with the retained source.
 /portable/docs/PyYAML-LICENSE.txt -text
 
+# Router payloads must execute on BusyBox even when packaged on Windows.
+/install.sh text eol=lf
+/uninstall.sh text eol=lf
+/src/*.lua text eol=lf
+/tests/*.lua text eol=lf
+/tests/*.sh text eol=lf
+/files/*.init text eol=lf
+/files/portalproxy.config text eol=lf
+/luci/** text eol=lf
+/scripts/build-router*.py text eol=lf
+/files/portalproxy text eol=lf
+
 # Preserve exact pinned dependency bytes for provenance on all checkouts.
 native/third_party/mihomo/** -text
 native/third_party/mihomo/PSPORTAL-PATCHES/*.patch -whitespace

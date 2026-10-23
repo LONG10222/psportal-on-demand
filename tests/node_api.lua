@@ -49,6 +49,7 @@ local function fixture()
         check(timeout<=10,'bounded polling interval'); w.polls=w.polls+1
         if not w.freeze_time then w.time=w.time+timeout/1000 end
         if w.poll_error then return nil,5 end
+        if w.false_polls and w.false_polls>0 then w.false_polls=w.false_polls-1; return false end
         return w.stall and 0 or 1
     end
     n.socket=function(domain,kind)
@@ -120,6 +121,8 @@ check(api.get(cfg,'/proxies').ok,'partial sends and async connect succeed')
 check(w.closed==1,'successful request closes socket')
 check(w.requests[1]:find('Authorization: Bearer test-only-secret\r\n',1,true),'authorization included')
 check(w.requests[1]:find('GET /proxies HTTP/1.1',1,true)==1,'GET only')
+w.false_polls=3; response({ok=true})
+check(api.get(cfg,'/proxies').ok,'nixio false timeout retries until data arrives')
 local before=w.sockets
 for _,path in ipairs({'http://example.com/proxies','/proxies/a/delay','/configs','/proxies/x?url=a','/proxies/x\r\nX: y','/proxies/%GG','/proxies/a%2Fdelay','/proxies/a%252Fdelay','/proxies/%2e%2e'}) do
     check(not api.get(cfg,path),'only allowlisted API paths')

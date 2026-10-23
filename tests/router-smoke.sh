@@ -34,7 +34,8 @@ curl -sS --max-time 4 --interface 127.0.0.2 --noproxy '' -x http://127.0.0.1:210
 sleep 1
 [ "$(state core_running)" = false ]
 code="$(curl -sS --max-time 15 --noproxy '' -x http://127.0.0.1:21081 -o /dev/null -w '%{http_code}' http://1.1.1.1/)"
-[ "$code" = 204 ] && [ "$(state core_running)" = true ]
+[ "$code" = 204 ]
+[ "$(state core_running)" = true ]
 i=0
 while [ "$i" -lt $((IDLE_SECONDS+7)) ]; do
     code="$(curl -sS --max-time 4 --noproxy '' -x http://127.0.0.1:21081 -o /dev/null -w '%{http_code}' http://127.0.0.1:21084/)"
@@ -46,6 +47,7 @@ done
 [ "$(state counters.external_requests)" = 1 ]
 [ "$(state counters.denied_clients)" = 1 ]
 code="$(curl -sS --max-time 15 --noproxy '' -x http://127.0.0.1:21081 -o /dev/null -w '%{http_code}' http://1.1.1.1/)"
-[ "$code" = 204 ] && [ "$(state core_running)" = true ]
+[ "$code" = 204 ]
+[ "$(state core_running)" = true ]
 [ "$(state counters.starts)" = 2 ]
 echo 'PASS: loopback HTTP/CONNECT denial, client rejection, external wake, idle shutdown, second wake. LAN concurrency is covered by tests/lifecycle.lua.'
