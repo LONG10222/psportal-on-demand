@@ -73,7 +73,7 @@
  <!-- Enter in a field saves; it must never implicitly start sharing. -->
  <button type="submit" name="cbid.portalproxy_ui.1._save" value="1" hidden tabindex="-1" aria-hidden="true">保存配置</button>
  <div class="cbi-map starpass-app" id="cbi-portalproxy_ui">
-  <header class="starpass-brand"><div><h2>星渡 StarPass</h2><p>设备共享，按需连接。</p></div><span class="starpass-tag">HTTP / TCP</span></header>
+  <div class="starpass-brand"><div><h2>星渡 StarPass</h2><p>设备共享，按需连接。</p></div><span class="starpass-tag">HTTP / TCP</span></div>
   <% if self.message then %><div class="alert-message notice" role="status"><%=pcdata(self.message)%></div><% end %>
   <% if self.errmessage then %><div class="alert-message warning" role="alert"><%=pcdata(self.errmessage)%></div><% end %>
   <section class="starpass-card" aria-labelledby="starpass-overview-title">
