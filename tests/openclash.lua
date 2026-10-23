@@ -42,6 +42,31 @@ for _,prefix in ipairs({'127.0.0.1/32','127.0.0.0/8','127.0.0.1/8'}) do
     check(adapter.runtime({port=7890,mode='rule',authentication={'user:secret'},['skip-auth-prefixes']={prefix}},cfg)=='rule','explicit loopback exemption supported')
 end
 check(not adapter.runtime({port=7890,mode='rule',authentication='not-a-list'},cfg),'malformed auth rejected')
+local credential_cursor={foreach=function(_,package,kind,callback)
+    check(package=='openclash' and kind=='authentication','reads existing auth section only')
+    callback({enabled='0',username='disabled',password='do-not-use'})
+    callback({enabled='1',username='Aladdin',password='open sesame'})
+end}
+local header,user=adapter.proxy_authorization(credential_cursor)
+check(header=='Proxy-Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==','RFC Basic authentication vector')
+cfg.proxy_authorization,cfg.proxy_username=header,user
+check(adapter.runtime({port=7890,mode='rule',authentication={'Aladdin'}},cfg)=='rule','runtime username matches enabled UCI credential')
+check(not adapter.runtime({port=7890,mode='rule',authentication={'other'}},cfg),'runtime username drift rejects credential')
+cfg.proxy_authorization,cfg.proxy_username=nil,nil
+for _,bad in ipairs({{username='user:bad',password='x'},{username='user',password='x\r\nInjected: bad'},
+    {username='',password='x'},{username='user',password=''}}) do
+    bad.enabled='1'
+    check(adapter.proxy_authorization({foreach=function(_,_,_,callback) callback(bad) end})==nil,'unsafe auth does not enter HTTP headers')
+end
+local protocol=require 'protocol'
+local body='test request body'
+local wire='POST http://example.com/ HTTP/1.1\r\nHost: example.com\r\nProxy-Authorization: client-secret\r\nConnection: keep-alive\r\n\r\n'..body
+local authenticated=protocol.authenticated_request(wire,header)
+check(not authenticated:find('client-secret',1,true),'client proxy auth stripped')
+check(authenticated:sub(-#body)==body,'payload preserved')
+local _,headers=authenticated:gsub('Proxy%-Authorization:', '')
+check(headers==1 and authenticated:find(header,1,true),'exactly one upstream auth header')
+check(authenticated:find('Connection: close',1,true),'HTTP auth cannot be bypassed with a subsequent keepalive request')
 local options={core_mode='openclash',listen_ip='192.168.50.2',client_ip='192.168.50.30',local_dns='192.168.50.1'}
 local core,policy=config.render(options,nil,nil,cfg)
 check(core==nil,'linked mode renders no owned core config')

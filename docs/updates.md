@@ -63,6 +63,8 @@ LuCI 显示只读更新指引，不下载或执行未知架构核心。先核对
 
 ## 验证范围
 
+opkg 固件可使用无核心 IPK；apk 固件仍用源码安装器，不混装或改名。IPK 升级通过包管理器保留 conffile，备份位于本机私有目录；卸载仍保留配置，完整清除须在卸载后明确执行源码卸载器 `--purge`。源码安装/卸载拒绝覆盖 opkg 管理的安装。安装完成后仍需明确启动。具体结果见[路由器验收](router-validation-2026-10-23.zh-CN.md)。
+
 新增 JVM 测试覆盖版本/架构选择、受限下载域名、哈希/长度校验和取消。编译后清单审计继续严格检查权限，并要求更新 Activity 和单文件 APK provider 均不对外导出；安装包只通过临时只读 URI 授权。应用内没有静默安装、启动检查定时器、密钥生成或用户可配置的更新源。
 
 参考：[Android 安装来源授权](https://developer.android.com/reference/android/content/pm/PackageManager#canRequestPackageInstalls())、[Android 应用签名](https://developer.android.com/studio/publish/app-signing)、[GitHub Release 附件 API](https://docs.github.com/en/rest/releases/assets)。

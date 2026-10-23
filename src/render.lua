@@ -17,6 +17,15 @@ for _,key in ipairs(keys) do
 end
 local ok,err = pcall(function()
     local validated = config.validate(options)
+    if validated.core_mode == 'standalone' then
+        if validated.core_path == '/usr/libexec/portalproxy/mihomo' and not fs.access(validated.core_path,'x') then
+            for _,candidate in ipairs({'/usr/bin/mihomo','/etc/openclash/core/clash_meta'}) do
+                if fs.access(candidate,'x') then options.core_path=candidate; break end
+            end
+        end
+        assert(fs.access(options.core_path or validated.core_path,'x'),
+            'Standalone core missing. Link existing OpenClash or install a compatible Mihomo; no service started')
+    end
     local linked
     if validated.core_mode == 'openclash' then
         linked = require('openclash').discover(); config.render(options,nil,nil,linked)

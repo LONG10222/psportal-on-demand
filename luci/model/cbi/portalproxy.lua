@@ -7,7 +7,7 @@ local json = require 'luci.jsonc'
 local sys = require 'luci.sys'
 
 local form = SimpleForm('portalproxy_ui', translate('StarPass / 星渡'),
-    translate('Viewing this page reads a local snapshot only. It does not start the core, probe nodes, or keep the core awake. Save settings first, then explicitly apply them when connections may be interrupted.'))
+    translate('保存配置与启动共享分开。状态来自本地快照，刷新页面不会唤醒核心。 / Save first, then explicitly Start. Page views read local snapshots only.'))
 form.submit = false
 form.reset = false
 
@@ -23,15 +23,50 @@ http.header('Cache-Control', 'no-store')
 local cursor = require('uci').cursor()
 local options = cursor:get_all('portalproxy', 'main') or {}
 local linked = options.core_mode == 'openclash'
+package.path = '/usr/libexec/portalproxy/?.lua;' .. package.path
+local runtime
+do
+    local ok, status = pcall(require, 'runtime_status')
+    if ok then
+        local read_ok, state = pcall(status.read)
+        if read_ok then runtime = state end
+    end
+end
+local live = form:field(DummyValue, '_listener', translate('Listener / 监听状态'))
+live.value = runtime and (runtime.stale and translate('状态过期，请检查服务 / Status stale; check service') or translate('运行中；外网需另行验证 / Running; Internet access unverified'))
+    or translate('已停止 / Stopped')
+if runtime then
+    local connections = form:field(DummyValue, '_connections', translate('Connections · uptime / 连接与时长'))
+    connections.value = string.format('%d external / %d LAN · %d s', runtime.external_connections, runtime.local_connections, runtime.uptime_seconds)
+    local traffic = form:field(DummyValue, '_traffic', translate('设备上传 / 下载（字节）'))
+    traffic.value = string.format('%.0f / %.0f', runtime.counters.upload_bytes, runtime.counters.download_bytes)
+end
+local network = cursor:get_all('network', 'lan') or {}
+local network_fields = {'listen_ip', 'client_ip', 'local_dns', 'listen_port', 'idle_seconds', 'bootstrap_dns'}
+local definitions = {
+    {'listen_ip', '路由器 LAN IPv4 / Router LAN IPv4', network.ipaddr and network.ipaddr:match('^[^/]+') or ''},
+    {'client_ip', '允许接入的设备 IPv4 / Allowed device IPv4', ''},
+    {'local_dns', '局域网 DNS / LAN DNS IPv4', network.gateway or network.ipaddr or ''},
+    {'listen_port', 'HTTP 代理端口 / HTTP proxy port', '10081'},
+    {'idle_seconds', '空闲回收（秒）/ External idle timeout', '60'},
+    {'bootstrap_dns', '引导 DNS（可选）/ Bootstrap DNS', ''}
+}
 local game_mode = form:field(DummyValue, '_game_mode', translate('Game mode / 游戏模式'))
 game_mode.template = 'portalproxy/onboarding'
 game_mode.value = translate('Game-device sharing (HTTP/TCP). Configure the allowed device, start the service, then enter this router address and proxy port in the device manual HTTP proxy settings. Verify a webpage on the device before testing the intended game feature. Listener ready or a connection does not prove Internet access. Game UDP and whole-device routing are not provided. Turn off the device HTTP proxy when finished.')
-local core_mode = form:field(ListValue, 'core_mode', translate('Core ownership'),
-    translate('Standalone starts and stops its own core. OpenClash linked reuses the already running external core; final DNS, rules and DIRECT choices stay with OpenClash. Idle closes only StarPass sessions. HTTP sharing does not carry game UDP.'))
-core_mode:value('standalone', translate('Standalone on-demand core'))
-core_mode:value('openclash', translate('OpenClash linked (read-only)'))
+local core_mode = form:field(ListValue, 'core_mode', translate('核心归属 / Core ownership'))
+core_mode:value('standalone', translate('独立按需核心 / Standalone on-demand core'))
+core_mode:value('openclash', translate('联动 OpenClash（只读复用）/ OpenClash linked'))
 core_mode.default = options.core_mode or 'standalone'
 core_mode.rmempty = false
+for _, definition in ipairs(definitions) do
+    local key = definition[1]
+    local value = form:field(Value, key, translate(definition[2]))
+    value.default = options[key] and options[key] ~= '' and options[key] or definition[3]
+    value.rmempty = key == 'bootstrap_dns'
+    value.maxlength = 256
+    if key == 'bootstrap_dns' then value:depends('core_mode', 'standalone') end
+end
 if linked then
     local manage = form:field(DummyValue, '_openclash', translate('Subscription and node management'))
     manage.value = translate('Use Services → OpenClash. This page never changes its subscriptions, selectors, rules, service or firewall.')
@@ -159,11 +194,14 @@ if type(snapshot.nodes) == 'table' then
     end
 end
 local nodes = form:section(Table, node_rows, translate('Cached nodes'),
-    translate('These are historical values. A sleeping core is not contacted to refresh this list.'))
+    linked and translate('OpenClash 节点只读展示；节点选择和测速请在 OpenClash 操作。 / Manage node choices and latency tests in OpenClash.')
+    or translate('These are historical values. A sleeping core is not contacted to refresh this list.'))
 nodes:option(DummyValue, 'name', translate('Name'))
+if not linked then
 nodes:option(DummyValue, 'delay', translate('Delay'))
 nodes:option(DummyValue, 'health', translate('Cached health'))
 nodes:option(DummyValue, 'selected', translate('Selected at snapshot'))
+end
 
 local function button(name, label, description)
     local value = form:field(Button, name, label, description)
@@ -173,10 +211,11 @@ local function button(name, label, description)
     function value.write() end
     function value.remove() end
 end
-button('_save', translate('Save settings (no restart)'),
-    translate('Save to UCI without restarting the listener or waking the core. Running connections keep their current configuration until Apply or the next service start.'))
-button('_apply', translate('Apply saved settings and restart listener'),
-    translate('Uses saved settings only; unsaved edits are ignored. Restarts the StarPass listener and stops its owned core, interrupting Portal sessions. An external OpenClash core is never restarted or stopped.'))
+button('_save', translate('保存配置 / Save settings'))
+button('_apply', translate('应用已保存配置 / Apply saved settings'))
+button('_start', translate('启动共享（开机自启）/ Start sharing'))
+button('_stop', translate('停止共享（取消自启）/ Stop sharing'))
+button('_refresh', translate('刷新节点快照 / Refresh node snapshot'))
 if not linked then button('_update', translate('Update subscription now'),
     translate('Downloads the cache using the saved URL without starting the core. A running core may automatically reload the changed file, switch live routes, and interrupt active Portal connections.')) end
 
@@ -184,12 +223,18 @@ if not linked then button('_update', translate('Update subscription now'),
 -- Fixed result messages only; no submitted value enters a redirect.
 local results = {
     saved = translate('Settings saved. The listener was not restarted. Apply saved settings when interrupting active connections is acceptable.'),
-    applied = translate('Saved settings applied and listener restarted. Standalone remains on demand; linked mode leaves OpenClash running unchanged.'),
+    applied = translate('Saved settings applied. An enabled listener was restarted; a disabled listener stays stopped until Start. OpenClash remains unchanged.'),
+    started = translate('Start requested using saved settings; verify the listener status below. Standalone remains on demand. This is not an Internet test.'),
+    stopped = translate('StarPass stopped and boot startup disabled. OpenClash remains unchanged. Disable the device HTTP proxy.'),
+    refreshed = translate('Node snapshot refreshed. This does not prove Internet or game access.'),
     updated = translate('Subscription cache updated. A running core may reload it and change live routes. The status below may still show the previous snapshot.')
 }
 local errors = {
     apply_failed = translate('Could not apply saved settings. Check the saved configuration and local service status.'),
-    update_failed = translate('Subscription update did not complete. Check the saved configuration and local service status.')
+    update_failed = translate('Subscription update did not complete. Check the saved configuration and local service status.'),
+    start_failed = translate('Could not start. Check the saved configuration, dependencies and core status.'),
+    stop_failed = translate('Could not finish stopping. Check local service status.'),
+    refresh_failed = translate('Snapshot unavailable. The core may be sleeping; refresh does not wake it.')
 }
 if http.getenv('REQUEST_METHOD') == 'GET' then
     local result = http.formvalue('result')
@@ -214,7 +259,7 @@ function form.handle(self, state, data)
     end
     local action, count
     count = 0
-    for _, name in ipairs({'_save', '_apply', '_update'}) do
+    for _, name in ipairs({'_save', '_apply', '_update', '_start', '_stop', '_refresh'}) do
         if http.formvalue('cbid.portalproxy_ui.1.' .. name) then
             action = name
             count = count + 1
@@ -231,6 +276,10 @@ function form.handle(self, state, data)
         candidate.core_mode = data.core_mode or options.core_mode or 'standalone'
         candidate.selection_mode = data.selection_mode or options.selection_mode or 'auto'
         candidate.preferred_node = data.preferred_node or options.preferred_node or ''
+        for _, key in ipairs(network_fields) do
+            if data[key] ~= nil then candidate[key] = data[key] end
+        end
+        if candidate.bootstrap_dns == '' then candidate.bootstrap_dns = candidate.local_dns end
         if replacement and replacement ~= '' then candidate.subscription_url = replacement end
         local ok = pcall(function()
             package.path = '/usr/libexec/portalproxy/?.lua;' .. package.path
@@ -250,6 +299,9 @@ function form.handle(self, state, data)
             assert(cursor:set('portalproxy', 'main', 'core_mode', candidate.core_mode))
             assert(cursor:set('portalproxy', 'main', 'selection_mode', candidate.selection_mode))
             assert(cursor:set('portalproxy', 'main', 'preferred_node', candidate.preferred_node))
+            for _, key in ipairs(network_fields) do
+                if candidate[key] ~= nil then assert(cursor:set('portalproxy', 'main', key, candidate[key])) end
+            end
             if replacement and replacement ~= '' then
                 assert(cursor:set('portalproxy', 'main', 'subscription_url', candidate.subscription_url))
             end
@@ -264,6 +316,15 @@ function form.handle(self, state, data)
     elseif action == '_apply' then
         local ok, code = pcall(sys.call, '/usr/bin/lua /usr/libexec/portalproxy/render.lua >/dev/null 2>&1 && /etc/init.d/portalproxy restart >/dev/null 2>&1')
         return completed(ok and code == 0 and 'applied' or 'apply_failed')
+    elseif action == '_start' or action == '_stop' or action == '_refresh' then
+        local commands = {
+            _start = {'/usr/sbin/portalproxy enable >/dev/null 2>&1', 'started', 'start_failed'},
+            _stop = {'/usr/sbin/portalproxy disable >/dev/null 2>&1', 'stopped', 'stop_failed'},
+            _refresh = {'/usr/sbin/portalproxy nodes-refresh >/dev/null 2>&1', 'refreshed', 'refresh_failed'}
+        }
+        local command = commands[action]
+        local ok, code = pcall(sys.call, command[1])
+        return completed(ok and code == 0 and command[2] or command[3])
     elseif action == '_update' then
         if linked then return completed('update_failed') end
         local ok, code = pcall(sys.call, '/usr/bin/lua /usr/libexec/portalproxy/update-subscription.lua >/dev/null 2>&1')

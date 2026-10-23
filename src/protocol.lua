@@ -161,4 +161,20 @@ function M.local_request(header,request,body)
     return table.concat(lines,'\r\n') .. '\r\n\r\n' .. (body or '')
 end
 
+-- Add the existing upstream credential only to a fixed loopback connection.
+-- Strip any client-supplied proxy authentication, never duplicate credentials.
+function M.authenticated_request(request,authorization)
+    assert(type(authorization)=='string' and authorization:match('^Proxy%-Authorization: Basic [A-Za-z0-9+/=]+$'))
+    local split=assert(request:find('\r\n\r\n',1,true))
+    local lines={}
+    for line in request:sub(1,split-1):gmatch('[^\r\n]+') do
+        local lower=line:lower()
+        if not lower:match('^proxy%-authorization:') and not lower:match('^proxy%-connection:')
+            and not lower:match('^connection:') then lines[#lines+1]=line end
+    end
+    lines[#lines+1]=authorization
+    if not request:match('^CONNECT ') then lines[#lines+1]='Connection: close' end
+    return table.concat(lines,'\r\n')..'\r\n\r\n'..request:sub(split+4)
+end
+
 return M

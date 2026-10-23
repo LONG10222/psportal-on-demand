@@ -17,6 +17,58 @@ PUBLIC_UPSTREAM_CONFIGS = {
 }
 
 class PackagingTests(unittest.TestCase):
+    def test_router_scripts_are_lf_even_on_windows_checkout(self):
+        for directory in ('src', 'files', 'tests'):
+            for path in (ROOT / directory).rglob('*'):
+                if path.is_file() and (path.suffix in ('.lua', '.sh', '.init') or path.name == 'portalproxy'):
+                    self.assertNotIn(b'\r\n', path.read_bytes(), path)
+
+    def test_no_core_install_still_allows_configuration_and_never_starts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / 'root'
+            result = subprocess.run(['sh', str(ROOT / 'install.sh'), '--root', str(target)], check=True, capture_output=True, text=True)
+            self.assertIn('Installed without a core', result.stdout)
+            self.assertFalse((target / 'usr/libexec/portalproxy/mihomo').exists())
+            self.assertIn("option enabled '0'", (target / 'etc/config/portalproxy').read_text())
+            self.assertFalse((target / 'etc/rc.d').exists())
+
+    def test_uninstall_refuses_symlink_ancestors_and_concurrent_install(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target, outside = Path(tmp) / 'root', Path(tmp) / 'outside'
+            target.mkdir(); outside.mkdir()
+            (outside / 'libexec/portalproxy').mkdir(parents=True)
+            sentinel = outside / 'libexec/portalproxy/keep'
+            sentinel.write_text('unrelated file')
+            (target / 'usr').symlink_to(outside, target_is_directory=True)
+            command = ['sh', str(ROOT / 'uninstall.sh'), '--root', str(target), '--purge']
+            self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)
+            self.assertEqual(sentinel.read_text(), 'unrelated file')
+            (target / 'usr').unlink()
+            (target / '.starpass-install.lock').mkdir()
+            self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)
+
+    def test_ipk_is_reproducible_arch_all_core_free_and_preserves_configuration(self):
+        import io
+        with tempfile.TemporaryDirectory() as tmp:
+            outputs = [Path(tmp) / name for name in ('first.ipk', 'second.ipk')]
+            for output in outputs:
+                subprocess.run(['python3', str(ROOT / 'scripts/build-router-ipk.py'), str(output), '--version', '0.1.0+test-1'], check=True, capture_output=True)
+            raw = outputs[0].read_bytes()
+            self.assertEqual(raw, outputs[1].read_bytes())
+            with tarfile.open(fileobj=io.BytesIO(raw)) as archive:
+                members = {m.name.removeprefix('./'): archive.extractfile(m).read() for m in archive if m.isfile()}
+            self.assertEqual(members['debian-binary'], b'2.0\n')
+            with tarfile.open(fileobj=io.BytesIO(members['control.tar.gz'])) as archive:
+                self.assertIn(b'Architecture: all', archive.extractfile('./control').read())
+                self.assertEqual(archive.extractfile('./conffiles').read(), b'/etc/config/portalproxy\n')
+                self.assertNotIn(b'portalproxy start', archive.extractfile('./postinst').read())
+            with tarfile.open(fileobj=io.BytesIO(members['data.tar.gz'])) as archive:
+                self.assertTrue(archive.getmember('./usr/libexec/portalproxy').isdir())
+                self.assertTrue(archive.getmember('./usr/lib/lua/luci/view/portalproxy').isdir())
+                self.assertFalse(any(m.name.endswith('/mihomo') for m in archive))
+                self.assertEqual(archive.getmember('./etc/config/portalproxy').mode, 0o600)
+                self.assertIn(b"option enabled '0'", archive.extractfile('./etc/config/portalproxy').read())
+
     def test_router_update_guidance_is_read_only_and_preserves_config(self):
         template = (ROOT / 'luci/view/portalproxy/onboarding.htm').read_text()
         section = template.split('<details class="starpass-updates">', 1)[1].split('</details>', 1)[0]

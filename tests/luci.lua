@@ -82,6 +82,9 @@ end
 
 local f=load()
 equal(#scenario.commands,0); equal(scenario.commit,0)
+for _,key in ipairs({'listen_ip','client_ip','local_dns','listen_port','idle_seconds','bootstrap_dns'}) do
+    assert(f.fields[key], 'first-install field missing: '..key)
+end
 equal(f.fields._game_mode.kind, DummyValue)
 equal(f.fields._game_mode.template, 'portalproxy/onboarding')
 assert(f.fields._game_mode.value:find('does not prove Internet access',1,true))
@@ -171,6 +174,17 @@ f=load({real_validation=true,options={core_mode='openclash',listen_ip='192.168.5
 post('_save'); f:handle(FORM_VALID,{core_mode='standalone',selection_mode='auto',subscription_url='https://fixture.example/profile'})
 equal(scenario.commit,1); equal(scenario.writes.core_mode,'standalone')
 equal(scenario.writes.subscription_url,'https://fixture.example/profile'); equal(#scenario.commands,0)
+
+f=load({real_validation=true,options={core_mode='openclash'}})
+post('_save'); f:handle(FORM_VALID,{core_mode='openclash',listen_ip='192.168.50.2',client_ip='192.168.50.30',local_dns='192.168.50.1',listen_port='10081',idle_seconds='60'})
+equal(scenario.commit,1); equal(scenario.writes.client_ip,'192.168.50.30'); equal(#scenario.commands,0)
+for _,action in ipairs({'_start','_stop','_refresh'}) do
+    f=load(); post(action); f:handle(FORM_INVALID,{listen_ip='ignored',subscription_url='https://unsaved.example/private'})
+    equal(scenario.commit,0); equal(#scenario.commands,1)
+    assert(not scenario.commands[1]:find('unsaved',1,true))
+    f=load(); post(action,'wrong'); f:handle(FORM_VALID,{})
+    equal(#scenario.commands,0); equal(scenario.status,403)
+end
 
 loadfile, io.open = real_loadfile, real_open
 assert(loadfile('luci/controller/portalproxy.lua')) -- syntax only; no live controller

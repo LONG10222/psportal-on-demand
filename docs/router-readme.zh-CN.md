@@ -37,7 +37,9 @@ LuCI 中可选择归属模式，保存后明确应用。已有安装不会被安
 
 [详细联动指南、控制器认证、fake-IP 和验证边界](../docs/openclash-linked.zh-CN.md)。
 OpenClash 的最终规则可以选 DIRECT，看到的来源通常是路由器。HTTP 入口不承载游戏 UDP。
-本次提供源码安装器及校验清单，尚未制作／验收 iStore 上架包、IPK 或 APK。
+本次提供无核心的 `luci-app-starpass` IPK（仅 opkg 固件）和源码安装器。OpenWrt 25.12/apk 固件使用源码安装器，不能重命名 IPK。尚未上架 iStore；[2026-10-23 实机验证与剩余项](router-validation-2026-10-23.zh-CN.md)。
+
+已有 opkg 固件可先核对校验值，再执行 `opkg install /tmp/luci-app-starpass.ipk`，在“服务 → StarPass / 星渡”选择归属、填设备地址并保存，之后单独点“启动共享”。安装和保存均不隐式启动。
 
 ## 独立模式快速开始
 
@@ -54,9 +56,9 @@ SSH 登录软路由，以 root 执行：
 
 ```sh
 cd /tmp
-curl -fL https://github.com/LONG10222/psportal-on-demand/archive/refs/heads/main.tar.gz -o portal-source.tar.gz
-tar -xzf portal-source.tar.gz
-cd psportal-on-demand-main
+# 从本开发分支 Actions 下载并核对 starpass-router-source.tar.gz
+tar -xzf starpass-router-source.tar.gz
+cd starpass-router-source
 sh install.sh
 portalproxy setup
 ```
@@ -71,7 +73,8 @@ sh install.sh --core /path/to/mihomo
 
 ```sh
 opkg update
-opkg install lua luci-lib-nixio luci-lib-jsonc luci-lib-base libuci-lua curl ca-bundle
+opkg install lua luci-compat luci-lib-nixio luci-lib-jsonc luci-lib-base libuci-lua curl ca-bundle
+# apk 固件使用 apk update / apk add 同名依赖，不混装 opkg 包
 ```
 
 ### 3. 配置
@@ -90,7 +93,7 @@ opkg install lua luci-lib-nixio luci-lib-jsonc luci-lib-base libuci-lua curl ca-
 | Optional local Clash/Mihomo YAML seed file | 可留空，或填已有配置文件路径 |
 | Outbound routing mark | 无 OpenClash 用 `0`；共存配置见[使用文档](../docs/guide.zh-CN.md#openclash-共存) |
 
-完成后监听器立即运行，并在开机时启动。
+完成后仅保存配置，不启动、不重启。独立模式先导入种子或明确执行订阅更新，再运行 `portalproxy enable`（启动并开机自启）。已有监听器保存后仍使用先前应用的配置，明确 `apply` 才重启。
 
 在 **Portal → Wi-Fi → 当前网络 → 高级设置** 中：
 
@@ -108,7 +111,9 @@ portalproxy nodes      # 查看缓存节点（不唤醒）
 portalproxy prefer preferred '日本 A'  # 保存精确首选名称
 portalproxy apply      # 应用设置，会中断连接
 portalproxy subscription-update  # 明确下载，运行中可能换线
-portalproxy setup      # 修改配置
+portalproxy logs       # 只读清洗后的本插件日志
+portalproxy diagnose   # 配置、状态与日志；不启动
+portalproxy setup      # 只保存配置
 portalproxy check      # 检查配置
 portalproxy restart    # 重启服务
 portalproxy stop       # 停止服务
@@ -120,7 +125,7 @@ portalproxy enable     # 启动并开启开机启动
 
 ## 更新与卸载
 
-下载新版源码，重新执行 `sh install.sh`，再运行 `portalproxy restart`。原配置保留，升级备份位于 `/etc/portalproxy-backups/`。
+IPK 安装使用 `opkg install /tmp/新版.ipk` 升级，`opkg remove luci-app-starpass` 卸载并保留私有配置。不要用源码安装器覆盖包管理器文件。源码安装使用新版 `sh install.sh`，再明确启动；两种升级均不自动重启，原配置保留，私有备份位于 `/etc/portalproxy-backups/`。更新前停止共享、保留旧安装包/源码与配置，验证备份后再操作；opkg 的 `-opkg` 文件是新默认配置，不要覆盖自己的配置。
 
 ```sh
 sh uninstall.sh          # 卸载，保留配置

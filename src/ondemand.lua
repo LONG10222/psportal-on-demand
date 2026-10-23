@@ -1,10 +1,10 @@
 local n = require 'nixio'
 local fs = require 'nixio.fs'
 local json = require 'luci.jsonc'
-local util = require 'luci.util'
 local sys = require 'luci.sys'
 local directory = arg[0]:match('^(.*)/') or '.'
 package.path = directory .. '/?.lua;' .. package.path
+local service_status = require 'service_status'
 local protocol = require 'protocol'
 local lifecycle = require 'lifecycle'
 local dns = require 'dns'
@@ -25,22 +25,15 @@ local sessions, cache = {}, {}
 local core_on, last_external, last_save = false, 0, 0
 local life = lifecycle.new(cfg.wakeup_timeout or 12, cfg.idle_seconds)
 local startup_pid, startup_killed, startup_generation, generation, server
-local counters = {external_requests=0, local_requests=0, denied_clients=0, starts=0, idle_stops=0}
+local counters = {external_requests=0, local_requests=0, denied_clients=0, starts=0, idle_stops=0, upload_bytes=0, download_bytes=0}
 local function now() return n.sysinfo().uptime end
+local started_at = now()
 local function log(msg)
     local f = io.open(cfg.run_dir .. '/events.log', 'a')
     if f then f:write(os.date('!%Y-%m-%dT%H:%M:%SZ'), ' ', msg, '\n'); f:close() end
 end
 local function core_pid()
-    local t = util.ubus('service', 'list', {name=cfg.core_name}) or {}
-    local i = t[cfg.core_name] and t[cfg.core_name].instances
-    if linked and type(i)=='table' then
-        for _,instance in pairs(i) do
-            if type(instance)=='table' and instance.running then return instance.pid end
-        end
-        return nil
-    end
-    return i and i.main and i.main.running and i.main.pid or nil
+    return service_status.pid(cfg.core_name,linked)
 end
 local function save(reason)
     local ext, lan = 0, 0
@@ -48,9 +41,11 @@ local function save(reason)
         if not s.dead and s.kind == 'external' then ext=ext+1 end
         if not s.dead and s.kind == 'local' then lan=lan+1 end
     end
-    local t = {launcher_pid=n.getpid(), core_mode=linked and 'openclash' or 'standalone',
-        session_active=core_on, core_managed=not linked,core_running=(linked or core_on) and core_pid()~=nil,
-        core_pid=(linked or core_on) and core_pid() or nil, core_starting=startup_pid~=nil, idle_timeout=cfg.idle_seconds,
+    local pid=(linked or core_on) and core_pid() or nil
+    local t = {launcher_pid=n.getpid(), updated_at=os.time(), uptime_seconds=math.max(0,now()-started_at),
+        core_mode=linked and 'openclash' or 'standalone',
+        session_active=core_on, core_managed=not linked,core_running=pid~=nil,
+        core_pid=pid, core_starting=startup_pid~=nil, idle_timeout=cfg.idle_seconds,
         idle_seconds=core_on and math.max(0,now()-last_external) or 0,
         external_connections=ext, local_connections=lan, reason=reason,
         counters=counters, allowed_ip=cfg.allowed_ip, port=cfg.port}
@@ -159,6 +154,9 @@ local function error_reply(s,code)
 end
 local function connect_backend(s)
     s.waiting=false
+    if linked and cfg.proxy_authorization then
+        s.c2u=protocol.authenticated_request(s.c2u,cfg.proxy_authorization)
+    end
     s.u=n.socket('inet','stream')
     if not s.u then error_reply(s,'503 Service Unavailable'); return end
     s.u:setblocking(false)
@@ -177,7 +175,8 @@ local function advance_startup()
         for _,s in ipairs(sessions) do if s.waiting and not s.dead then error_reply(s,'503 Service Unavailable') end end
     end
     local pid,status,code=n.waitpid(startup_pid,'nohang')
-    if pid==0 then return end
+    -- nixio returns false (not POSIX's integer 0) for a live WNOHANG child.
+    if pid==false or pid==0 then return end
     if not pid and status==n.const.EINTR then return end
     -- ECHILD or another wait failure is terminal, never strand pending clients.
     local ready=pid and not startup_killed and status=='exited' and code==0
@@ -259,6 +258,8 @@ local function read_side(s,side)
     local sock=side=='c' and s.c or s.u
     local data,err=sock:recv(8192)
     if data and #data>0 then
+        local key = side=='c' and 'upload_bytes' or 'download_bytes'
+        counters[key] = counters[key] + #data
         activity(s,#data)
         if side=='c' and s.header then
             s.header=s.header..data
@@ -268,6 +269,9 @@ local function read_side(s,side)
     elseif not interrupted_io(err) then close_session(s) end
 end
 local function main()
+    if linked then
+        cfg.proxy_authorization,cfg.proxy_username=require('openclash').proxy_authorization()
+    end
     ownership.cancel(cfg)
     if not linked then sys.call(cfg.core_service..' stop >/dev/null 2>&1') end
     core_on=false

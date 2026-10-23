@@ -51,16 +51,13 @@ case "${1:-status}" in
         fi
         printf '%s\n' "$listen_ip" "$client_ip" "$local_dns" "$bootstrap_dns" "$listen_port" "$idle_seconds" "$subscription_url" "$seed_file" "$routing_mark" "$core_mode" > "$setup_file"
         /usr/bin/lua /usr/libexec/portalproxy/configure.lua "$setup_file"
-        /usr/bin/lua /usr/libexec/portalproxy/render.lua
-        /etc/init.d/portalproxy-core disable
-        /etc/init.d/portalproxy enable
-        /etc/init.d/portalproxy restart
         printf 'Portal HTTP proxy: %s:%s\n' "$listen_ip" "$listen_port"
+        echo 'Settings saved. No service started or restarted. Run portalproxy enable when ready to start and enable at boot.'
         if [ "$core_mode" = openclash ]; then
-            echo 'Listener enabled. OpenClash must already be running; its rules and DNS control final routes, including DIRECT.'
+            echo 'OpenClash must already be running before starting StarPass; its rules and DNS control final routes, including DIRECT.'
             echo 'Idle closes only our sessions. Manage nodes and subscriptions in OpenClash. HTTP proxy does not carry game UDP.'
         else
-            echo 'Listener enabled at boot. The core starts only for external requests.'
+            echo 'After explicit start, the core starts only for external requests.'
             echo 'Import a seed or run portalproxy subscription-update before the first external request.'
         fi
         ;;
@@ -74,9 +71,17 @@ case "${1:-status}" in
         exec /etc/init.d/portalproxy restart
         ;;
     status) exec /usr/bin/lua /usr/libexec/portalproxy/status.lua ;;
+    logs) exec /usr/bin/lua /usr/libexec/portalproxy/logs.lua ;;
+    diagnose)
+        /usr/bin/lua /usr/libexec/portalproxy/render.lua --check
+        /usr/bin/lua /usr/libexec/portalproxy/status.lua
+        exec /usr/bin/lua /usr/libexec/portalproxy/logs.lua
+        ;;
     check) exec /usr/bin/lua /usr/libexec/portalproxy/render.lua --check ;;
     start|stop|restart) exec /etc/init.d/portalproxy "$1" ;;
     enable)
+        [ "$(id -u)" = 0 ] || exit 1
+        /usr/bin/lua /usr/libexec/portalproxy/render.lua
         uci set portalproxy.main.enabled=1
         uci commit portalproxy
         /etc/init.d/portalproxy enable
@@ -88,5 +93,5 @@ case "${1:-status}" in
         uci set portalproxy.main.enabled=0
         uci commit portalproxy
         ;;
-    *) echo 'Usage: portalproxy {setup|status|nodes|nodes-refresh|prefer MODE [NAME]|subscription-update|apply|check|start|stop|restart|enable|disable}' >&2; exit 2 ;;
+    *) echo 'Usage: portalproxy {setup|status|logs|diagnose|nodes|nodes-refresh|prefer MODE [NAME]|subscription-update|apply|check|start|stop|restart|enable|disable}' >&2; exit 2 ;;
 esac

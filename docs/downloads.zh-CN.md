@@ -2,6 +2,8 @@
 
 ## 当前入口
 
+- **软路由开发验证包**：本修复分支 Actions 的路由器产物包含 `luci-app-starpass.ipk` 与 SHA-256，以及 `starpass-router-source.tar.gz`。IPK 仅供 opkg 固件，包含 Lua/LuCI、不包含代理核心；OpenWrt apk 固件使用源码安装器。[安装与实机验证](router-validation-2026-10-23.zh-CN.md)，尚未上架 iStore，不代表实体游戏验收完成。
+
 - [测试归档 Releases](https://github.com/LONG10222/psportal-on-demand/releases)：`starpass-test-20261020-c1d2d3a` 保留已验证的整合测试包及校验信息。
 - [当前分支 Actions](https://github.com/LONG10222/psportal-on-demand/actions)：Android 四页精简界面、升级校验和全平台更新入口由对应 PR 构建，旧归档不包含这些更新。原始 CI APK 未签名。
 

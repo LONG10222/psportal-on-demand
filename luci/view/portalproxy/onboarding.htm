@@ -22,8 +22,11 @@
 .starpass-guide .starpass-navigator > div { min-width:0; overflow-wrap:anywhere; }
 .starpass-guide .starpass-navigator h3 { color:#f5f2ff; margin:4px 0 8px; }
 .starpass-guide .starpass-navigator p { color:#c9c1e5; margin:0; }
-.starpass-guide .starpass-portrait { width:128px; height:128px; flex:none; object-fit:contain; border:1px solid #8070b8; border-radius:50%; box-shadow:0 0 0 7px #ffffff0b,0 0 0 16px #ffffff06; }
-@media (max-width:480px) { .starpass-guide .starpass-navigator { gap:16px; padding:14px; flex-direction:column-reverse; align-items:flex-start; } .starpass-guide .starpass-portrait { width:80px; height:80px; } }
+.starpass-guide .starpass-portrait { width:64px; height:64px; flex:none; object-fit:contain; border:1px solid #8070b8; border-radius:50%; }
+@media (max-width:480px) { .starpass-guide .starpass-navigator { gap:12px; padding:14px; } }
+.starpass-guide .starpass-navigator h3 { background:transparent; box-shadow:none; border:0; padding:0; }
+.starpass-guide details { margin-top:10px; }
+.starpass-guide summary { cursor:pointer; font-weight:600; }
 </style>
 <section class="starpass-guide" aria-labelledby="starpass-guide-title">
  <div class="starpass-navigator">
@@ -32,13 +35,17 @@
  </div>
  <p class="starpass-kicker">StarPass · 星渡</p>
  <h3 id="starpass-guide-title"><%:Game mode / 游戏模式%></h3>
- <p><%:三步接入游戏设备。打开页面只读取本地快照，不会启动服务或测速。 / Three steps to connect. Viewing reads a local snapshot only; no service start or probes.%></p>
+ <p><%:HTTP/TCP 设备共享；不接管游戏 UDP。 / Device HTTP/TCP sharing; no game UDP.%></p>
+ <details class="starpass-help">
+ <summary><%:接入与状态说明 / Connection guide%></summary>
  <ol>
   <li><strong><%:Prepare settings / 准备配置%></strong><%:先选择核心模式并保存配置。联动模式的订阅和节点在 OpenClash 中管理。 / Choose a core mode and save. Linked subscriptions and nodes stay in OpenClash.%></li>
-  <li><strong><%:Start sharing / 启动共享%></strong><%:确认可以中断现有连接后，再应用已保存的设置。不会重启 OpenClash 本身。 / Apply saved settings when interruption is acceptable. OpenClash itself is never restarted.%></li>
+  <li><strong><%:Start sharing / 启动共享%></strong><%:保存不启动。点“启动共享”才启用；“应用”只重启已经启用的入口。不会重启 OpenClash。 / Save never starts sharing. Start explicitly; Apply restarts only an enabled listener. OpenClash is never restarted.%></li>
   <li><strong><%:Connect and verify / 接入并验证%></strong><%:在允许接入的设备上手动填写路由器地址和代理端口，先验证网页，再测试目标游戏功能。 / Set the allowed device’s manual HTTP proxy. Verify a webpage, then the intended game feature.%></li>
  </ol>
  <p class="starpass-limit"><%:监听就绪或设备已连接不等于外网访问成功。仅 HTTP/TCP 共享，不提供游戏 UDP 或全设备路由；用完请关闭设备的 HTTP 代理。 / Listener ready is not proof of Internet access. No game UDP or whole-device routing; disable the device proxy when finished.%></p>
+ <p><%:流量是本次监听器从设备和上游实际接收的字节，包含协议头；时长是本次监听器运行时长。节点延迟是历史健康检查，不是游戏延迟。应用、停止或运行中更新订阅可能中断连接。 / Traffic includes protocol headers; uptime belongs to this listener session. Node latency is historical, not game latency. Apply, Stop or a live subscription update may interrupt connections.%></p>
+ </details>
  <details class="starpass-updates">
   <summary><%:应用更新与配置保留 / Application updates and configuration%></summary>
   <p><%:路由器采用手动更新；本页不检查在线版本、不下载或安装软件，也不会将网络失败显示为“最新版”。 / Router updates are manual. This page does not check online versions, download or install software, or treat a network failure as “up to date”.%></p>

@@ -13,7 +13,6 @@ local ok,err = pcall(function()
     local options = uci:get_all('portalproxy','main') or {}
     for _,key in ipairs(keys) do if key ~= 'seed_file' and values[key] ~= '' then options[key] = values[key] end end
     config.validate(options)
-    if options.core_mode=='openclash' then config.render(options,nil,nil,require('openclash').discover()) end
     local seed
     if options.core_mode~='openclash' and values.seed_file ~= '' then
         local st = fs.stat(values.seed_file)
@@ -22,7 +21,6 @@ local ok,err = pcall(function()
     end
     if not uci:get('portalproxy','main') then uci:section('portalproxy','proxy','main',{}) end
     for _,key in ipairs(keys) do if key ~= 'seed_file' and values[key] ~= '' then uci:set('portalproxy','main',key,values[key]) end end
-    uci:set('portalproxy','main','enabled','1')
     assert(uci:commit('portalproxy'))
     assert(fs.chmod('/etc/config/portalproxy','600'))
     if seed then

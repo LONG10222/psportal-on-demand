@@ -24,11 +24,11 @@ The default desktop engine launches a separate Mihomo. Experimental embedded mod
 
 Use the exact draft-PR commit or its `starpass-router-source-…` Actions artifact. The older main archive does not contain this change. Run `sh install.sh --openclash`, then `portalproxy setup` and select `openclash`. No second core or subscription is copied. Existing installations keep their settings until you explicitly choose and apply the mode.
 
-Start/configure OpenClash in its own interface first. StarPass reads effective UCI HTTP/mixed/controller ports and uses only literal loopback GET requests. It validates the authenticated runtime port and proxy-auth loopback exemption. Node/group snapshots are optional, sanitized and observational. StarPass never starts/stops/reloads OpenClash, selects its nodes, updates its subscriptions or changes DNS/firewall/routes. Idle closes only StarPass sessions.
+Start/configure OpenClash in its own interface first. StarPass reads effective UCI HTTP/mixed/controller ports and uses only literal loopback GET requests. It validates the authenticated runtime port. Existing enabled OpenClash UCI proxy authentication can be reused in process memory after matching runtime usernames; an explicit loopback exemption is also supported. Credentials never enter policy/cache/logs/command arguments. Node/group snapshots are optional, sanitized and observational. StarPass never starts/stops/reloads OpenClash, selects its nodes, updates its subscriptions or changes DNS/firewall/routes. Idle closes only StarPass sessions.
 
 OpenClash controls final DNS/rules, including DIRECT; source-IP rules see the router rather than the original client. This cannot inherit standalone backend rebinding protections. Default fake-IP DNS answers are forwarded by their original public hostname, never dialed; forbidden literals and local-name answers stay rejected. HTTP/CONNECT is TCP only, not arbitrary game UDP. Controller availability is not proof of Internet or game success.
 
-The package is a reproducible, core-free source installer with SHA256SUMS, not an IPK/APK or iStore release. Mocks and staging tests do not establish real-router compatibility. See [the complete linked-mode guide](openclash-linked.zh-CN.md).
+A reproducible core-free IPK is available for opkg firmware, alongside the source installer. apk firmware uses the source installer; there is no native apk/iStore release. N1 real-device results and remaining boundaries are recorded in [the 2026-10-23 validation](router-validation-2026-10-23.zh-CN.md). See [the complete linked-mode guide](openclash-linked.zh-CN.md).
 
 ## Standalone quick start
 
@@ -45,9 +45,9 @@ SSH into the OpenWrt router and run as root:
 
 ```sh
 cd /tmp
-curl -fL https://github.com/LONG10222/psportal-on-demand/archive/refs/heads/main.tar.gz -o portal-source.tar.gz
-tar -xzf portal-source.tar.gz
-cd psportal-on-demand-main
+# Download and verify starpass-router-source.tar.gz from this development branch Actions
+tar -xzf starpass-router-source.tar.gz
+cd starpass-router-source
 sh install.sh
 portalproxy setup
 ```
@@ -62,7 +62,8 @@ If Lua dependencies are missing:
 
 ```sh
 opkg update
-opkg install lua luci-lib-nixio luci-lib-jsonc luci-lib-base libuci-lua curl ca-bundle
+opkg install lua luci-compat luci-lib-nixio luci-lib-jsonc luci-lib-base libuci-lua curl ca-bundle
+# On apk firmware use apk update / apk add with matching firmware feeds.
 ```
 
 ### 3. Configure
@@ -81,7 +82,9 @@ Run `portalproxy setup` and follow the prompts. Replace the example addresses wi
 | Optional local Clash/Mihomo YAML seed file | Leave empty or enter an existing configuration path |
 | Outbound routing mark | `0` without OpenClash; see [coexistence settings](../docs/guide.md#openclash) |
 
-Setup starts the listener and enables it at boot.
+Setup saves only. Import a seed or explicitly update the standalone subscription,
+then run `portalproxy enable` to start and enable at boot. Saving never starts or
+restarts the listener; apply saved settings explicitly when interruption is acceptable.
 
 On the **Portal → Wi-Fi → current network → advanced settings**:
 
@@ -107,7 +110,11 @@ Configuration: `/etc/config/portalproxy`. After editing, run `portalproxy check`
 
 ## Update and uninstall
 
-Download the new source, run `sh install.sh`, then `portalproxy restart`. Existing configuration is retained; upgrade backups are stored in `/etc/portalproxy-backups/`.
+For an opkg-managed installation, upgrade with the new IPK and remove with
+`opkg remove luci-app-starpass`; private configuration is retained. Source installs
+use `sh install.sh`. Do not mix the source installer with package-owned files.
+Neither installer automatically starts/restarts sharing. Existing configuration
+is retained; private backups are stored in `/etc/portalproxy-backups/`.
 
 ```sh
 sh uninstall.sh          # Uninstall, keep configuration
