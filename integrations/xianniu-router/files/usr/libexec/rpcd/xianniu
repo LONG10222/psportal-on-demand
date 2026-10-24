@@ -1,0 +1,7 @@
+#!/usr/bin/python3
+import sys
+sys.dont_write_bytecode = True
+sys.pycache_prefix = '/var/run/xianniu-router-python-cache'
+sys.path.insert(0, '/usr/lib/xianniu-router')
+from xianniu_router.rpc import main
+main()

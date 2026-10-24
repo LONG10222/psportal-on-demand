@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.tmp
+session.json
+member.json
+login-response.json
+wechat-*
+result-*
