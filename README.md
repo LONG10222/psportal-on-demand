@@ -13,6 +13,8 @@
 
 ## 功能
 
+- **鲜牛 N1 / iStoreOS 插件 0.4.4**：独立官方账号、游戏/设备方案、剩余时长与暂停/恢复。[源码与安装包](integrations/xianniu-router/README.md)。
+
 - **按需运行**：外部请求唤醒核心，空闲后回收。
 - **手机或设备共享**：Android 内置 Mihomo；电脑可独立运行或复用已有 Clash。
 - **Windows 加速器模式（预览）**：独立保存配置，支持电脑出口与本机 HTTP/SOCKS5 接入，先覆盖 Steam 网页服务。[使用说明](portable/docs/accelerator-mode.zh-CN.md)。

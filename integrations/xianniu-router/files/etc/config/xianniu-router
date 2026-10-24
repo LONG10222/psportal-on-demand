@@ -1,0 +1,7 @@
+config service 'main'
+    option enabled '0'
+    option interface 'br-lan'
+    option http_enabled '0'
+    option http_host '127.0.0.1'
+    option http_port '10082'
+    option steam_store_direct '1'

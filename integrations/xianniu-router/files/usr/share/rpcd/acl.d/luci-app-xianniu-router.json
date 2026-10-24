@@ -1,0 +1,14 @@
+{
+  "luci-app-xianniu-router": {
+    "description": "Manage experimental Xianniu router service without exposing session credentials",
+    "read": {
+      "uci": ["xianniu-router"],
+      "ubus": {"file": ["read"], "xianniu": ["status", "catalog", "lines", "devices"]},
+      "file": {"/var/run/xianniu-router.json": ["read"]}
+    },
+    "write": {
+      "uci": ["xianniu-router"],
+      "ubus": {"luci": ["setInitAction"], "xianniu": ["select", "start", "stop", "launch", "member", "member_pause", "member_resume", "wechat_create", "wechat_image", "wechat_poll", "login_password"]}
+    }
+  }
+}
