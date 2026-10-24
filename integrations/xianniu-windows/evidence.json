@@ -1,0 +1,148 @@
+{
+  "platform": "Windows",
+  "session_mode": "managed",
+  "game_id": 797,
+  "profile": {
+    "area_id": 933,
+    "line_id": 122,
+    "isp_type": 3
+  },
+  "initial_timing_paused": true,
+  "network_configuration_changed": false,
+  "n1_service_changed": false,
+  "official_driver_independence": "not_verified",
+  "actual_console_game": "not_verified",
+  "startup_result": {
+    "running": true,
+    "startup_stage": "ready",
+    "error_message_received": null
+  },
+  "frozen_exe_ready": true,
+  "local_first": {
+    "sony_https": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 302 Moved Temporarily",
+      "elapsed_ms": 375
+    },
+    "second_https": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 200 OK",
+      "elapsed_ms": 500
+    },
+    "literal_ip_https": {
+      "error_type": "ValueError"
+    },
+    "socks_tcp": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 302 Moved Temporarily"
+    },
+    "socks_udp_stun": {
+      "udp_stun_verified": true,
+      "transaction_checked": true,
+      "response_bytes": 32
+    }
+  },
+  "external_lan_first": {
+    "sony_https": {
+      "error_type": "TimeoutError"
+    },
+    "second_https": {
+      "error_type": "TimeoutError"
+    },
+    "literal_ip_https": {
+      "error_type": "TimeoutError"
+    },
+    "socks_tcp": {
+      "error_type": "TimeoutError"
+    },
+    "socks_udp_stun": {
+      "error_type": "TimeoutError"
+    }
+  },
+  "local_after_renewal": {
+    "sony_https": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 302 Moved Temporarily",
+      "elapsed_ms": 359
+    },
+    "second_https": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 200 OK",
+      "elapsed_ms": 516
+    },
+    "literal_ip_https": {
+      "error_type": "ValueError"
+    },
+    "socks_tcp": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 302 Moved Temporarily"
+    },
+    "socks_udp_stun": {
+      "udp_stun_verified": true,
+      "transaction_checked": true,
+      "response_bytes": 32
+    }
+  },
+  "external_lan_after_renewal": {
+    "sony_https": {
+      "error_type": "TimeoutError"
+    },
+    "second_https": {
+      "error_type": "TimeoutError"
+    },
+    "literal_ip_https": {
+      "error_type": "TimeoutError"
+    },
+    "socks_tcp": {
+      "error_type": "TimeoutError"
+    },
+    "socks_udp_stun": {
+      "error_type": "TimeoutError"
+    }
+  },
+  "exit_code": 0,
+  "final_status": {
+    "running": false,
+    "renewals": 1,
+    "refresh_ok": true,
+    "counters": {
+      "sent": 10274,
+      "received": 35669,
+      "tcp_connections": 6,
+      "tcp_errors": 2,
+      "udp_packets": 2,
+      "udp_errors": 0,
+      "rejected": 0
+    },
+    "official_stop_ok": true,
+    "console_udp_captured": false
+  },
+  "n1_remained_stopped": true,
+  "ownership_journal_clear": true,
+  "listeners_closed": true,
+  "original_pause_restored": true,
+  "provider_controlled_tests": {
+    "passed": 17,
+    "failed": 0
+  },
+  "adjacent_router_regression": {
+    "passed": 50,
+    "failed": 0
+  },
+  "starpass_portable_regression": {
+    "run": 594,
+    "passed": 510,
+    "skipped": 84,
+    "failed": 0
+  },
+  "installed_independent_copy": true,
+  "installed_frozen_smoke_passed": true,
+  "gui_visual_acceptance": false,
+  "lan_firewall_rules_applied": false,
+  "notes": [
+    "First frozen build failed before official start: omitted public SSL runtime policy file; fixed without disabling TLS.",
+    "Original first-build pre-recovery journal was cleared after confirming timing stayed paused; no unknown official stop called.",
+    "External LAN remains unverified; administrator confirmation is needed for optional scoped inbound rules.",
+    "No actual game, console UDP capture, NAT, multi-game concurrency or independence from the installed official driver has been verified."
+  ]
+}
