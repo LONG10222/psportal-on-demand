@@ -35,12 +35,10 @@ function d.fs.chmod() return true end
 function d.json.parse() return {running=running} end
 function d.sys.call(c) assert(c:match('^/etc/init.d/portalproxy '));calls[#calls+1]=c;return 0 end
 assert(mode.switch('accelerator',d)=='accelerator' and current=='accelerator')
-assert(#calls==1 and calls[1]:find(' stop ',1,true))
-assert(mode.switch('accelerator',d)=='accelerator' and #calls==1)
-running=true;assert(not pcall(mode.switch,'game',d));assert(#calls==1 and current=='accelerator')
-running=false;assert(mode.switch('game',d)=='game' and #calls==3)
-assert(calls[3]:find(' start ',1,true))
-installed=false;assert(not pcall(mode.switch,'accelerator',d));assert(current=='game' and #calls==3)
+assert(#calls==0, 'Switching the page must not stop or start services')
+assert(mode.switch('accelerator',d)=='accelerator' and #calls==0)
+running=true;assert(mode.switch('game',d)=='game' and #calls==0)
+installed=false;assert(not pcall(mode.switch,'accelerator',d));assert(current=='game' and #calls==0)
 assert(not pcall(mode.switch,'clash',d));assert(current=='game')
-enabled='0';installed=true;mode.switch('accelerator',d);mode.switch('game',d);assert(#calls==5)
-print('Workspace/source tests: read-only disabled-OpenClash import, private metadata, saved mode, owned lifecycle and active-session exclusion passed')
+enabled='0';installed=true;mode.switch('accelerator',d);mode.switch('game',d);assert(#calls==0)
+print('Workspace/source tests: page changes preserve both service lifecycles, active sessions and independent enabled state')

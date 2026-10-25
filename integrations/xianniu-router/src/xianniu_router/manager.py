@@ -158,7 +158,7 @@ class Manager:
     def service(self,action):
         if action not in ('start','stop','enable','disable'):raise ValueError('Invalid service operation')
         if action=='enable' and Path('/etc/config/portalproxy').exists():
-            # StarPass remembers the workspace; boot must not resume paid time.
+            # Paid acceleration requires an explicit start, regardless of the visible workspace.
             action='disable'
         result=subprocess.run(['/etc/init.d/xianniu-router',action],capture_output=True,timeout=40)
         if result.returncode:raise RuntimeError('鲜牛服务操作未成功，请查看状态')
@@ -170,7 +170,6 @@ class Manager:
 
     def start(self):
         with self.lock():
-            self.require_workspace()
             if not self.config().get('account',{}).get('access_token'):raise ValueError('请先登录鲜牛账号')
             if self.runtime().get('running'):return {'started':True,'already_running':True}
             resumed=self.prepare_member()
@@ -200,7 +199,6 @@ class Manager:
         from .devices import discover
         game_id,area_id,line_id=int(game_id),int(area_id),int(line_id)
         with self.lock():
-            self.require_workspace()
             config=self.config()
             if not config.get('account',{}).get('access_token'):raise ValueError('请先登录鲜牛账号')
             inventory=discover(config,self.preferences())
@@ -264,11 +262,6 @@ class Manager:
                 'last_ip':row['ip'] if row else old.get('last_ip','')}
             atomic_json(self.private/'preferences.json',preferences)
         return {'saved':True,'mac':identity,'note':note.strip()}
-
-    def require_workspace(self):
-        if self.private!=Path('/etc/xianniu-router') or not Path('/etc/config/portalproxy').exists():return
-        value=subprocess.run(['uci','-q','get','portalproxy.main.product_mode'],capture_output=True,text=True,timeout=8)
-        if value.stdout.strip()!='accelerator':raise ValueError('请先在星渡中切换到加速器模式')
 
     def billing(self,game_id=None):
         identity=int(self.config().get('game_id',797) if game_id is None else game_id)

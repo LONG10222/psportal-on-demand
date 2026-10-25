@@ -71,10 +71,10 @@ cleanup() { echo CLEANUP; }
         for option in ('--manage-routing', '--transparent-port', '--dns-port'):
             self.assertNotIn(option, result.stdout)
 
-    def test_game_workspace_never_starts_accelerator(self):
+    def test_explicit_start_is_independent_of_game_workspace(self):
         result=self.init_start(workspace='game')
         self.assertEqual(result.returncode,0)
-        self.assertNotIn('OPEN',result.stdout)
+        self.assertIn('OPEN',result.stdout)
 
     def test_accelerator_workspace_can_start_explicit_session(self):
         result=self.init_start(workspace='accelerator')

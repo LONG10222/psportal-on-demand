@@ -12,11 +12,11 @@ For a preferred Hysteria2 node, verify its actual protocol in the core details, 
 
 ## Accelerator mode
 
-Install the compatible Xianniu router module, then select Accelerator on the StarPass page. The game listener stops and the page opens the existing account, game, device and line workspace. Select a device, game and official line before starting. Use the proxy address displayed by that workspace; it may differ from game mode.
+Install the compatible Xianniu router module, then select Accelerator on the StarPass page. The game listener keeps running and the page opens the existing account, game, device and line workspace. Select a device, game and official line before starting. Use the proxy address displayed by that workspace; it may differ from game mode.
 
-Free projects never resume or suspend whole-account billing. Paid sessions stop and obtain official confirmation before pausing account time. Stop an active accelerator session before returning to game mode. Reboot preserves the workspace but does not resume paid acceleration.
+Free projects never resume or suspend whole-account billing. Paid sessions stop and obtain official confirmation before pausing account time. Switching back to the game page leaves an active accelerator session running. Reboot preserves the workspace but does not resume paid acceleration.
 
-The services can be installed together; the current workspace runs them exclusively and does not chain their exits.
+The services can run concurrently on separate entry ports and device allowlists. Switching pages changes only the visible workspace; each service has its own Start / Stop control. Their exits are not chained. An enabled game listener starts at boot regardless of the selected page. Paid acceleration still requires an explicit start.
 
 ## PS5 and Portal
 

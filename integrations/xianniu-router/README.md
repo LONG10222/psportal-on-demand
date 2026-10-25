@@ -1,4 +1,4 @@
-# 鲜牛 N1 / iStoreOS 插件 0.4.4+istore22.8
+# 鲜牛 N1 / iStoreOS 插件 0.4.4+istore22.9
 
 通过用户自己的官方账号，独立管理鲜牛游戏会话，并向选中局域网设备提供 HTTP/HTTPS CONNECT 代理。此目录包含可构建源码、受控测试和 [Actions 构建产物](https://github.com/LONG10222/psportal-on-demand/actions/workflows/check.yml)。它是互操作实验模块，不是鲜牛官方发行版。
 
@@ -6,7 +6,7 @@
 
 ## 使用
 
-1. 下载本分支 Actions 的配套包，或在本目录执行 `python3 build_ipk.py` 构建。安装匹配依赖后，通过 iStoreOS 软件包管理上传 IPK，或运行 `opkg install ./xianniu-router_0.4.4+istore22.8_all.ipk`。先用 [SHA256SUMS](SHA256SUMS) 校验文件。
+1. 下载本分支 Actions 的配套包，或在本目录执行 `python3 build_ipk.py` 构建。安装匹配依赖后，通过 iStoreOS 软件包管理上传 IPK，或运行 `opkg install ./xianniu-router_0.4.4+istore22.9_all.ipk`。先用 [SHA256SUMS](SHA256SUMS) 校验文件。
 2. 在 LuCI 的“服务 → 鲜牛游戏加速”打开页面；升级后强制刷新，确认标题为 0.4.4。
 3. 使用官方微信二维码登录，等待页面显示“鲜牛账号：已登录”。登录方式、时间和会员状态在顶部显示。
 4. 选设备、游戏、区服和线路，点击“开始加速”。会员处于暂停时，按钮显示“恢复计时并加速”，由官方接口恢复后启动。
@@ -52,3 +52,5 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 [MIT](LICENSE)。星渡来源与修改见 [UPSTREAM.md](UPSTREAM.md)，公开官方协议依据见 [authentication-evidence.md](authentication-evidence.md)。不分发官方 Windows EXE、驱动或真实授权数据。
 
 设备备注和方案按 MAC 保存；展开卡片“备注”编辑。官方计时开启时每秒显示倒计时估算，每 60 秒官方校准，暂停后保持固定。
+
+鲜牛与星渡游戏共享可同时运行。页面切换不操作服务；各自使用独立端口和设备名单。与星渡一起安装时，鲜牛仍不自动恢复付费计时。

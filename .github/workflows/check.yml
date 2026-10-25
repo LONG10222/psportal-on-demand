@@ -40,7 +40,9 @@ jobs:
           node tests/member-clock.js
           PYTHONPATH=src:. python3 -m unittest discover -s tests -v
       - name: Installer and repository checks
-        run: python3 tests/packaging.py
+        run: |
+          python3 tests/packaging.py
+          python3 tests/coexistence.py
       - name: Verify StarPass icons and platform branding
         run: |
           python3 native/scripts/generate_brand_assets.py --verify
@@ -60,7 +62,7 @@ jobs:
             ${{ runner.temp }}/starpass-router-source.sha256
             ${{ runner.temp }}/luci-app-starpass.ipk
             ${{ runner.temp }}/luci-app-starpass.sha256
-            integrations/xianniu-router/xianniu-router_0.4.4+istore22.8_all.ipk
+            integrations/xianniu-router/xianniu-router_0.4.4+istore22.9_all.ipk
             integrations/xianniu-router/SHA256SUMS
           retention-days: 7
           if-no-files-found: error

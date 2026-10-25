@@ -85,8 +85,9 @@
   <nav class="starpass-mode-tabs" aria-label="用途模式">
    <% action('_mode_game', self.portal_workspace == 'game'); action('_mode_accelerator', self.portal_workspace == 'accelerator') %>
   </nav>
+  <p>游戏共享：<%=self.portal_running and "运行中" or "未运行"%> · 鲜牛：<%=self.portal_accelerator_running and "运行中" or "未运行"%>。切换页面不中断服务。</p>
   <% if self.portal_workspace == 'accelerator' then %>
-   <section class="starpass-card"><h3>鲜牛游戏加速</h3><p>选择游戏后开始加速，账号和选择会自动保留。</p><div id="starpass-accelerator">正在加载游戏库…</div></section>
+   <section class="starpass-card"><h3>鲜牛游戏加速</h3><p>选择游戏后开始加速，可与游戏共享同时运行；两套服务分别启停。</p><div id="starpass-accelerator">正在加载游戏库…</div></section>
   <% end %>
   <div<% if self.portal_workspace == 'accelerator' then %> hidden<% end %>>
    <section class="starpass-card starpass-game-home" aria-labelledby="starpass-overview-title">

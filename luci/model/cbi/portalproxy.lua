@@ -262,7 +262,7 @@ local results = {
     stopped = translate('共享已停止，开机自启已取消。请关闭设备上的手动代理。'),
     refreshed = translate('快照已刷新；节点详情可展开查看。'),
     updated = translate('订阅缓存已更新。运行中的核心可能重载节点；快照仍需单独刷新。')
-    ,mode_changed = translate('用途模式已保存。加速器模式不会自动恢复会员计时，请选择游戏后启动。')
+    ,mode_changed = translate('操作界面已切换，两套服务各自启停；切换不会中断现有连接或恢复计时。')
 }
 local errors = {
     apply_failed = translate('应用失败，请检查已保存的配置和本地服务状态。'),
@@ -389,6 +389,8 @@ function form.handle(self, state, data)
     return true
 end
 
+local accel_ok, accel_pid = pcall(function() return require('service_status').pid('xianniu-router',true) end)
+form.portal_accelerator_running = accel_ok and accel_pid ~= nil or false
 form.portal_linked = linked
 form.portal_workspace = workspace_mode
 form.portal_source = options.source_mode == 'openclash'
