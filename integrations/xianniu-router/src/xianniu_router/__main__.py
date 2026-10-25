@@ -44,6 +44,9 @@ def main():
         config['devices'] = option('devices', '').split()
         config['interface'] = option('interface', 'br-lan')
         config['steam_store_direct']=option('steam_store_direct','1')=='1'
+        if config.get('game_id')==12:
+            from .manager import Manager
+            if Manager().billing(12)=='free':config['steam_store_direct']=False
         if option('http_enabled', '0') == '1':
             args.http_host = option('http_host', '127.0.0.1')
             args.http_port = int(option('http_port', '10082'))

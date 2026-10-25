@@ -1,10 +1,12 @@
-# 鲜牛 N1 / iStoreOS 插件 0.4.4
+# 鲜牛 N1 / iStoreOS 插件 0.4.4+istore22.4
 
-通过用户自己的官方账号，独立管理鲜牛游戏会话，并向选中局域网设备提供 HTTP/HTTPS CONNECT 代理。此目录包含可构建源码、受控测试和 [OpenWrt 安装包](xianniu-router_0.4.4_all.ipk)。它是互操作实验模块，不是鲜牛官方发行版。
+通过用户自己的官方账号，独立管理鲜牛游戏会话，并向选中局域网设备提供 HTTP/HTTPS CONNECT 代理。此目录包含可构建源码、受控测试和 [OpenWrt 安装包](xianniu-router_0.4.4+istore22.4_all.ipk)。它是互操作实验模块，不是鲜牛官方发行版。
+
+此本地适配版基于公开提交 `905ecc5`：默认仅启用手动 HTTP/HTTPS 代理，透明模式需显式开启且要求 fw4；支持 OpenWrt 22.03 的 Python 3.10 UDP 接口。不会为安装而切换防火墙。
 
 ## 使用
 
-1. 安装匹配依赖后，通过 iStoreOS 软件包管理上传 IPK，或运行 `opkg install ./xianniu-router_0.4.4_all.ipk`。先用 [SHA256SUMS](SHA256SUMS) 校验文件。
+1. 安装匹配依赖后，通过 iStoreOS 软件包管理上传 IPK，或运行 `opkg install ./xianniu-router_0.4.4+istore22.4_all.ipk`。先用 [SHA256SUMS](SHA256SUMS) 校验文件。
 2. 在 LuCI 的“服务 → 鲜牛游戏加速”打开页面；升级后强制刷新，确认标题为 0.4.4。
 3. 使用官方微信二维码登录，等待页面显示“鲜牛账号：已登录”。登录方式、时间和会员状态在顶部显示。
 4. 选设备、游戏、区服和线路，点击“开始加速”。会员处于暂停时，按钮显示“恢复计时并加速”，由官方接口恢复后启动。

@@ -17,8 +17,8 @@ class Profiles(unittest.TestCase):
         self.directory=tempfile.TemporaryDirectory();self.root=Path(self.directory.name)
         self.catalog=self.root/'catalog.json'
         self.catalog.write_text(json.dumps([
-            {'id':797,'title':'主机 PS5/XBOX 通用－港服','keywords':'ps5,港服','platform':'console','areas':[{'id':933,'title':'全区'}]},
-            {'id':80,'title':'暗黑破坏神4','keywords':'暗黑4,Diablo IV','platform':'pc','areas':[{'id':10,'title':'亚洲'}]},
+            {'id':797,'is_free':False,'title':'主机 PS5/XBOX 通用－港服','keywords':'ps5,港服','platform':'console','areas':[{'id':933,'title':'全区'}]},
+            {'id':80,'is_free':False,'title':'暗黑破坏神4','keywords':'暗黑4,Diablo IV','platform':'pc','areas':[{'id':10,'title':'亚洲'}]},
             {'id':81,'title':'Switch 通用','platform':'switch','areas':[{'id':11,'title':'全区'}]}]),encoding='utf-8')
         self.runtime=self.root/'runtime.json';self.runtime.write_text('{"running":false}')
         self.manager=Manager(self.root/'private',self.catalog,self.runtime)
@@ -59,8 +59,8 @@ class Profiles(unittest.TestCase):
             self.manager.launch('192.168.31.233',80,10,122)
         self.assertEqual(self.manager.config()['devices'],['192.168.31.233'])
         preferences=self.manager.preferences()
-        self.assertEqual(preferences['devices']['192.168.31.112']['game_id'],797)
-        self.assertEqual(preferences['devices']['192.168.31.233']['game_id'],80)
+        self.assertEqual(preferences['devices']['02:00:00:00:00:01']['game_id'],797)
+        self.assertEqual(len(preferences['devices']),1)
         self.assertEqual(actions,['stop','enable','start']*2)
         self.assertTrue(all('xianniu-router' in ' '.join(cmd) for cmd in commands))
         self.assertNotIn('OLD-SECRET',json.dumps(preferences))
@@ -136,7 +136,7 @@ class Discovery(unittest.TestCase):
                 ('192.168.31.112','02:00:00:00:00:01'),('192.168.31.222','00'),
                 ('192.168.31.1','00'),('10.1.1.1','00'),('192.168.31.88','')]])
         with patch('xianniu_router.devices.read_command',side_effect=command),patch('xianniu_router.devices.Path.read_text',side_effect=FileNotFoundError):
-            result=discover({}, {'devices':{'192.168.31.112':{'name':'PS5 Pro'}}})
+            result=discover({}, {'devices':{'02:00:00:00:00:01':{'last_ip':'192.168.31.112','note':'PS5 Pro'}}})
         self.assertEqual([r['ip'] for r in result['devices']],['192.168.31.112'])
         self.assertEqual(result['devices'][0]['name'],'PS5 Pro')
         self.assertEqual(result['host'],'192.168.31.222')

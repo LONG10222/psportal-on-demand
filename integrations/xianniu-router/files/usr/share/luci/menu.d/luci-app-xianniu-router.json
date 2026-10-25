@@ -2,7 +2,7 @@
   "admin/services/xianniu_router": {
     "title": "鲜牛游戏加速（实验版）",
     "order": 65,
-    "action": {"type": "view", "path": "xianniu_router/overview"},
+    "action": {"type": "view", "path": "xianniu_router/overview_v2"},
     "depends": {"acl": ["luci-app-xianniu-router"]}
   }
 }

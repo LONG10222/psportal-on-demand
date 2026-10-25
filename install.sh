@@ -4,11 +4,12 @@ BASE="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 ROOT=''
 CORE=''
 LINKED=0
+MODE_SET=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --root) [ "$#" -ge 2 ] || exit 2; ROOT="$2"; shift 2 ;;
-        --openclash) LINKED=1; shift ;;
-        --core) [ "$#" -ge 2 ] || exit 2; CORE="$2"; shift 2 ;;
+        --openclash) [ "$MODE_SET" = 0 ] || { echo 'Choose only one core mode.' >&2; exit 2; }; LINKED=1; MODE_SET=1; shift ;;
+        --core) [ "$#" -ge 2 ] && [ "$MODE_SET" = 0 ] || exit 2; CORE="$2"; MODE_SET=1; shift 2 ;;
         *) echo 'Usage: sh install.sh [--openclash | --core /path/to/mihomo] [--root /staging/directory]' >&2; exit 2 ;;
     esac
 done
@@ -17,17 +18,29 @@ case "$ROOT" in ''|/*) ;; *) echo '--root must be absolute' >&2; exit 2 ;; esac
 case "/$ROOT/" in */../*|*/./*) echo 'Use a normalized --root path' >&2; exit 2 ;; esac
 if [ -z "$ROOT" ]; then
     [ "$(id -u)" = 0 ] || { echo 'Run as root.' >&2; exit 1; }
+    if command -v opkg >/dev/null && opkg status luci-app-starpass 2>/dev/null | sed -n '/^Status:.* installed$/p' | read -r installed; then
+        echo 'This installation is managed by opkg. Upgrade with the matching IPK; do not overwrite package-owned files with the source installer.' >&2; exit 1
+    fi
     command -v uci >/dev/null && [ -f /etc/rc.common ] || { echo 'OpenWrt with UCI and procd is required.' >&2; exit 1; }
     lua -e 'require "nixio"; require "nixio.fs"; require "luci.jsonc"; require "luci.util"; require "luci.sys"; require "uci"' || {
-        echo 'Missing Lua dependencies. See the README dependency section.' >&2; exit 1;
+        echo 'Missing Lua dependencies. Install lua luci-lib-nixio luci-lib-jsonc luci-lib-base libuci-lua curl ca-bundle using this firmware package manager.' >&2; exit 1;
     }
+    if [ -d /usr/lib/lua/luci ]; then
+        lua -e 'require "luci.cbi"' >/dev/null 2>&1 || { echo 'LuCI needs luci-compat. Install it with opkg install luci-compat or apk add luci-compat, matching this firmware.' >&2; exit 1; }
+    fi
+    if [ "$MODE_SET" = 0 ] && [ "$(uci -q get portalproxy.main.core_mode 2>/dev/null || true)" = openclash ]; then LINKED=1; fi
 fi
 if [ "$LINKED" = 0 ] && [ -z "$CORE" ]; then
-    for candidate in "$ROOT/usr/libexec/portalproxy/mihomo" /etc/openclash/core/clash_meta /usr/bin/mihomo; do
+    for candidate in "$ROOT/usr/libexec/portalproxy/mihomo" "$ROOT/etc/openclash/core/clash_meta" "$ROOT/usr/bin/mihomo"; do
         if [ -x "$candidate" ]; then CORE="$candidate"; break; fi
     done
 fi
-[ "$LINKED" = 1 ] || { [ -n "$CORE" ] && [ -x "$CORE" ]; } || { echo 'Provide a compatible Mihomo executable with --core.' >&2; exit 1; }
+if [ -n "$CORE" ]; then
+    [ -x "$CORE" ] || { echo 'Core is not executable.' >&2; exit 1; }
+    if [ -z "$ROOT" ]; then
+        "$CORE" -v >/dev/null 2>&1 || { echo 'Core cannot run on this firmware/CPU. Existing files were not changed.' >&2; exit 1; }
+    fi
+fi
 umask 077
 # Prepare every payload before touching installed files or stopping a service.
 # A failed upgrade never starts a service automatically. Power loss still needs
@@ -93,15 +106,20 @@ stage "$BASE/files/portalproxy-core.init" etc/init.d/portalproxy-core 700
 stage "$BASE/files/portalproxy" usr/sbin/portalproxy 700
 if [ ! -f "$ROOT/etc/config/portalproxy" ]; then
     stage "$BASE/files/portalproxy.config" etc/config/portalproxy 600
-    [ "$LINKED" = 0 ] || sed -i "s/option core_mode 'standalone'/option core_mode 'openclash'/" "$work/new/etc/config/portalproxy"
+    if [ "$LINKED" != 0 ]; then
+        sed "s/option core_mode 'standalone'/option core_mode 'openclash'/" "$work/new/etc/config/portalproxy" > "$work/new/etc/config/portalproxy.new"
+        mv "$work/new/etc/config/portalproxy.new" "$work/new/etc/config/portalproxy"
+    fi
 fi
-if [ "$LINKED" = 0 ] && [ "$CORE" != "$ROOT/usr/libexec/portalproxy/mihomo" ]; then
+if [ "$LINKED" = 0 ] && [ -n "$CORE" ] && [ "$CORE" != "$ROOT/usr/libexec/portalproxy/mihomo" ]; then
     stage "$CORE" usr/libexec/portalproxy/mihomo 700
 fi
 if [ -d "$ROOT/usr/lib/lua/luci" ]; then
     stage "$BASE/luci/controller/portalproxy.lua" usr/lib/lua/luci/controller/portalproxy.lua 644
     stage "$BASE/luci/model/cbi/portalproxy.lua" usr/lib/lua/luci/model/cbi/portalproxy.lua 644
     stage "$BASE/luci/view/portalproxy/onboarding.htm" usr/lib/lua/luci/view/portalproxy/onboarding.htm 644
+    stage "$BASE/luci/view/portalproxy/dashboard.htm" usr/lib/lua/luci/view/portalproxy/dashboard.htm 644
+    stage "$BASE/luci/static/accelerator.js" www/luci-static/resources/starpass/accelerator_v2.js 644
 fi
 # Preserve all installed project files, including old launchers and LuCI, not
 # just UCI/core data. Archive remains local and may contain subscription secrets.
@@ -109,7 +127,7 @@ set --
 for path in etc/config/portalproxy etc/portalproxy usr/libexec/portalproxy \
     etc/init.d/portalproxy etc/init.d/portalproxy-core usr/sbin/portalproxy \
     usr/lib/lua/luci/controller/portalproxy.lua usr/lib/lua/luci/model/cbi/portalproxy.lua \
-    usr/lib/lua/luci/view/portalproxy; do
+    usr/lib/lua/luci/view/portalproxy www/luci-static/resources/starpass/accelerator_v2.js; do
     [ ! -e "$ROOT/$path" ] || set -- "$@" "$path"
 done
 if [ "$#" -gt 0 ]; then
@@ -134,10 +152,14 @@ chmod 600 "$ROOT/etc/config/portalproxy"
 
 if [ -z "$ROOT" ]; then
     /etc/init.d/portalproxy-core disable
+    rm -f /tmp/luci-indexcache /tmp/luci-indexcache.*.json
     echo 'Installed. Run: portalproxy setup (choose standalone or openclash explicitly)'
     [ "$LINKED" = 0 ] || echo 'No core copied. Existing configuration was preserved; choose openclash in setup.'
 else
     echo 'Staging install complete. No services were started or enabled.'
+fi
+if [ "$LINKED" = 0 ] && [ -z "$CORE" ]; then
+    echo 'Installed without a core. Existing OpenClash can be linked in LuCI; standalone needs a compatible Mihomo before Start.'
 fi
 
 committed=1

@@ -28,7 +28,17 @@ jobs:
           lua5.1 tests/subscription.lua
           lua5.1 tests/node_api.lua
           lua5.1 tests/openclash.lua
-          lua5.1 tests/luci.lua
+          LUA_PATH="src/?.lua;;" lua5.1 tests/luci.lua
+          LUA_PATH="src/?.lua;;" lua5.1 tests/workspaces.lua
+          lua5.1 tests/status.lua
+          lua5.1 tests/configure.lua
+          lua5.1 tests/service_status.lua
+      - name: Xianniu router tests
+        run: |
+          cd integrations/xianniu-router
+          python3 build_ipk.py
+          node tests/member-clock.js
+          PYTHONPATH=src:. python3 -m unittest discover -s tests -v
       - name: Installer and repository checks
         run: python3 tests/packaging.py
       - name: Verify StarPass icons and platform branding

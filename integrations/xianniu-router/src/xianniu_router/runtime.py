@@ -13,6 +13,7 @@ from pathlib import Path
 from .control import refresh, start_session, stop_session, APIError
 from .dns import AddressBook
 from .protocol import build_request, frame, read_frame
+from .async_socket import recvfrom, sendto
 
 IP_TRANSPARENT = 19
 IP_RECVORIGDSTADDR = 20
@@ -250,7 +251,7 @@ class Service:
         async def reply(host, port, payload):
             if peer[0]:
                 packet = b'\0\0\0\x01' + socket.inet_aton(host) + struct.pack('!H', port) + payload
-                await loop.sock_sendto(local, packet, peer[0])
+                await sendto(local, packet, peer[0])
 
         relay = NativeUDP(self, reply)
         try:
@@ -260,7 +261,7 @@ class Service:
 
             async def upload():
                 while not relay.closed:
-                    packet, sender = await loop.sock_recvfrom(local, 65535)
+                    packet, sender = await recvfrom(local, 65535)
                     if sender[0] != '127.0.0.1' or len(packet) < 10 or packet[:3] != b'\0\0\0':
                         continue
                     if peer[0] is not None and peer[0] != sender:
@@ -331,7 +332,7 @@ class Service:
                         sock.close()
                         raise
                     self.reply_sockets[key] = sock
-                await asyncio.get_running_loop().sock_sendto(sock, body, peer)
+                await sendto(sock, body, peer)
 
             pending = asyncio.create_task(NativeUDP(self, reply).open())
             self.associations[peer] = pending
@@ -372,7 +373,7 @@ class Service:
                 if host != self.config.get('game_dns', '1.1.1.1') or port != 53:
                     return
                 self.book.learn(body, peer[0])
-                await asyncio.get_running_loop().sock_sendto(self.dns_listener, body, peer)
+                await sendto(self.dns_listener, body, peer)
             future = asyncio.create_task(NativeUDP(self, reply).open())
             self.dns_associations[peer] = future
         try:

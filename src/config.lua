@@ -103,6 +103,7 @@ function M.render(options,secret,paths,linked)
     local policy = {core_mode='standalone',bind=c.listen_ip,port=c.listen_port,allowed_ip=c.client_ip,backend_port=c.backend_port,api_port=c.api_port,
         local_dns=c.local_dns,idle_seconds=c.idle_seconds,wakeup_timeout=c.wakeup_timeout,health_url=c.health_url,
         selection_mode=c.selection_mode,preferred_node=c.preferred_node,
+        core_path=c.core_path,routing_mark=c.routing_mark,
         api_header=paths.data..'/api-header',core_name=paths.core_name,core_service=paths.core_service,run_dir=paths.run}
     return core,policy,c
 end

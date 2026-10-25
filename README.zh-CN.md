@@ -13,6 +13,8 @@
 
 ## 功能
 
+- **软路由游戏 / 加速器模式**：一键启停、记住模式，可读取 OpenClash 订阅而保持其服务关闭。[配置说明](docs/router-workspaces.zh-CN.md)。
+
 - **鲜牛 N1 / iStoreOS 插件 0.4.4**：独立官方账号、游戏/设备方案、剩余时长与暂停/恢复。[源码与安装包](integrations/xianniu-router/README.md)。
 
 - **按需运行**：外部请求唤醒核心，空闲后回收。

@@ -7,6 +7,7 @@ import unittest
 from xianniu_router.protocol import rc4, encode_api, decode_api, read_frame, frame, MAX_FRAME
 from xianniu_router.dns import addresses, name_at, AddressBook
 from xianniu_router.runtime import Service, NativeUDP
+from xianniu_router.async_socket import recvfrom, sendto
 
 
 class Codecs(unittest.TestCase):
@@ -81,8 +82,8 @@ class Streams(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(.05)
             self.assertFalse(relay.closed)
             await relay.send('8.8.8.8', 53, b'probe')
-            packet, peer = await asyncio.wait_for(loop.sock_recvfrom(udp, 4096), 1)
-            await loop.sock_sendto(udp, packet, peer)
+            packet, peer = await asyncio.wait_for(recvfrom(udp, 4096), 1)
+            await sendto(udp, packet, peer)
             self.assertEqual(await asyncio.wait_for(response, 1), ('8.8.8.8', 53, b'probe'))
         finally:
             await relay.close()

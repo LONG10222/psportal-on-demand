@@ -30,3 +30,5 @@ LAN HTTP/HTTPS CONNECT forwards TCP, not arbitrary game UDP. Use trusted network
 Information structure references [Clash Meta for Android](https://github.com/MetaCubeX/ClashMetaForAndroid); README organization references [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev) and [v2rayNG](https://github.com/2dust/v2rayNG). Existing StarPass artwork is retained.
 
 Router and desktop wrapper: [MIT](../LICENSE). Mihomo-linked native engine and Android app: [GPL-3.0-only](../native/LICENSE). Retain matching source and dependency notices when distributing binaries.
+
+Router: [game and accelerator workspaces](router-workspaces.en.md), one-button game sharing and read-only OpenClash subscription import.

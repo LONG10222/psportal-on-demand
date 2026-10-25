@@ -55,6 +55,9 @@ function M.resolve(proxies,health_url,root)
 end
 function M.collect(cfg,opts)
     if cfg.core_mode=='openclash' then
+        if not cfg.proxy_authorization then
+            cfg.proxy_authorization,cfg.proxy_username=require('openclash').proxy_authorization()
+        end
         local runtime,why=api.get(cfg,'/configs',opts)
         if not runtime then return nil,why end
         local mode,reason=require('openclash').runtime(runtime,cfg)

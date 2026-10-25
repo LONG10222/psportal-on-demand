@@ -1,8 +1,26 @@
 """Read-only LAN discovery. No DHCP, gateway or interface configuration writes."""
 import ipaddress
 import json
+import re
 from pathlib import Path
 import subprocess
+
+
+def mac_key(value):
+    if not isinstance(value,str) or not re.fullmatch(r'[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5}',value):return ''
+    value=value.lower()
+    return value if value not in ('00:00:00:00:00:00','ff:ff:ff:ff:ff:ff') and not int(value[:2],16)&1 else ''
+
+
+def device_preferences(value):
+    result={}
+    for key,row in value.get('devices',{}).items():
+        if not isinstance(row,dict):continue
+        identity=mac_key(key) or mac_key(row.get('mac'))
+        if not identity:continue
+        last=row.get('last_ip',key if not mac_key(key) else '')
+        result[identity]={**row,'mac':identity,'last_ip':last}
+    return {**value,'version':2,'devices':result}
 
 
 def read_command(args):
@@ -39,11 +57,12 @@ def discover(config,preferences):
         if networks and not any(ip in network and ip not in (network.network_address,network.broadcast_address) for network in networks):return
         row=rows.setdefault(str(ip),{'ip':str(ip),'name':'设备 '+str(ip),'mac':'','seen':False,'source':source})
         if name and name!='*':row['name']=str(name)[:64]
-        if mac:row['mac']=str(mac)[:17].upper()
+        if mac_key(mac):row['mac']=mac_key(mac)
         row['seen']=row['seen'] or online
+        if source!='saved':row['source']=source
 
-    saved=preferences.get('devices',{})
-    for address,preset in saved.items():add(address,preset.get('name',''),preset.get('mac',''))
+    saved=device_preferences(preferences).get('devices',{})
+    for identity,preset in saved.items():add(preset.get('last_ip',''),preset.get('name',''),identity)
     for address in config.get('devices',[]):add(address)
     for address in option('devices').split():add(address)
     try:
@@ -58,11 +77,20 @@ def discover(config,preferences):
         state=item.get('state',[])
         if isinstance(state,str):state=[state]
         add(item.get('dst'),mac=item.get('lladdr',''),online=any(s in ('REACHABLE','DELAY','PROBE','PERMANENT') for s in state),source='neighbor')
+    # Prefer live observations over the stored last IP for the same MAC.
+    identities={}
     for row in rows.values():
-        if row['ip'] in saved:
-            preset=saved[row['ip']]
-            if preset.get('name'):row['name']=str(preset['name'])[:64]
-            row['preset']={key:preset[key] for key in ('game_id','area_id','line_id') if key in preset}
+        identity=mac_key(row['mac'])
+        rank=(row['seen'],row['source']!='saved')
+        if identity and (identity not in identities or rank>identities[identity][0]):identities[identity]=(rank,row['ip'])
+    rows={ip:row for ip,row in rows.items() if not row['mac'] or identities[row['mac']][1]==ip}
+    for row in rows.values():
+        preset=saved.get(mac_key(row['mac']))
+        row['note']=str(preset.get('note',''))[:64] if preset else ''
+        if row['note']:row['name']=row['note']
+        if preset:
+            profile={key:preset[key] for key in ('game_id','area_id','line_id') if key in preset}
+            if profile:row['preset']=profile
     host=option('http_host','127.0.0.1')
     if host=='127.0.0.1' and local:host=local[0]
     return {'devices':sorted(rows.values(),key=lambda r:(not bool(r.get('preset')),not r['seen'],r['ip'])),

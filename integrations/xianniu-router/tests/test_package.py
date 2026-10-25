@@ -2,11 +2,12 @@ import io
 import tarfile
 import unittest
 from pathlib import Path, PurePosixPath
+from build_ipk import VERSION
 
 
 class OpenWrtPackage(unittest.TestCase):
     def test_linux_paths_parents_modes_and_no_account_payload(self):
-        package = Path(__file__).resolve().parents[1] / 'xianniu-router_0.4.4_all.ipk'
+        package = Path(__file__).resolve().parents[1] / ('xianniu-router_' + VERSION + '_all.ipk')
         with tarfile.open(package) as outer:
             self.assertEqual(outer.extractfile('./debian-binary').read(), b'2.0\n')
             with tarfile.open(fileobj=io.BytesIO(outer.extractfile('./data.tar.gz').read())) as archive:

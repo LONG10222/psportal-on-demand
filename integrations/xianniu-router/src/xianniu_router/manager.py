@@ -77,7 +77,9 @@ class Manager:
         except (ValueError,FileNotFoundError):return {'running':False}
 
     def preferences(self):
-        try:return json.loads((self.private/'preferences.json').read_text(encoding='utf-8'))
+        try:
+            from .devices import device_preferences
+            return device_preferences(json.loads((self.private/'preferences.json').read_text(encoding='utf-8')))
         except (ValueError,FileNotFoundError):return {'devices':{},'recent':[]}
 
     def catalog(self,query='',platform='',offset=0,limit=24):
@@ -120,7 +122,7 @@ class Manager:
                 'login_method':info.get('method','imported'), 'login_at':info.get('at'),
                 'nickname':info.get('nickname',''), 'game_id':config.get('game_id',797),
                 'profile':config.get('profile',{}), 'runtime':runtime,
-                'active_device':config.get('active_device',''),
+                'active_device':config.get('active_device',''),'active_device_mac':config.get('active_device_mac',''),
                 'member':member,
                 'login_methods':['wechat','password'], 'sms_login_supported':False}
 
@@ -155,6 +157,9 @@ class Manager:
 
     def service(self,action):
         if action not in ('start','stop','enable','disable'):raise ValueError('Invalid service operation')
+        if action=='enable' and Path('/etc/config/portalproxy').exists():
+            # StarPass remembers the workspace; boot must not resume paid time.
+            action='disable'
         result=subprocess.run(['/etc/init.d/xianniu-router',action],capture_output=True,timeout=40)
         if result.returncode:raise RuntimeError('鲜牛服务操作未成功，请查看状态')
 
@@ -165,6 +170,7 @@ class Manager:
 
     def start(self):
         with self.lock():
+            self.require_workspace()
             if not self.config().get('account',{}).get('access_token'):raise ValueError('请先登录鲜牛账号')
             if self.runtime().get('running'):return {'started':True,'already_running':True}
             resumed=self.prepare_member()
@@ -194,6 +200,7 @@ class Manager:
         from .devices import discover
         game_id,area_id,line_id=int(game_id),int(area_id),int(line_id)
         with self.lock():
+            self.require_workspace()
             config=self.config()
             if not config.get('account',{}).get('access_token'):raise ValueError('请先登录鲜牛账号')
             inventory=discover(config,self.preferences())
@@ -208,20 +215,25 @@ class Manager:
             same=(config.get('active_device')==device and config.get('game_id')==game_id and
                   config.get('profile',{}).get('area_id')==area_id and config.get('profile',{}).get('line_id')==line_id)
             if running and same:return {'started':True,'already_running':True}
+            if running and self.billing(config.get('game_id'))=='paid' and self.billing(game_id)=='free':
+                raise ValueError('请先停止当前付费加速并暂停计时，再选择免费项目')
             # Validate before stopping; never call an official stop for another
             # device/session outside this service's ownership.
             self.service('stop')
             if running and self.runtime().get('session_stop_ok') is False:
                 raise ValueError('旧加速会话未确认停止，请稍后重试，避免会话冲突')
-            resumed=self.prepare_member()
+            resumed=self.prepare_member(game_id)
             config=self.config()
-            config['game_id']=game_id;config['active_device']=device;config['devices']=[device]
+            config['game_id']=game_id;config['active_device']=device;config['active_device_mac']=selected.get('mac','');config['devices']=[device]
             config['profile']={**config.get('profile',{}),'area_id':area_id,'line_id':line_id}
             atomic_json(self.path,config)
             preferences=self.preferences()
-            preferences.setdefault('devices',{})[device]={
-                'name':selected['name'],'mac':selected['mac'],
-                'game_id':game_id,'area_id':area_id,'line_id':line_id}
+            from .devices import mac_key
+            identity=mac_key(selected.get('mac'))
+            if identity:
+                old=preferences.setdefault('devices',{}).get(identity,{})
+                preferences['devices'][identity]={**old,'name':selected['name'],'mac':identity,'last_ip':device,
+                    'game_id':game_id,'area_id':area_id,'line_id':line_id}
             preferences['recent']=([game_id]+[r for r in preferences.get('recent',[]) if r!=game_id])[:20]
             atomic_json(self.private/'preferences.json',preferences)
             # Only this plugin's UCI namespace is written. Device networking,
@@ -237,7 +249,51 @@ class Manager:
             self.service('enable');self.service('start')
             return {'started':True,'device':device,'game':game['title'],'switched':bool(running),'time_resumed':resumed}
 
-    def prepare_member(self):
+    def set_device_note(self,mac,note):
+        from .devices import discover,mac_key
+        identity=mac_key(mac)
+        if not identity:raise ValueError('设备 MAC 地址无效')
+        if not isinstance(note,str) or len(note)>64 or any(ord(c)<32 or ord(c)==127 for c in note):
+            raise ValueError('备注最多 64 个字符，不能包含控制字符')
+        with self.lock():
+            preferences=self.preferences()
+            row=next((r for r in discover(self.config(),preferences)['devices'] if mac_key(r.get('mac'))==identity),None)
+            old=preferences.setdefault('devices',{}).get(identity,{})
+            if row is None and not old:raise ValueError('请先发现设备，再保存备注')
+            preferences['devices'][identity]={**old,'mac':identity,'note':note.strip(),
+                'last_ip':row['ip'] if row else old.get('last_ip','')}
+            atomic_json(self.private/'preferences.json',preferences)
+        return {'saved':True,'mac':identity,'note':note.strip()}
+
+    def require_workspace(self):
+        if self.private!=Path('/etc/xianniu-router') or not Path('/etc/config/portalproxy').exists():return
+        value=subprocess.run(['uci','-q','get','portalproxy.main.product_mode'],capture_output=True,text=True,timeout=8)
+        if value.stdout.strip()!='accelerator':raise ValueError('请先在星渡中切换到加速器模式')
+
+    def billing(self,game_id=None):
+        identity=int(self.config().get('game_id',797) if game_id is None else game_id)
+        games=json.loads(self.catalog_path.read_text(encoding='utf-8'))
+        game=next((row for row in games if row.get('id')==identity),None)
+        flag=game.get('is_free') if game else None
+        if type(flag) is not bool:raise ValueError('官方目录缺少计费标记，请更新目录后再启动')
+        return 'free' if flag else 'paid'
+
+    def finish(self):
+        with self.lock():
+            was_running=self.runtime().get('running',False)
+            kind=self.billing()
+            self.service('stop');self.set_enabled(False);self.service('disable')
+            if was_running and self.runtime().get('session_stop_ok') is not True:
+                raise ValueError('官方停止尚未确认，暂未暂停会员计时')
+            if not was_running or kind=='free':return {'stopped':True,'billing':kind,'time_paused':False}
+            config=self.config()
+            call_api(config,'/client/member/suspend',{'access_token':config['account']['access_token'],'sender':0})
+            member=self._member()
+            if member.get('pause_state') not in (0,'0'):raise ValueError('官方尚未确认暂停，请刷新会员状态')
+            return {'stopped':True,'billing':kind,'time_paused':True}
+
+    def prepare_member(self,game_id=None):
+        if self.billing(game_id)=='free':return False
         member=self._member()
         if member.get('pause_state') not in (0,'0'):return False
         config=self.config()
@@ -249,7 +305,8 @@ class Manager:
     def member_cached(self):
         try:
             value=json.loads((self.private/'member.json').read_text(encoding='utf-8'))
-            return {**value,**balances(value)}
+            return {**value,**balances(value),
+                    'sample_age_seconds':max(0,int(time.time())-int(value.get('updated_at',time.time())))}
         except (ValueError,FileNotFoundError):return {}
 
     def member(self):
@@ -264,7 +321,7 @@ class Manager:
                 atomic_json(self.private/'member.json',{'login_required':True,'error_code':error.code,'updated_at':int(time.time())})
             raise
         if not isinstance(data,dict):raise ValueError('官方会员状态格式发生变化')
-        public={'updated_at':int(time.time())}
+        public={'updated_at':int(time.time()),'sample_age_seconds':0}
         for key in ('pause_state','total_datetime','free_datetime','expired_datetime',
                     'notpause_expired_datetime','billing_type','package_title'):
             if isinstance(data.get(key),(str,int,float,bool)):public[key]=data[key]
