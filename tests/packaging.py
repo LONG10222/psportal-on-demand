@@ -61,7 +61,9 @@ class PackagingTests(unittest.TestCase):
             with tarfile.open(fileobj=io.BytesIO(members['control.tar.gz'])) as archive:
                 self.assertIn(b'Architecture: all', archive.extractfile('./control').read())
                 self.assertEqual(archive.extractfile('./conffiles').read(), b'/etc/config/portalproxy\n')
-                self.assertNotIn(b'portalproxy start', archive.extractfile('./postinst').read())
+                self.assertIn(b'gateway_enabled', archive.extractfile('./postinst').read())
+                self.assertNotIn(b'xianniu-router start', archive.extractfile('./postinst').read())
+                self.assertNotIn(b'portalproxy enable', archive.extractfile('./postinst').read())
             with tarfile.open(fileobj=io.BytesIO(members['data.tar.gz'])) as archive:
                 self.assertTrue(archive.getmember('./usr/libexec/portalproxy').isdir())
                 self.assertTrue(archive.getmember('./usr/lib/lua/luci/view/portalproxy').isdir())

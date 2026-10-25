@@ -52,8 +52,12 @@ def build(destination, version):
         add(path.relative_to(ROOT), 'usr/libexec/portalproxy/' + path.name, 0o700)
     for source, target in [('portalproxy', 'usr/sbin/portalproxy'),
                            ('portalproxy.init', 'etc/init.d/portalproxy'),
-                           ('portalproxy-core.init', 'etc/init.d/portalproxy-core')]:
+                           ('portalproxy-core.init', 'etc/init.d/portalproxy-core'),
+                           ('portalproxy-gateway.init','etc/init.d/portalproxy-gateway'),
+                           ('portalproxy-starpass.init','etc/init.d/portalproxy-starpass')]:
         add('files/' + source, target, 0o700)
+    for path in sorted((ROOT/'gateway').glob('*')):
+        if path.suffix in ('.py','.rb'):add(path.relative_to(ROOT),'usr/libexec/portalproxy/gateway/'+path.name,0o700)
     add('files/portalproxy.config', 'etc/config/portalproxy', 0o600)
     for source in ('controller/portalproxy.lua', 'model/cbi/portalproxy.lua',
                    'view/portalproxy/onboarding.htm', 'view/portalproxy/dashboard.htm'):
@@ -69,7 +73,7 @@ Maintainer: StarPass contributors
 Section: luci
 Priority: optional
 License: MIT
-Depends: lua, luci-compat, luci-lib-nixio, luci-lib-jsonc, luci-lib-base, libuci-lua, curl, ca-bundle
+Depends: lua, luci-compat, luci-lib-nixio, luci-lib-jsonc, luci-lib-base, libuci-lua, curl, ca-bundle, xianniu-router (>= 0.5.1)
 Installed-Size: {installed_size}
 Description: StarPass on-demand HTTP/TCP device sharing with optional OpenClash linking
 '''
@@ -78,7 +82,7 @@ Description: StarPass on-demand HTTP/TCP device sharing with optional OpenClash 
 [ -n "$IPKG_INSTROOT" ] && exit 0
 set -eu
 set --
-for path in etc/config/portalproxy etc/portalproxy usr/libexec/portalproxy etc/init.d/portalproxy etc/init.d/portalproxy-core usr/sbin/portalproxy usr/lib/lua/luci/controller/portalproxy.lua usr/lib/lua/luci/model/cbi/portalproxy.lua usr/lib/lua/luci/view/portalproxy www/luci-static/resources/starpass/accelerator_v2.js; do
+for path in etc/config/portalproxy etc/portalproxy usr/libexec/portalproxy etc/init.d/portalproxy etc/init.d/portalproxy-core etc/init.d/portalproxy-gateway etc/init.d/portalproxy-starpass usr/sbin/portalproxy usr/lib/lua/luci/controller/portalproxy.lua usr/lib/lua/luci/model/cbi/portalproxy.lua usr/lib/lua/luci/view/portalproxy www/luci-static/resources/starpass/accelerator_v2.js; do
  [ ! -e "/$path" ] || set -- "$@" "$path"
 done
 if [ "$#" -gt 0 ]; then
@@ -100,12 +104,17 @@ chmod 600 /etc/config/portalproxy
 mkdir -p /etc/portalproxy/providers
 chmod 700 /etc/portalproxy /etc/portalproxy/providers /usr/libexec/portalproxy
 rm -f /tmp/luci-indexcache /tmp/luci-indexcache.*.json
-echo 'StarPass installed; configure Services -> StarPass, save, then explicitly Start. OpenClash is unchanged.'
+if [ "$(uci -q get portalproxy.main.gateway_enabled)" = 1 ] && [ -n "$(uci -q get portalproxy.main.listen_ip)" ]; then
+ /etc/init.d/portalproxy-gateway start >/dev/null 2>&1 || true
+ /usr/sbin/portalproxy start >/dev/null 2>&1 || true
+fi
+echo 'StarPass installed; configured entries are restored. Paid acceleration is not resumed.' 
 exit 0
 ''',
         'prerm': '''#!/bin/sh
 [ -n "$IPKG_INSTROOT" ] && exit 0
 # opkg upgrade also invokes prerm: stop only StarPass before replacing its code.
+if [ -x /etc/init.d/portalproxy-gateway ]; then /etc/init.d/portalproxy-gateway stop || exit 1; fi
 if [ -x /etc/init.d/portalproxy ]; then /etc/init.d/portalproxy stop || exit 1; fi
 if [ "$PKG_UPGRADE" != 1 ]; then
  [ ! -L /etc/portalproxy ] || exit 1

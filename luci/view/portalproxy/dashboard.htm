@@ -83,20 +83,31 @@
   <% if self.message then %><div class="alert-message notice" role="status"><%=pcdata(self.message)%></div><% end %>
   <% if self.errmessage then %><div class="alert-message warning" role="alert"><%=pcdata(self.errmessage)%></div><% end %>
   <nav class="starpass-mode-tabs" aria-label="用途模式">
-   <% action('_mode_game', self.portal_workspace == 'game'); action('_mode_accelerator', self.portal_workspace == 'accelerator') %>
+   <% action('_mode_game', self.portal_workspace == 'game'); action('_mode_accelerator', self.portal_workspace == 'accelerator'); action('_mode_starpass', self.portal_workspace == 'starpass') %>
   </nav>
-  <p>游戏共享：<%=self.portal_running and "运行中" or "未运行"%> · 鲜牛：<%=self.portal_accelerator_running and "运行中" or "未运行"%>。切换页面不中断服务。</p>
+  <p>游戏共享：<%=self.portal_running and "运行中" or "未运行"%> · 鲜牛：<%=self.portal_accelerator_running and "运行中" or "未运行"%> · 星渡：<%=self.portal_starpass_enabled and "已开启" or "已关闭"%>。</p>
   <% if self.portal_workspace == 'accelerator' then %>
    <section class="starpass-card"><h3>鲜牛游戏加速</h3><p>选择游戏后开始加速，可与游戏共享同时运行；两套服务分别启停。</p><div id="starpass-accelerator">正在加载游戏库…</div></section>
   <% end %>
-  <div<% if self.portal_workspace == 'accelerator' then %> hidden<% end %>>
+  <% if self.portal_workspace == 'starpass' then %>
+   <section class="starpass-card"><h3>星渡 · OpenClash</h3>
+    <p>局域网设备使用下面的手动代理。与游戏模式共用地址和端口，开启其中一个会关闭另一个。</p>
+    <div class="starpass-main-action"><% if self.portal_starpass_enabled then action('_starpass_off',true) else action('_starpass_on',true) end %></div>
+    <div class="starpass-endpoint"><%=pcdata(self.portal_address .. ':' .. self.portal_port)%></div>
+    <p>关闭后入口继续直连，恢复普通网络的可达范围。无需换 Wi-Fi 或修改 IP。</p>
+    <details><summary>OpenClash 原管理界面</summary><p><a href="<%=url('admin','services','openclash')%>" target="_blank" rel="noopener">单独打开 OpenClash</a></p>
+     <iframe title="OpenClash 原管理界面" loading="lazy" src="<%=url('admin','services','openclash')%>" style="width:100%;height:780px;border:0"></iframe>
+    </details>
+   </section>
+  <% end %>
+  <div<% if self.portal_workspace ~= 'game' then %> hidden<% end %>>
    <section class="starpass-card starpass-game-home" aria-labelledby="starpass-overview-title">
     <h3 id="starpass-overview-title">游戏共享<% if self.portal_running then %> · 已开启<% else %> · 已关闭<% end %></h3>
     <p><%=self.portal_running and '让 Portal 使用下面的代理即可，OpenClash 不用开启。' or '使用现有订阅和核心，为你的游戏设备按需联网。'%></p>
     <div class="starpass-main-action"><% if self.portal_running or self.portal_enabled then action('_stop', true) else action('_start', true) end %></div>
     <div class="starpass-connection"><p>在 Portal 的 Wi-Fi 手动代理中填写</p>
      <div class="starpass-endpoint"><%=pcdata(self.portal_configured and (self.portal_address .. ':' .. self.portal_port) or '请先展开高级设置，选择接入设备')%></div>
-     <p>只需设置一次。开启后随路由器启动，空闲 60 秒自动休眠。</p>
+     <p>只需设置一次。开启后空闲 60 秒休眠；关闭后同一入口直连，不影响普通网络访问。</p>
     </div>
     <p id="starpass-dirty" class="starpass-dirty" role="status" hidden>有未保存的修改。请先保存，再开启；关闭共享仍可使用。</p>
    </section>
@@ -147,7 +158,7 @@ cbi_init();
  // LuCI replaces widget placeholders asynchronously. Capture the baseline
  // after its first completed dependency pass, not before inputs exist.
  var initial = null;
- var protectedActions = ['_start', '_apply', '_update', '_refresh', '_switch_mode', '_mode_game', '_mode_accelerator'];
+ var protectedActions = ['_start', '_apply', '_update', '_refresh', '_switch_mode', '_mode_game', '_mode_accelerator', '_mode_starpass', '_starpass_on'];
  function dirtyState() {
   if (initial === null) return;
   var current = settingsValues();

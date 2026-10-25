@@ -42,3 +42,15 @@ installed=false;assert(not pcall(mode.switch,'accelerator',d));assert(current=='
 assert(not pcall(mode.switch,'clash',d));assert(current=='game')
 enabled='0';installed=true;mode.switch('accelerator',d);mode.switch('game',d);assert(#calls==0)
 print('Workspace/source tests: page changes preserve both service lifecycles, active sessions and independent enabled state')
+
+current='accelerator';running=true
+local paused=false
+function d.sys.call(command)
+ assert(command:find('pause%-accelerator'))
+ paused=true;return 0
+end
+assert(mode.switch('starpass',d)=='starpass' and paused)
+current='accelerator';paused=false
+function d.sys.call() return 1 end
+assert(not pcall(mode.switch,'starpass',d) and current=='accelerator')
+print('Accelerator -> StarPass requires successful official pause before changing the page')

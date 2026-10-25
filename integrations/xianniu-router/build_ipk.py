@@ -6,7 +6,7 @@ import tarfile
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.4.4+istore22.9'
+VERSION = '0.5.1'
 
 
 def archive(files, sort=True):

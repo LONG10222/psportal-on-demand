@@ -51,6 +51,12 @@ local ok,err = pcall(function()
     end
     assert(fs.chmod('/etc/portalproxy/api-secret','600'))
     local core,policy = config.render(options,secret)
+    local cursor=require('uci').cursor()
+    if cursor:get('portalproxy','main','gateway_enabled')=='1' then
+        policy.bind='127.0.0.1';policy.allowed_ip='127.0.0.1'
+        policy.port=tonumber(cursor:get('portalproxy','main','entry_backend_port') or '18880')
+        assert(policy.port and policy.port>=1024 and policy.port<=65535 and policy.port~=policy.backend_port and policy.port~=policy.api_port and policy.port~=validated.listen_port and policy.port~=validated.dns_port,'Invalid entry backend port')
+    end
     local core_yaml = config.to_yaml(core,json.stringify)
     for name,value in pairs({['config.yaml']=core_yaml,['policy.json']=json.stringify(policy),['api-header']='Authorization: Bearer '..secret..'\n'}) do
         local path = '/etc/portalproxy/'..name

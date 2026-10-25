@@ -1,6 +1,6 @@
 -- Persisted game/accelerator workspace. No external core service is managed.
 local M = {}
-function M.valid(mode) return mode == 'game' or mode == 'accelerator' end
+function M.valid(mode) return mode == 'game' or mode == 'accelerator' or mode == 'starpass' end
 function M.switch(mode, deps)
     assert(M.valid(mode), 'Invalid workspace mode')
     deps = deps or {uci=require('uci').cursor(), fs=require('nixio.fs'), sys=require('luci.sys'), json=require('luci.jsonc')}
@@ -13,6 +13,9 @@ function M.switch(mode, deps)
     end
     assert(fs.mkdir('/tmp/portalproxy-mode.lock','700'), 'Another mode change is in progress')
     local ok,err=pcall(function()
+        if previous=='accelerator' and mode=='starpass' then
+            assert(deps.sys.call('/usr/bin/python3 /usr/libexec/portalproxy/gateway/control.py pause-accelerator >/dev/null 2>&1')==0,'Official accelerator pause not confirmed')
+        end
         assert(uci:set('portalproxy','main','product_mode',mode));assert(uci:commit('portalproxy'))
         assert(fs.chmod('/etc/config/portalproxy','600'))
     end)

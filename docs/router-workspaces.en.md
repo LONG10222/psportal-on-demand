@@ -1,5 +1,7 @@
 # Router game and accelerator modes
 
+[Fixed entries and three modes](router-fixed-entry.en.md)
+
 StarPass opens in game mode. The selected mode is saved and survives service restarts.
 
 ## Game mode

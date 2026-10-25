@@ -10,14 +10,14 @@ import tarfile
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ('install.sh', 'uninstall.sh', 'LICENSE', 'README.zh-CN.md', 'CHANGELOG.md',
          'SECURITY.md', 'scripts/build-router-source.py', 'scripts/build-router-ipk.py')
-DIRS = ('src', 'files', 'luci', 'tests', 'docs')
+DIRS = ('src', 'files', 'luci', 'tests', 'docs','gateway')
 
 
 def build(destination):
     paths = [ROOT / name for name in FILES]
     for name in DIRS:
         paths.extend(p for p in (ROOT / name).rglob('*')
-                     if p.is_file() and p.suffix in ('.lua', '.sh', '.md', '.py', '.init', '.config', '.htm', '.js'))
+                     if p.is_file() and p.suffix in ('.lua', '.sh', '.md', '.py', '.init', '.config', '.htm', '.js', '.rb'))
     paths.append(ROOT / 'files/portalproxy')
     entries = {}
     for path in sorted(set(paths)):

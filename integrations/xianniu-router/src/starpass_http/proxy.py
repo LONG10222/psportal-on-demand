@@ -202,7 +202,8 @@ class ProxyServer:
         if self.timeout <= 0 or self.max_connections < 1:
             raise ValueError("request_timeout and max_connections must be positive")
         self.allowed_clients = frozenset(ipaddress.ip_address(ip) for ip in config["allowed_clients"])
-        if not self.allowed_clients:
+        self.allowed_networks = tuple(ipaddress.ip_network(v,strict=True) for v in config.get("allowed_networks", []))
+        if not self.allowed_clients and not self.allowed_networks:
             raise ValueError("allowed_clients must not be empty")
         self._server: asyncio.Server | None = None
         self._tasks: set[asyncio.Task] = set()
@@ -388,7 +389,8 @@ class ProxyServer:
         try:
             peer = writer.get_extra_info("peername")
             try:
-                allowed = bool(peer) and ipaddress.ip_address(peer[0]) in self.allowed_clients
+                allowed = bool(peer) and (ipaddress.ip_address(peer[0]) in self.allowed_clients or
+                    any(ipaddress.ip_address(peer[0]) in network for network in self.allowed_networks))
             except ValueError:
                 allowed = False
             if not allowed:
@@ -408,6 +410,7 @@ class ProxyServer:
             client['last_seen'] = time.time()
             peer_ip = str(ipaddress.ip_address(peer[0]))
             self._clients[peer_ip] = self._clients.get(peer_ip, 0) + 1
+            if hasattr(self.core,"set_client"): self.core.set_client(peer_ip)
             request = parse_request(await self._header(reader))
             resolver = self.config.get('destination_resolver', resolve_destination)
             route = await asyncio.wait_for(resolver(request.host, request.port), self.timeout)

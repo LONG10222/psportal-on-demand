@@ -50,6 +50,8 @@ def main():
         if option('http_enabled', '0') == '1':
             args.http_host = option('http_host', '127.0.0.1')
             args.http_port = int(option('http_port', '10082'))
+    if Path('/usr/libexec/portalproxy/gateway/control.py').exists() and subprocess.run(['uci','-q','get','portalproxy.main.gateway_enabled'],capture_output=True,text=True).stdout.strip()=='1':
+        args.http_port=0  # Permanent LAN entry uses the existing loopback SOCKS backend.
     if not config.get('start_on_launch'):
         address = ipaddress.IPv4Address(config['node']['host'])
         if not address.is_global:

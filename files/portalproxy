@@ -69,7 +69,8 @@ case "${1:-status}" in
     apply)
         [ "$(id -u)" = 0 ] || exit 1
         /usr/bin/lua /usr/libexec/portalproxy/render.lua
-        exec /etc/init.d/portalproxy restart
+        /etc/init.d/portalproxy restart
+        if [ "$(get_option gateway_enabled)" = 1 ]; then /etc/init.d/portalproxy-gateway restart; fi
         ;;
     status) exec /usr/bin/lua /usr/libexec/portalproxy/status.lua ;;
     logs) exec /usr/bin/lua /usr/libexec/portalproxy/logs.lua ;;
@@ -81,6 +82,9 @@ case "${1:-status}" in
     check) exec /usr/bin/lua /usr/libexec/portalproxy/render.lua --check ;;
     start|stop|restart) exec /etc/init.d/portalproxy "$1" ;;
     enable)
+        if [ -x /usr/libexec/portalproxy/gateway/control.py ]; then
+            exec /usr/bin/python3 /usr/libexec/portalproxy/gateway/control.py game-on
+        fi
         [ "$(id -u)" = 0 ] || exit 1
         /usr/bin/lua /usr/libexec/portalproxy/render.lua
         uci set portalproxy.main.enabled=1
@@ -89,6 +93,9 @@ case "${1:-status}" in
         exec /etc/init.d/portalproxy start
         ;;
     disable)
+        if [ -x /usr/libexec/portalproxy/gateway/control.py ]; then
+            exec /usr/bin/python3 /usr/libexec/portalproxy/gateway/control.py game-off
+        fi
         /etc/init.d/portalproxy stop
         /etc/init.d/portalproxy disable
         uci set portalproxy.main.enabled=0

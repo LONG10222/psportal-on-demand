@@ -16,7 +16,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Install Lua
-        run: sudo apt-get update && sudo apt-get install -y lua5.1
+        run: sudo apt-get update && sudo apt-get install -y lua5.1 ruby
       - name: Protocol and configuration tests
         run: |
           lua5.1 tests/unit.lua
@@ -43,6 +43,7 @@ jobs:
         run: |
           python3 tests/packaging.py
           python3 tests/coexistence.py
+          python3 tests/gateway.py
       - name: Verify StarPass icons and platform branding
         run: |
           python3 native/scripts/generate_brand_assets.py --verify
@@ -52,7 +53,7 @@ jobs:
           python3 scripts/build-router-source.py "$RUNNER_TEMP/starpass-router-source.tar.gz" > "$RUNNER_TEMP/starpass-router-source.sha256"
           python3 scripts/build-router-source.py "$RUNNER_TEMP/starpass-router-source-second.tar.gz"
           cmp "$RUNNER_TEMP/starpass-router-source.tar.gz" "$RUNNER_TEMP/starpass-router-source-second.tar.gz"
-          python3 scripts/build-router-ipk.py "$RUNNER_TEMP/luci-app-starpass.ipk" --version "0.2.0+git${PSPORTAL_SOURCE_COMMIT:0:12}-1" > "$RUNNER_TEMP/luci-app-starpass.sha256"
+          python3 scripts/build-router-ipk.py "$RUNNER_TEMP/luci-app-starpass.ipk" --version "0.3.5+git${PSPORTAL_SOURCE_COMMIT:0:12}-1" > "$RUNNER_TEMP/luci-app-starpass.sha256"
       - name: Upload reviewed router source installer
         uses: actions/upload-artifact@v4
         with:
@@ -62,7 +63,7 @@ jobs:
             ${{ runner.temp }}/starpass-router-source.sha256
             ${{ runner.temp }}/luci-app-starpass.ipk
             ${{ runner.temp }}/luci-app-starpass.sha256
-            integrations/xianniu-router/xianniu-router_0.4.4+istore22.9_all.ipk
+            integrations/xianniu-router/xianniu-router_0.5.1_all.ipk
             integrations/xianniu-router/SHA256SUMS
           retention-days: 7
           if-no-files-found: error

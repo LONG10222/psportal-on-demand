@@ -103,6 +103,9 @@ stage() {
 for file in "$BASE"/src/*.lua; do stage "$file" "usr/libexec/portalproxy/${file##*/}" 700; done
 stage "$BASE/files/portalproxy.init" etc/init.d/portalproxy 700
 stage "$BASE/files/portalproxy-core.init" etc/init.d/portalproxy-core 700
+stage "$BASE/files/portalproxy-gateway.init" etc/init.d/portalproxy-gateway 700
+stage "$BASE/files/portalproxy-starpass.init" etc/init.d/portalproxy-starpass 700
+for file in "$BASE"/gateway/*.py "$BASE"/gateway/*.rb; do stage "$file" "usr/libexec/portalproxy/gateway/${file##*/}" 700; done
 stage "$BASE/files/portalproxy" usr/sbin/portalproxy 700
 if [ ! -f "$ROOT/etc/config/portalproxy" ]; then
     stage "$BASE/files/portalproxy.config" etc/config/portalproxy 600
@@ -125,7 +128,7 @@ fi
 # just UCI/core data. Archive remains local and may contain subscription secrets.
 set --
 for path in etc/config/portalproxy etc/portalproxy usr/libexec/portalproxy \
-    etc/init.d/portalproxy etc/init.d/portalproxy-core usr/sbin/portalproxy \
+    etc/init.d/portalproxy etc/init.d/portalproxy-core etc/init.d/portalproxy-gateway etc/init.d/portalproxy-starpass usr/sbin/portalproxy \
     usr/lib/lua/luci/controller/portalproxy.lua usr/lib/lua/luci/model/cbi/portalproxy.lua \
     usr/lib/lua/luci/view/portalproxy www/luci-static/resources/starpass/accelerator_v2.js; do
     [ ! -e "$ROOT/$path" ] || set -- "$@" "$path"

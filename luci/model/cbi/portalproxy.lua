@@ -31,10 +31,11 @@ local cursor = require('uci').cursor()
 local options = cursor:get_all('portalproxy', 'main') or {}
 local linked = options.core_mode == 'openclash'
 package.path = '/usr/libexec/portalproxy/?.lua;' .. package.path
-local workspace_mode = options.product_mode == 'accelerator' and 'accelerator' or 'game'
+local workspace_mode = (options.product_mode == 'accelerator' or options.product_mode == 'starpass') and options.product_mode or 'game'
 local product_mode = field(ListValue, 'product_mode', translate('用途模式'))
 product_mode:value('game', translate('游戏模式'))
 product_mode:value('accelerator', translate('加速器模式 · 鲜牛'))
+product_mode:value('starpass', translate('星渡模式 · OpenClash'))
 product_mode.default = workspace_mode
 product_mode.rmempty = false
 local source_adapter = require 'openclash_source'
@@ -245,24 +246,29 @@ end
 button('_save', translate('保存配置'))
 button('_apply', translate('应用已保存配置'))
 button('_start', translate('一键开启'))
-button('_stop', translate('关闭游戏共享'))
+button('_stop', translate('关闭游戏模式 · 恢复直连'))
 button('_refresh', translate('刷新快照'))
 button('_switch_mode', translate('切换并记住模式'))
 button('_mode_game', translate('游戏模式'))
 button('_mode_accelerator', translate('加速器模式'))
+button('_mode_starpass', translate('星渡模式'))
+button('_starpass_on', translate('开启星渡'))
+button('_starpass_off', translate('关闭星渡 · 恢复直连'))
 if not linked then button('_update', translate('更新订阅'),
     translate('使用已保存链接下载缓存；不会启动核心。运行中的核心可能重载节点并中断连接。')) end
 
 -- Post/redirect/get prevents a browser refresh from repeating a service action.
 -- Fixed result messages only; no submitted value enters a redirect.
 local results = {
+    starpass_on = translate('星渡已开启，游戏模式已关闭。'),
+    starpass_off = translate('星渡已关闭，代理入口继续直连。'),
     saved = translate('配置已保存。共享状态保持不变；运行中需点击“应用已保存配置”使修改生效。'),
     applied = translate('已应用保存的配置。已启用的共享会重启；已停止的共享仍保持停止。'),
     started = translate('已按保存的配置启动，请查看共享状态。启动成功不代表外网或游戏已连通。'),
     stopped = translate('共享已停止，开机自启已取消。请关闭设备上的手动代理。'),
     refreshed = translate('快照已刷新；节点详情可展开查看。'),
     updated = translate('订阅缓存已更新。运行中的核心可能重载节点；快照仍需单独刷新。')
-    ,mode_changed = translate('操作界面已切换，两套服务各自启停；切换不会中断现有连接或恢复计时。')
+    ,mode_changed = translate('操作界面已切换。从加速器进入星渡时会先停止加速并暂停官方计时。')
 }
 local errors = {
     apply_failed = translate('应用失败，请检查已保存的配置和本地服务状态。'),
@@ -270,7 +276,7 @@ local errors = {
     start_failed = translate('启动失败，请检查配置、依赖和核心状态。'),
     stop_failed = translate('停止未完成，请检查本地服务状态。'),
     refresh_failed = translate('快照不可用；核心可能正在休眠，刷新不会唤醒它。'),
-    mode_failed = translate('模式切换未完成。请先停止鲜牛加速，并确认已安装鲜牛模块。')
+    mode_failed = translate('模式切换未完成，鲜牛停止或暂停计时尚未确认；请刷新状态后重试。')
 }
 if http.getenv('REQUEST_METHOD') == 'GET' then
     local result = http.formvalue('result')
@@ -295,7 +301,7 @@ function form.handle(self, state, data)
     end
     local action, count
     count = 0
-    for _, name in ipairs({'_save', '_apply', '_update', '_start', '_stop', '_refresh', '_switch_mode', '_mode_game', '_mode_accelerator'}) do
+    for _, name in ipairs({'_save', '_apply', '_update', '_start', '_stop', '_refresh', '_switch_mode', '_mode_game', '_mode_accelerator', '_mode_starpass', '_starpass_on', '_starpass_off'}) do
         if http.formvalue('cbid.portalproxy_ui.1.' .. name) then
             action = name
             count = count + 1
@@ -305,11 +311,15 @@ function form.handle(self, state, data)
         self.errmessage = translate('请一次执行一个操作。')
         return true
     end
-    if action == '_switch_mode' or action == '_mode_game' or action == '_mode_accelerator' then
-        local target = action == '_mode_game' and 'game' or action == '_mode_accelerator' and 'accelerator' or data.product_mode
-        if target ~= 'game' and target ~= 'accelerator' then return completed('mode_failed') end
+    if action == '_switch_mode' or action == '_mode_game' or action == '_mode_accelerator' or action == '_mode_starpass' then
+        local target = action == '_mode_game' and 'game' or action == '_mode_accelerator' and 'accelerator' or action == '_mode_starpass' and 'starpass' or data.product_mode
+        if target ~= 'game' and target ~= 'accelerator' and target ~= 'starpass' then return completed('mode_failed') end
         local ok,code=pcall(sys.call, '/usr/sbin/portalproxy mode '..target..' >/dev/null 2>&1')
         return completed(ok and code==0 and 'mode_changed' or 'mode_failed')
+    elseif action == '_starpass_on' or action == '_starpass_off' then
+        local target=action=='_starpass_on' and 'starpass-on' or 'starpass-off'
+        local ok,code=pcall(sys.call,'/usr/bin/python3 /usr/libexec/portalproxy/gateway/control.py '..target..' >/dev/null 2>&1')
+        return completed(ok and code==0 and (action=='_starpass_on' and 'starpass_on' or 'starpass_off') or 'apply_failed')
     elseif action == '_save' then
         if state ~= FORM_VALID then
             self.errmessage = translate('配置无效，未保存。请检查标记的 IP、端口和超时字段。')
@@ -370,7 +380,7 @@ function form.handle(self, state, data)
         end
         return completed('saved')
     elseif action == '_apply' then
-        local ok, code = pcall(sys.call, '/usr/bin/lua /usr/libexec/portalproxy/render.lua >/dev/null 2>&1 && /etc/init.d/portalproxy restart >/dev/null 2>&1')
+        local ok, code = pcall(sys.call, '/usr/sbin/portalproxy apply >/dev/null 2>&1')
         return completed(ok and code == 0 and 'applied' or 'apply_failed')
     elseif action == '_start' or action == '_stop' or action == '_refresh' then
         local commands = {
@@ -393,6 +403,8 @@ local accel_ok, accel_pid = pcall(function() return require('service_status').pi
 form.portal_accelerator_running = accel_ok and accel_pid ~= nil or false
 form.portal_linked = linked
 form.portal_workspace = workspace_mode
+form.portal_starpass_enabled = options.starpass_enabled=='1'
+form.portal_gateway = options.gateway_enabled=='1'
 form.portal_source = options.source_mode == 'openclash'
 form.portal_running = runtime and not runtime.stale or false
 form.portal_enabled = options.enabled == '1'

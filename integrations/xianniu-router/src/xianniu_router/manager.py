@@ -168,7 +168,14 @@ class Manager:
                      ['uci','commit','xianniu-router']):
             subprocess.run(args,check=True,capture_output=True,timeout=8)
 
+    def ensure_entry(self):
+        helper=Path('/usr/libexec/portalproxy/gateway/control.py')
+        if self.private==Path('/etc/xianniu-router') and helper.exists():
+            result=subprocess.run(['/usr/bin/python3',str(helper),'entry-enable'],capture_output=True,timeout=60)
+            if result.returncode:raise ValueError('固定代理入口尚未就绪，请检查星渡接入设置')
+
     def start(self):
+        self.ensure_entry()
         with self.lock():
             if not self.config().get('account',{}).get('access_token'):raise ValueError('请先登录鲜牛账号')
             if self.runtime().get('running'):return {'started':True,'already_running':True}
@@ -198,6 +205,7 @@ class Manager:
         """Select one device/profile and switch this plugin's owned session."""
         from .devices import discover
         game_id,area_id,line_id=int(game_id),int(area_id),int(line_id)
+        self.ensure_entry()
         with self.lock():
             config=self.config()
             if not config.get('account',{}).get('access_token'):raise ValueError('请先登录鲜牛账号')
