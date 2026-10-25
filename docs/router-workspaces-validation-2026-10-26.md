@@ -24,6 +24,8 @@ N1 ARM64, iStoreOS 22.03.6 / fw3. Router changes are based on the reviewed route
 
 - MAC-keyed notes: migration, changed IP, old IP reuse, profile preservation and invalid identities covered by four added tests. Two physical devices were named locally; the LuCI save action passed after reloading rpcd ACLs.
 
+- On-device countdown acceptance: after official resume, two page observations showed decreasing remaining time without manual refresh. Official pause was confirmed and the displayed balance then stayed fixed.
+
 ## Remaining limits
 
 The current workspace is mutually exclusive: selecting accelerator stops the game listener. Entry ports may differ. No combined routing or automatic proxy chaining is implemented.
