@@ -26,6 +26,7 @@ class LoginTests(unittest.TestCase):
         self.app=App.__new__(App)
         self.app.root=self.root;self.app.tk=tk;self.app.ttk=ScopedTtk()
         self.app.busy=False;self.app.provider=None;self.app.qr_generation=0
+        self.app.simple=False;self.app.quick_pending=None
         self.app.config={'dns_server':'192.0.2.1'}
         self.app.status_var=tk.StringVar(self.root)
         self.app.events=queue.Queue()

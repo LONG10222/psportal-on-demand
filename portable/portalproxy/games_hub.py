@@ -20,11 +20,18 @@ class GamesHub:
         frame.rowconfigure(1,weight=1)
         header=ttk.Frame(frame,style='Portal.Page.TFrame');header.grid(row=0,column=0,sticky='ew',pady=(0,10))
         self.buttons={}
-        for spec in PROVIDERS:
+        ttk.Label(header,text='游戏加速',style='Portal.Section.TLabel').pack(side='left',padx=(0,16))
+        for spec in PROVIDERS[:1]:
             button=ttk.Button(header,text=spec.title+(' · 内置' if spec.built_in else ' · 客户端'),command=lambda key=spec.key:self.select(key))
             button.pack(side='left',padx=(0,8));self.buttons[spec.key]=button
-        ttk.Button(header,text='检测已安装加速器',command=self.detect).pack(side='right')
-        ttk.Button(header,text='游戏设置',command=self.settings).pack(side='right',padx=8)
+        more=ttk.Menubutton(header,text='更多')
+        menu=tk.Menu(more,tearoff=False)
+        menu.add_command(label='鲜牛',command=lambda:self.select('xianniu'))
+        menu.add_command(label='网易 UU 客户端联动',command=lambda:self.select('uu'))
+        menu.add_command(label='雷神客户端联动',command=lambda:self.select('leigod'))
+        menu.add_separator();menu.add_command(label='检测已安装加速器',command=self.detect)
+        more.configure(menu=menu);more.pack(side='right')
+        ttk.Button(header,text='设置',command=self.settings).pack(side='right',padx=8)
         self.body=tk.Frame(frame,background='#f4f6fa');self.body.grid(row=1,column=0,sticky='nsew')
         self.native_frame=tk.Frame(self.body,background='#f4f6fa')
         self.linked_frame=ttk.Frame(self.body,padding=22,style='Portal.Card.TFrame')
@@ -82,7 +89,7 @@ class GamesHub:
         try:
             rows=self.events.get_nowait();self.providers={r['key']:r for r in rows}
             for row in rows:
-                self.buttons[row['key']].configure(text=row['title']+(' · 内置' if row['capabilities']['built_in'] else ' · 已安装' if row['installed'] else ' · 未安装'))
+                if row['key'] in self.buttons:self.buttons[row['key']].configure(text=row['title'])
             if self.selected!='xianniu':self.select(self.selected)
         except queue.Empty:pass
         self.frame.after(150,self.poll)
@@ -92,7 +99,7 @@ class GamesHub:
         except ValueError as error:self.status.set(str(error))
 
     def settings(self):
-        if self.selected=='xianniu' and self.xianniu:self.xianniu.advanced()
+        if self.selected=='xianniu' and self.xianniu:self.xianniu.quick_settings()
         else:self.host.view.subtitle.set('当前客户端联动的账号与游戏设置请在官方客户端中完成。')
 
     def standard_proxy(self):

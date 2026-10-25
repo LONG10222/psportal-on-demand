@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import time
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -29,6 +30,7 @@ class IntegratedGamesTests(unittest.TestCase):
         inventory=discover({'installations':[],'processes':[]},exists=lambda p:False)
         self.patches=[patch('starpass_xianniu.storage.Store',return_value=self.store),
             patch('starpass_xianniu.game_grid.IconCache.read',return_value=None),
+            patch('xianniu_router.control.call_api',return_value={'pause_state':0,'total_datetime':100}),
             patch('portalproxy.games_hub.discover',return_value=inventory),
             patch('portalproxy.existing_proxy.detect_system_proxy',return_value=None)]
         for item in self.patches:item.start()
@@ -92,6 +94,74 @@ class IntegratedGamesTests(unittest.TestCase):
     def test_navigation_away_disables_game_shortcuts(self):
         self.app.view.show('Games');self.assertTrue(self.app.games_hub.xianniu.active)
         self.app.view.show('Overview');self.assertFalse(self.app.games_hub.xianniu.active)
+
+    def pump_until(self,predicate):
+        deadline=time.monotonic()+3
+        while not predicate() and time.monotonic()<deadline:
+            self.root.update();time.sleep(.02)
+        self.assertTrue(predicate())
+
+    def test_accelerator_button_opens_simple_library_without_rewriting_normal_configuration(self):
+        raw=copy.deepcopy(self.app.raw);dirty=self.app.dirty
+        values={k:v.get() for k,v in self.app.vars.items()}
+        self.app.view.product_mode_buttons['accelerator'].invoke();self.root.update()
+        game=self.app.games_hub.xianniu
+        self.assertEqual(self.app.view.page,'Games');self.assertTrue(game.simple)
+        self.assertFalse(game.devices_panel.winfo_manager())
+        self.assertFalse(game.route_panel.winfo_manager())
+        self.assertEqual(game.start_button.cget('text'),'一键加速')
+        self.assertEqual(self.app.raw,raw);self.assertEqual(self.app.dirty,dirty)
+        self.assertEqual({k:v.get() for k,v in self.app.vars.items()},values)
+        self.assertEqual(self.path.read_bytes(),self.original)
+
+    def test_quick_action_fetches_a_line_then_starts_only_after_user_click(self):
+        self.app.open_game_accelerator();game=self.app.games_hub.xianniu
+        game.config.update(account={'access_token':'fixture-only'},exclusive_confirmed=True)
+        data={'lines':[{'id':120,'title':'fixture line'}],'all_lines':[]}
+        with patch.object(game.catalog,'lines',return_value=data),patch.object(game,'start') as start:
+            game.select_game_id(12)
+            self.assertFalse(start.called)
+            game.quick_toggle()
+            self.pump_until(lambda:start.called)
+            start.assert_called_once()
+            self.assertEqual(game.line.current(),0)
+            self.assertIsNone(game.quick_pending)
+
+    def test_cancelled_preparation_cannot_start_from_late_line_result(self):
+        self.app.open_game_accelerator();game=self.app.games_hub.xianniu
+        game.config.update(account={'access_token':'fixture-only'},exclusive_confirmed=True)
+        gate=threading.Event()
+        def delayed(*args):
+            gate.wait(2);return {'lines':[{'id':120,'title':'fixture line'}],'all_lines':[]}
+        with patch.object(game.catalog,'lines',side_effect=delayed),patch.object(game,'start') as start:
+            game.select_game_id(12);game.quick_toggle()
+            self.assertIsNotNone(game.quick_pending)
+            game.quick_toggle();gate.set()
+            self.assertIsNone(game.quick_pending)
+            deadline=time.monotonic()+.4
+            while time.monotonic()<deadline:self.root.update();time.sleep(.02)
+            start.assert_not_called()
+
+    def test_single_stop_button_pauses_owned_session_and_borrowed_session_only_stops(self):
+        self.app.open_game_accelerator();game=self.app.games_hub.xianniu
+        game.provider=object()
+        try:
+            with patch.object(game,'pause') as pause,patch.object(game,'stop') as stop:
+                game.config['session_mode']='managed';game.quick_toggle();pause.assert_called_once();stop.assert_not_called()
+                game.config['session_mode']='borrowed';game.quick_toggle();stop.assert_called_once()
+        finally:game.provider=None
+
+    def test_failed_pause_does_not_trap_closed_listener_in_repeated_shutdown(self):
+        self.app.open_game_accelerator();game=self.app.games_hub.xianniu
+        class StoppedProvider:
+            running=True
+            async def stop_and_pause(self):
+                self.running=False
+                raise ValueError('官方尚未确认暂停，请核对')
+        game.provider=StoppedProvider();game.pause()
+        self.pump_until(lambda:not game.busy)
+        self.assertIsNone(game.provider)
+        self.assertIn('暂停',game.status_var.get())
 
 
 if __name__=='__main__':unittest.main()

@@ -81,7 +81,7 @@ class GameGrid(ttk.Frame):
         menu.add_command(label='读取已安装鲜牛的目录',command=app.sync_catalog)
         menu.add_command(label='选择 gamelist.xml 文件…',command=app.choose_catalog_file)
         self.sync_button.configure(menu=menu)
-        self.sync_button.pack(side='right')
+        if not getattr(app,'simple',False):self.sync_button.pack(side='right')
         tabs = ttk.Frame(self,style='SPGame.Card.TFrame');tabs.pack(fill='x',pady=(8,6))
         self.tab_buttons = {}
         for key,label in [('', '全部游戏'),('mine','我的游戏'),('pc','PC'),('console','PS / Xbox'),('switch','Switch'),('recent','最近选择')]:
@@ -111,7 +111,7 @@ class GameGrid(ttk.Frame):
         self.next = ttk.Button(pager,text='下一页',command=lambda:self.change_page(1),style='SPGame.Compact.TButton');self.next.pack(side='left',padx=6)
         self.page_var = tk.StringVar()
         ttk.Label(pager,textvariable=self.page_var,style='SPGame.CardMuted.TLabel').pack(side='left',padx=8)
-        ttk.Button(pager,text='跳转',command=self.jump,style='SPGame.Compact.TButton').pack(side='right')
+        ttk.Button(pager,text='跳页',command=self.jump,style='SPGame.Compact.TButton').pack(side='right')
         self.page_entry = ttk.Entry(pager,textvariable=self.page_number,width=5);self.page_entry.pack(side='right',padx=6)
         self.page_entry.bind('<Return>',lambda _:self.jump())
         def scoped(action):
@@ -161,7 +161,7 @@ class GameGrid(ttk.Frame):
         self.page_var.set(f'{page} / {self.pages} 页');self.page_number.set(str(page))
         self.previous.configure(state='normal' if page>1 else 'disabled')
         self.next.configure(state='normal' if page<self.pages else 'disabled')
-        self.source_var.set(f"{self.app.repository.info['label']} · {len(self.model.games):,} 款")
+        self.source_var.set(f"{len(self.model.games):,} 款" if getattr(self.app,'simple',False) else f"{self.app.repository.info['label']} · {len(self.model.games):,} 款")
         self.result_var.set(f"找到 {result['total']:,} 款 · 显示 {self.offset+1 if result['total'] else 0}—{self.offset+len(self.filtered)}")
         for key,button in self.tab_buttons.items():button.configure(style='SPGame.SelectedTab.TButton' if key==self.category.get() else 'SPGame.Compact.TButton')
         for child in self.grid_frame.winfo_children():child.destroy()

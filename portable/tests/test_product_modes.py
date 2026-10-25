@@ -497,6 +497,8 @@ class ProductModeWindowTests(unittest.TestCase):
                 self.assertTrue(app.view.quick_button.winfo_viewable())
                 for _ in range(3):
                     for index, mode in enumerate(product_modes.MODES):
+                        # Accelerator now opens the separately tested game workspace.
+                        if mode == 'accelerator':continue
                         app.view.product_mode_buttons[mode].invoke()
                         root.update()
                         self.assertEqual(app.product_mode(), mode)

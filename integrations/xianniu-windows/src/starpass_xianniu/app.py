@@ -50,6 +50,8 @@ class App:
         ttk=ScopedTtk()
         self.tk, self.ttk, self.root, self.store = tk, ttk, root, store
         self.embedded=embedded
+        self.simple=embedded
+        self.quick_pending=None
         self.closed=False
         self.active=True
         self.config = store.load()
@@ -122,7 +124,7 @@ class App:
         self.account_var = tk.StringVar()
         ttk.Label(account_row, textvariable=self.account_var, style='SPGame.CardTitle.TLabel').pack(side='left', fill='x', expand=True)
         ttk.Button(account_row, text='微信登录', command=self.login,style='SPGame.Compact.TButton').pack(side='right')
-        ttk.Button(account_row, text='刷新时长', command=self.refresh_member,style='SPGame.Compact.TButton').pack(side='right', padx=8)
+        if not self.simple:ttk.Button(account_row, text='刷新时长', command=self.refresh_member,style='SPGame.Compact.TButton').pack(side='right', padx=8)
         self.member_var = tk.StringVar(value='可用时长：暂未获取　　试用：暂未获取')
         ttk.Label(account, textvariable=self.member_var, style='SPGame.CardMuted.TLabel').pack(anchor='w', pady=(5, 0))
         footer=ttk.Frame(outer);footer.pack(side='bottom',fill='x')
@@ -137,13 +139,19 @@ class App:
         self.device_entry = tk.StringVar()
         ttk.Button(devices, text='管理设备', command=self.manage_devices).pack(fill='x', pady=(12, 0))
         self.rebuild_devices()
+        self.devices_panel=devices
+        if self.simple:
+            devices.grid_remove()
+            body.columnconfigure(0,weight=0,minsize=0)
         self.library_grid = GameGrid(body,self,self.library)
         self.library_grid.grid(row=0,column=1,sticky='nsew')
         choose = ttk.Frame(body, style='SPGame.Card.TFrame', padding=10); choose.grid(row=1, column=1, sticky='ew',pady=(8,0))
         selected_heading = ttk.Frame(choose,style='SPGame.Card.TFrame');selected_heading.pack(fill='x',pady=(0,4))
         self.selected_title_var = tk.StringVar(value='请选择一个游戏')
         ttk.Label(selected_heading,textvariable=self.selected_title_var,style='SPGame.CardTitle.TLabel',wraplength=580).pack(side='left')
-        row = ttk.Frame(choose, style='SPGame.Card.TFrame'); row.pack(fill='x')
+        if self.simple:
+            ttk.Button(selected_heading,text='区服与线路',command=self.toggle_route,style='SPGame.Compact.TButton').pack(side='right')
+        row = self.route_panel = ttk.Frame(choose, style='SPGame.Card.TFrame'); row.pack(fill='x')
         row.columnconfigure(0, weight=1); row.columnconfigure(1, weight=1)
         self.area_var = tk.StringVar(); self.line_var = tk.StringVar()
         ttk.Label(row, text='区服', style='SPGame.CardMuted.TLabel').grid(row=0, column=0, sticky='w', pady=(0, 5))
@@ -153,17 +161,19 @@ class App:
         self.line = ttk.Combobox(row, textvariable=self.line_var, state='readonly', width=24); self.line.grid(row=1, column=1, sticky='ew')
         ttk.Button(row,text='全部线路',command=self.show_all_lines,style='SPGame.Compact.TButton').grid(row=1,column=2,padx=(8,0))
         self.line.bind('<<ComboboxSelected>>',lambda _:self.save_game_profile())
+        if self.simple:row.pack_forget()
         self.owner_var = tk.StringVar()
         actions = ttk.Frame(footer); actions.pack(fill='x', pady=(8, 5))
-        self.start_button = ttk.Button(actions, text='启动加速与共享', style='SPGame.Accent.TButton', command=self.start)
+        self.start_button = ttk.Button(actions, text='一键加速' if self.simple else '启动加速与共享', style='SPGame.Accent.TButton', command=self.quick_toggle if self.simple else self.start)
         self.start_button.pack(side='left')
-        ttk.Button(actions, text='停止共享', command=self.stop).pack(side='left', padx=10)
-        ttk.Button(actions, text='停止并暂停计时', command=self.pause).pack(side='left')
-        ttk.Label(actions, text='主机 UDP / NAT 尚待验证', foreground='#a06b18').pack(side='right')
-        self.status_var = tk.StringVar(value='已停止 · 选择设备和游戏后启动')
+        if not self.simple:
+            ttk.Button(actions, text='停止共享', command=self.stop).pack(side='left', padx=10)
+            ttk.Button(actions, text='停止并暂停计时', command=self.pause).pack(side='left')
+        ttk.Label(actions, text='代理加速 · 主机 UDP 待验证' if self.simple else '主机 UDP / NAT 尚待验证', foreground='#a06b18').pack(side='right')
+        self.status_var = tk.StringVar(value='选择游戏，点击一键加速' if self.simple else '已停止 · 选择设备和游戏后启动')
         ttk.Label(footer, textvariable=self.status_var, wraplength=1050, style='SPGame.Muted.TLabel').pack(anchor='w', pady=(0, 3))
         self.entry_var = tk.StringVar()
-        ttk.Label(footer, textvariable=self.entry_var, style='SPGame.Muted.TLabel').pack(anchor='w')
+        if not self.simple:ttk.Label(footer, textvariable=self.entry_var, style='SPGame.Muted.TLabel').pack(anchor='w')
         if not embedded:root.protocol('WM_DELETE_WINDOW', self.close)
         self.update_account(); self.update_entry()
         self.select_game_id(self.library.selected_id)
@@ -185,7 +195,47 @@ class App:
         borrowed = self.config.get('session_mode') == 'borrowed'
         self.owner_var.set('会话归属：' + ('复用现有 ' + self.config.get('external_session_owner', '') + '；游戏/区服/线路沿用它的当前方案。本预览不调用 start、stop 或暂停计时。' if borrowed else
             'Windows 独立管理。需先停止同账号其他入口，并在高级设置确认独占；关闭共享不会自动暂停会员计时。'))
-        self.start_button.configure(text='启动现有会话共享' if borrowed else '启动加速与共享')
+        self.start_button.configure(text='一键加速' if self.simple else '启动现有会话共享' if borrowed else '启动加速与共享')
+
+    def toggle_route(self):
+        if self.route_panel.winfo_manager():self.route_panel.pack_forget()
+        else:self.route_panel.pack(fill='x',pady=(8,0))
+
+    def quick_settings(self):
+        dialog=self.tk.Toplevel(self.root);dialog.title('加速设置');dialog.geometry('460x340')
+        dialog.configure(background='#f4f6fa')
+        frame=self.ttk.Frame(dialog,padding=20);frame.pack(fill='both',expand=True)
+        self.ttk.Label(frame,text='鲜牛 · 代理加速',style='SPGame.CardTitle.TLabel').pack(anchor='w',pady=(0,12))
+        self.ttk.Label(frame,text='通道开启后，应用或设备仍需使用代理。\n完整游戏 UDP / NAT 尚未验证。',wraplength=410).pack(anchor='w',pady=(0,16))
+        def devices():
+            if self.devices_panel.winfo_manager():self.devices_panel.grid_remove()
+            else:self.devices_panel.grid()
+            dialog.destroy()
+        for label,command in [('共享设备',devices),('刷新账号时长',self.refresh_member),('同步游戏目录',self.sync_catalog),('高级网络设置',self.advanced)]:
+            self.ttk.Button(frame,text=label,command=command).pack(fill='x',pady=4)
+
+    def quick_toggle(self):
+        if self.busy or self.closing:return
+        if self.provider:
+            if self.config.get('session_mode')=='managed':self.pause()
+            else:self.stop()
+            return
+        if self.quick_pending:
+            self.quick_pending=None;self.line_sequence+=1
+            self.status_var.set('已取消准备');return
+        if not self.config.get('account',{}).get('access_token'):
+            self.login();return
+        if not self.selected_game or not self.areas:
+            self.status_var.set('请先选择一个游戏');return
+        if self.config.get('session_mode')=='managed' and not self.config.get('exclusive_confirmed'):
+            from tkinter import messagebox
+            if not messagebox.askyesno('首次使用鲜牛', '开启加速会恢复官方计时。\n请确认同账号的其他加速入口已停止，由星渡管理本次会话。',parent=self.root):return
+            self.config['exclusive_confirmed']=True
+        if self.config.get('session_mode')=='managed' and (not self.lines or self.line.current()<0):
+            self.quick_pending=(self.selected_game['id'],self.areas[self.area.current()]['id'])
+            self.status_var.set('正在自动选择可用线路…')
+            self.fetch_lines();return
+        self.start()
 
     def update_entry(self):
         self.entry_var.set(f"共享地址  {self.config['listen_host']}:{self.config['http_port']}   ·   SOCKS5  {self.config['socks_port']}")
@@ -243,6 +293,7 @@ class App:
         self.library_grid.reset()
 
     def select_game_id(self, identity):
+        self.quick_pending=None
         self.line_sequence += 1
         self.selected_game = self.library.by_id.get(identity)
         self.lines, self.all_lines = [], []
@@ -281,8 +332,14 @@ class App:
                 self.line.current(next((i for i, r in enumerate(self.lines) if r['id'] == preferred), 0))
                 self.line.configure(state='readonly')
             else:self.line_var.set('当前区服暂无可用线路')
-            self.status_var.set(f"已选择 {self.selected_game['title']} · {len(self.lines)} 条适用线路")
-        self.submit(read(), accepted)
+            self.status_var.set('已选择 ' + self.selected_game['title'] + (' · 可一键加速' if self.simple and self.lines else f' · {len(self.lines)} 条适用线路'))
+            if self.quick_pending==(game,area):
+                self.quick_pending=None
+                if self.lines and not self.closing:self.start()
+        def failed(message):
+            if sequence!=self.line_sequence:return
+            self.quick_pending=None;self.line_var.set('线路获取失败');self.status_var.set(message)
+        self.submit(read(), accepted, failed)
 
     def save_game_profile(self):
         if not self.selected_game or not self.lines or self.line.current()<0 or self.area.current()<0:return
@@ -347,7 +404,7 @@ class App:
         self.account_var.set('鲜牛账号：官方会话已确认')
         stamp = time.strftime('%H:%M:%S', time.localtime(member.get('updated_at', time.time())))
         paused = '暂停' if member.get('pause_state') in (0, '0') else '计时中' if member.get('pause_state') is not None else '未知'
-        self.member_var.set(f"官方剩余：{duration(member.get('remaining_seconds'))}　试用：{duration(member.get('trial_seconds'))}　{paused}　查询 {stamp}")
+        self.member_var.set(f"剩余 {duration(member.get('remaining_seconds'))} · {paused}" if self.simple else f"官方剩余：{duration(member.get('remaining_seconds'))}　试用：{duration(member.get('trial_seconds'))}　{paused}　查询 {stamp}")
 
     def periodic_member(self):
         self.refresh_member()
@@ -465,6 +522,10 @@ class App:
         except Exception as error:
             self.busy = False; self.status_var.set(error_text(error)); return
         self.status_var.set('正在检查端口、会话归属并准备共享…')
+        if self.simple and config['game_id']==12:
+            # Selecting Steam acceleration must actually route its store traffic.
+            # Keep this override local to the new session, preserving other modes.
+            config['steam_store_direct']=False
         async def launch():
             provider = Provider(config, self.store)
             await provider.start(exclusive=config.get('exclusive_confirmed', False))
@@ -500,7 +561,9 @@ class App:
                     # A failed image/widget update must not stop the event pump.
                     self.status_var.set(error_text(error))
         locked=self.busy or self.provider is not None
-        self.start_button.configure(state='disabled' if locked else 'normal')
+        if self.simple:
+            self.start_button.configure(state='disabled' if self.busy else 'normal',text='处理中…' if self.busy else '停止加速' if self.provider else '取消准备' if self.quick_pending else '一键加速')
+        else:self.start_button.configure(state='disabled' if locked else 'normal')
         self.area.configure(state='disabled' if locked or not self.areas else 'readonly')
         self.line.configure(state='disabled' if locked or not self.lines else 'readonly')
         self.library_grid.sync_button.configure(state='disabled' if locked else 'normal')
@@ -509,11 +572,12 @@ class App:
         if self.provider and not self.busy:
             status = self.provider.status()
             c = status['counters']
-            self.status_var.set(status['last_error'] or f"{'共享运行中' if status['running'] else '共享已停止'}　鲜牛 TCP {c['tcp_connections']}　UDP 包 {c['udp_packets']}　发送 {c['sent']} B / 接收 {c['received']} B　续期 {status['renewals']} 次；游戏/NAT 待验收")
+            self.status_var.set(status['last_error'] or ('通道已开启 · 应用或设备需使用代理' if self.simple and status['running'] else '通道已停止' if self.simple else f"{'共享运行中' if status['running'] else '共享已停止'}　鲜牛 TCP {c['tcp_connections']}　UDP 包 {c['udp_packets']}　发送 {c['sent']} B / 接收 {c['received']} B　续期 {status['renewals']} 次；游戏/NAT 待验收"))
             if status['member']: self.show_member(status['member'])
         if self.closing and not self.busy:
             if self.provider:
-                self.stop()
+                if self.simple and self.config.get('session_mode')=='managed':self.pause()
+                else:self.stop()
             else:
                 self.loop.call_soon_threadsafe(self.loop.stop)
                 self.store.unlock()
@@ -525,12 +589,18 @@ class App:
         if self.busy or not self.provider:
             self.status_var.set('请在本预览独占会话运行时使用“停止并暂停计时”'); return
         self.busy = True
+        provider=self.provider
         def accepted(member):
             self.provider = None; self.busy = False
             self.show_member(member); self.status_var.set('本预览共享已停止，官方已确认暂停账号计时。')
-        self.submit(self.provider.stop_and_pause(), accepted)
+        def failed(message):
+            self.busy=False
+            if not provider.running:self.provider=None
+            self.status_var.set(message)
+        self.submit(provider.stop_and_pause(), accepted, failed)
 
     def close(self):
+        self.quick_pending=None
         self.qr_generation += 1
         self.closing = True
         self.status_var.set('正在停止本预览拥有的连接与会话…')

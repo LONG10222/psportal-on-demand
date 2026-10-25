@@ -531,6 +531,9 @@ class DesktopApp:
         except (OSError, ValueError):
             self.backend.log('Appearance preference could not be saved.')
 
+    def open_game_accelerator(self):
+        self.view.show('Games')
+
     def set_product_mode(self, mode):
         previous = getattr(self, '_selected_product_mode', self.raw.get('product_mode', 'game'))
         if (mode not in product_modes.MODES or self.closing or self.importing
@@ -1842,7 +1845,7 @@ def main(argv=None) -> int:
         print('Desktop UI could not open a display. Use the CLI on headless systems.', file=sys.stderr)
         return 2
     application=DesktopApp(root, args.config)
-    if args.page=='games':application.view.show('Games')
+    if args.page=='games' or application.product_mode()=='accelerator':application.view.show('Games')
     root.mainloop()
     return 0
 

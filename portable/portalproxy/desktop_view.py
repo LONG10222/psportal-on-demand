@@ -495,8 +495,12 @@ class DesktopView:
         for mode in product_modes.MODES:
             if mode == 'accelerator' and sys.platform != 'win32':
                 continue
-            button = ttk.Radiobutton(product, text=self.tr(product_modes.LABELS[mode]),
-                variable=variable, value=mode, style='Portal.Mode.TRadiobutton', command=lambda value=mode: self.app.set_product_mode(value))
+            if mode == 'accelerator':
+                button = ttk.Button(product, text=self.tr(product_modes.LABELS[mode]),
+                    command=self.app.open_game_accelerator)
+            else:
+                button = ttk.Radiobutton(product, text=self.tr(product_modes.LABELS[mode]),
+                    variable=variable, value=mode, style='Portal.Mode.TRadiobutton', command=lambda value=mode: self.app.set_product_mode(value))
             button.pack(side='left', padx=(0, 12))
             self.product_mode_buttons[mode] = button
         self.product_mode_note = tk.StringVar()
