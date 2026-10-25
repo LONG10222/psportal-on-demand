@@ -99,6 +99,14 @@ def main(argv=None):
     notices = folder / 'licenses'
     notices.mkdir(exist_ok=True)
     shutil.copy2(root.parent / 'LICENSE', notices / 'PSPortal-OnDemand-LICENSE.txt')
+    pillow=importlib.metadata.distribution('Pillow')
+    for item in pillow.files or ():
+        if '/licenses/' in str(item).replace('\\','/'):
+            source=Path(pillow.locate_file(item))
+            if source.is_file():
+                target=notices/'Pillow'/source.name;target.parent.mkdir(exist_ok=True);shutil.copy2(source,target)
+    for name in ('AllowStarPassGamesLan.cmd','AllowStarPassGamesLan.ps1','StartStarPassGamesPreview.cmd'):
+        if (root/'launchers'/name).is_file():shutil.copy2(root/'launchers'/name,folder/name)
     shutil.copy2(root / 'docs' / 'THIRD-PARTY-NOTICES.md', notices / 'THIRD-PARTY-NOTICES.md')
     for filename in ('Tcl-license.terms', 'Tk-license.terms'):
         shutil.copy2(root / 'docs' / filename, notices / filename)

@@ -19,6 +19,8 @@ SUBTITLES = dict(zip(PAGES, (
     'Original diagnostics, with sensitive values redacted.',
     'Devices using this proxy, grouped by source IP.',
 )))
+PAGES = ('Overview','Games') + PAGES[1:]
+SUBTITLES['Games']='Choose a game accelerator without changing other StarPass modes.'
 
 
 def core_readiness_note(engine_mode, executable):
@@ -117,6 +119,7 @@ class DesktopView:
         content.columnconfigure(0, weight=1)
         content.rowconfigure(2, weight=1)
         header = ttk.Frame(content, style='Portal.Page.TFrame')
+        self.main_header=header
         header.grid(row=0, column=0, sticky='ew')
         header.columnconfigure(0, weight=1)
         self.title = tk.StringVar()
@@ -133,6 +136,7 @@ class DesktopView:
         ttk.Label(header, textvariable=self.subtitle, style='Portal.Note.TLabel', wraplength=760).grid(row=1, column=0, columnspan=2, sticky='w', pady=(8, 18))
         app.path_var = tk.StringVar(value=str(app.path))
         config_bar = ttk.Frame(content, style='Portal.Page.TFrame')
+        self.main_config_bar=config_bar
         config_bar.grid(row=1, column=0, sticky='ew', pady=(0, 18))
         self.advanced_sections.append(config_bar)
         config_bar.columnconfigure(0, weight=1)
@@ -283,6 +287,7 @@ class DesktopView:
         self.label(logs, 'Original diagnostics, with sensitive values redacted.', style='Portal.Note.TLabel').grid(row=1, column=0, sticky='w', pady=12)
 
         footer = ttk.Frame(content, style='Portal.Page.TFrame')
+        self.main_footer=footer
         footer.grid(row=3, column=0, sticky='ew', pady=(18, 0))
         app.save_button = self.button(footer, 'Save / validate', command=app.save)
         app.save_button.pack(side='left')
@@ -666,14 +671,14 @@ class DesktopView:
         self.advanced = bool(enabled)
         for name, button in self.nav.items():
             button.pack_forget()
-            if self.advanced or name in ('Overview', 'Proxies', 'Devices', 'LAN sharing'):
+            if self.advanced or name in ('Overview', 'Games', 'Proxies', 'Devices', 'LAN sharing'):
                 button.pack(fill='x', pady=3, ipady=2, before=self.advanced_button)
         for section in self.advanced_sections:
             section.grid() if self.advanced else section.grid_remove()
         self.app.save_button.pack_forget()
         if self.advanced:
             self.app.save_button.pack(side='left', padx=(0, 10), before=self.app.start_button)
-        if not self.advanced and self.page not in ('Overview', 'Proxies', 'Devices', 'LAN sharing'):
+        if not self.advanced and self.page not in ('Overview', 'Games', 'Proxies', 'Devices', 'LAN sharing'):
             self.show('Overview')
         self.refresh()
 
@@ -683,7 +688,24 @@ class DesktopView:
         if self.page != page:
             self.navigation_generation += 1
         self.page = page
+        application=getattr(self,'app',None)
+        if page=='Games' and application is not None and getattr(application,'games_hub',None) is None:
+            if sys.platform=='win32':
+                from .games_hub import GamesHub
+                self.app.games_hub=GamesHub(self.app,self.frames['Games'])
+            elif not self.frames['Games'].winfo_children():
+                ttk.Label(self.frames['Games'],text='游戏加速器联动目前仅提供 Windows 预览。').pack(padx=20,pady=20)
         self.frames[page].tkraise()
+        hub=getattr(application,'games_hub',None)
+        if hub and hub.xianniu:hub.xianniu.active=page=='Games' and hub.selected=='xianniu'
+        if hasattr(self,'main_header'):
+            if page=='Games':
+                self.main_header.grid_remove();self.main_config_bar.grid_remove()
+                self.main_footer.grid_remove()
+            else:
+                self.main_header.grid()
+                self.main_footer.grid()
+                self.main_config_bar.grid() if self.advanced else self.main_config_bar.grid_remove()
         for name, button in self.nav.items():
             button.configure(style='Portal.Selected.TButton' if name == page else 'Portal.Nav.TButton')
         self.refresh()

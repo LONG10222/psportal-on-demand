@@ -1,12 +1,17 @@
 # Build on each target OS; PyInstaller does not cross-compile.
 from pathlib import Path
 import sys
+import sysconfig
 
 root = Path(SPECPATH).resolve().parent
 branding = root.parent / 'native' / 'assets' / 'branding' / 'desktop'
+integrations=root.parent/'integrations'
+extra_data=[(str(integrations/'xianniu-router/files/usr/share/xianniu-router/catalog.json'),'.')]
+ssl_policy=Path(sysconfig.get_path('stdlib'))/'codex-rejected-cas.pem'
+if ssl_policy.is_file():extra_data.append((str(ssl_policy),'.'))
 analysis = Analysis(
-    [str(root / 'packaging' / 'entry.py')], pathex=[str(root)],
-    binaries=[], datas=[(str(branding), 'assets/branding')], hiddenimports=['portalproxy.__main__', 'yaml._yaml'],
+    [str(root / 'packaging' / 'entry.py')], pathex=[str(root),str(integrations/'xianniu-windows/src'),str(integrations/'xianniu-router/src')],
+    binaries=[], datas=[(str(branding), 'assets/branding')]+extra_data, hiddenimports=['portalproxy.__main__', 'yaml._yaml','starpass_xianniu.app'],
     hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=[], noarchive=False,
 )
 pyz = PYZ(analysis.pure)

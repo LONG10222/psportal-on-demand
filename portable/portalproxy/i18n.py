@@ -6,6 +6,9 @@ from pathlib import Path
 import tempfile
 
 ZH = {
+    'Games':'游戏',
+    'Choose a game accelerator without changing other StarPass modes.':'选择加速器、游戏和设备。其他星渡模式及订阅保持独立。',
+    'Stop sharing and game acceleration, then close?':'停止本程序的共享和游戏加速后退出？',
     'Package saved, not installed. See instructions below.': '安装包已保存，尚未安装。请查看下方说明。',
     'Saved package: ': '安装包保存位置：',
     'Update failed. See details below.': '更新失败，请查看下方详情。',

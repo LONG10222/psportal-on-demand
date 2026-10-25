@@ -3,3 +3,4 @@
 # Build-only dependency.
 # Review and intentionally update this pin before a public release.
 PyInstaller==6.16.0
+Pillow==13.0.0

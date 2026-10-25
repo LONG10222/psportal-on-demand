@@ -388,6 +388,7 @@ class DesktopApp:
         self.inputs = []
         self.engine_inputs = {}
         self.profile_selection_inputs = []
+        self.games_hub = None
         from .existing_proxy import detect_system_proxy, read_clash_accounting
         self.existing_proxy = detect_system_proxy()
         self.clash_info = read_clash_accounting() if self.existing_proxy else None
@@ -1785,7 +1786,9 @@ class DesktopApp:
                 self._poll_runtime()
                 self.backend.log('Listener exited.' if result == 0 else f'Listener exited with code {result}.')
                 self.running_controls(False)
-        if self.closing and self.backend.process is None and not self.importing:
+        hub=getattr(self,'games_hub',None)
+        games_done = not self.closing or hub is None or hub.shutdown_complete()
+        if self.closing and self.backend.process is None and not self.importing and games_done:
             self.root.destroy()
             return
         self.root.after(150, self.poll)
@@ -1795,6 +1798,8 @@ class DesktopApp:
         if self.closing:
             return
         running = self.backend.process is not None and self.backend.process.poll() is None
+        hub=getattr(self,'games_hub',None)
+        games_running=bool(hub and hub.running)
         if not running and getattr(self, '_quick_rollback', None):
             # Close can arrive after the child exits but before the next poll.
             # Settle ownership now so destroying Tk cannot lose the rollback.
@@ -1804,23 +1809,25 @@ class DesktopApp:
                 self._rollback_quick_start()
             if self.backend.process is not None:
                 self.backend.poll()
-        question = ('Stop the listener and its core, then close?' if running else
+        question = ('Stop sharing and game acceleration, then close?' if games_running else 'Stop the listener and its core, then close?' if running else
                     'Cancel preparation and close?' if self.importing else
                     'Close and discard unsaved configuration edits?')
-        if (running or self.dirty or self.importing) and not messagebox.askyesno(self._t('Close StarPass?'), self._t(question), parent=self.root):
+        if (running or games_running or self.dirty or self.importing) and not messagebox.askyesno(self._t('Close StarPass?'), self._t(question), parent=self.root):
             return
         self.closing = True
+        if hub:hub.close()
         if self.importing:
             self.cancel_preparation()
         if running:
             self.stop()
-        elif not self.importing:
+        elif not self.importing and hub is None:
             self.root.destroy()
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description='StarPass desktop application')
     parser.add_argument('--config', type=Path, default=default_config_path())
+    parser.add_argument('--page',choices=('overview','games'),default='overview')
     args = parser.parse_args(argv)
     try:
         import tkinter as tk
@@ -1834,7 +1841,8 @@ def main(argv=None) -> int:
             raise
         print('Desktop UI could not open a display. Use the CLI on headless systems.', file=sys.stderr)
         return 2
-    DesktopApp(root, args.config)
+    application=DesktopApp(root, args.config)
+    if args.page=='games':application.view.show('Games')
     root.mainloop()
     return 0
 

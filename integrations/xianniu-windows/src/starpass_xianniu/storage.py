@@ -63,6 +63,11 @@ class Store:
                     session_mode='managed', dns_server='192.168.31.1', devices=[],
                     http_port=18082, socks_port=18092, listen_host='127.0.0.1', steam_store_direct=True)
 
+    def unlock(self):
+        if self.lock_file is not None:
+            self.lock_file.close()
+            self.lock_file=None
+
     def save(self, config):
         # Internal ownership is process-local, never import it from a file.
         clean = {k: v for k, v in config.items() if not k.startswith('_')}
