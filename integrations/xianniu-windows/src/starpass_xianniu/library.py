@@ -32,6 +32,7 @@ def validate_games(rows):
                 areas.append({'id':area_id, 'title':str(area.get('title', area_id))[:160]})
                 area_ids.add(area_id)
         result.append({'id':identity, 'title':title, 'areas':areas,
+            'is_free':row.get('is_free') if type(row.get('is_free')) is bool else None,
             'keywords':str(row.get('keywords',''))[:800], 'platform':platform_for(title),
             'hot':bool(row.get('hot')), 'icon':str(row.get('icon',''))[:1000]})
         ids.add(identity)
@@ -50,6 +51,7 @@ def parse_official_xml(path):
         if not node.get('id','').isdigit(): continue
         icon = node.get('icon','')
         rows.append({'id':int(node.get('id')), 'title':node.get('title',''),
+            'is_free':True if node.get('is_free')=='1' else False if node.get('is_free')=='0' else None,
             'keywords':node.get('keywords',''), 'hot':node.get('is_hot') == '1',
             'icon':'https://picture.xianniu.com'+icon if icon.startswith('/') else '',
             'areas':[{'id':int(a.get('id')), 'title':a.get('title','')} for a in node.findall('area') if a.get('id','').isdigit()]})

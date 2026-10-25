@@ -188,5 +188,18 @@ class IntegratedGamesTests(unittest.TestCase):
         self.assertIsNone(game.provider)
         self.assertIn('暂停',game.status_var.get())
 
+    def test_free_steam_confirmation_does_not_claim_it_will_resume_paid_time(self):
+        self.app.open_game_accelerator();game=self.app.games_hub.xianniu
+        game.select_game_id(12)
+        game.config.update(account={'access_token':'fixture-only'},exclusive_confirmed=False)
+        self.assertIs(game.selected_game['is_free'],True)
+        with patch('tkinter.messagebox.askyesno',return_value=False) as confirm,patch.object(game,'start') as start:
+            game.quick_toggle()
+            message=confirm.call_args.args[1]
+            self.assertIn('官方标记为免费',message)
+            self.assertIn('不恢复账号计时',message)
+            self.assertNotIn('开启加速会恢复官方计时',message)
+            start.assert_not_called()
+
 
 if __name__=='__main__':unittest.main()

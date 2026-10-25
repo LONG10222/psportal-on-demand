@@ -235,7 +235,8 @@ class App:
             self.status_var.set('请先选择一个游戏');return
         if self.config.get('session_mode')=='managed' and not self.config.get('exclusive_confirmed'):
             from tkinter import messagebox
-            if not messagebox.askyesno('首次使用鲜牛', '开启加速会恢复官方计时。\n请确认同账号的其他加速入口已停止，由星渡管理本次会话。',parent=self.root):return
+            billing_note='该项目官方标记为免费，不恢复账号计时。' if self.selected_game.get('is_free') is True else '该项目按官方规则使用时长，开启时可能恢复计时。'
+            if not messagebox.askyesno('首次使用鲜牛', billing_note+'\n请确认同账号的其他加速入口已停止，由星渡管理本次会话。',parent=self.root):return
             self.config['exclusive_confirmed']=True
         if self.config.get('session_mode')=='managed' and (not self.lines or self.line.current()<0 or time.monotonic()-self.lines_fetched_at>=60):
             self.quick_pending=(self.selected_game['id'],self.areas[self.area.current()]['id'])
@@ -340,7 +341,8 @@ class App:
                 self.line.current(next((i for i, r in enumerate(self.lines) if r['id'] == preferred), 0))
                 self.line.configure(state='readonly')
             else:self.line_var.set('当前区服暂无可用线路')
-            self.status_var.set('已选择 ' + self.selected_game['title'] + (' · 可一键加速' if self.simple and self.lines else f' · {len(self.lines)} 条适用线路'))
+            billing_note=' · 官方免费，不恢复计时' if self.selected_game.get('is_free') is True else ''
+            self.status_var.set('已选择 ' + self.selected_game['title'] + billing_note + (' · 可一键加速' if self.simple and self.lines else f' · {len(self.lines)} 条适用线路'))
             if self.quick_pending==(game,area):
                 self.quick_pending=None
                 if self.lines and not self.closing:self.start()
@@ -605,7 +607,8 @@ class App:
         if self.provider and not self.busy:
             status = self.provider.status()
             c = status['counters']
-            self.status_var.set(status['last_error'] or ('通道已开启 · 应用或设备需使用代理' if self.simple and status['running'] else '通道已停止' if self.simple else f"{'共享运行中' if status['running'] else '共享已停止'}　鲜牛 TCP {c['tcp_connections']}　UDP 包 {c['udp_packets']}　发送 {c['sent']} B / 接收 {c['received']} B　续期 {status['renewals']} 次；游戏/NAT 待验收"))
+            active_label='免费通道已开启 · 不恢复账号计时' if status.get('billing_policy',{}).get('kind')=='free' else '通道已开启 · 应用或设备需使用代理'
+            self.status_var.set(status['last_error'] or (active_label if self.simple and status['running'] else '通道已停止' if self.simple else f"{'共享运行中' if status['running'] else '共享已停止'}　鲜牛 TCP {c['tcp_connections']}　UDP 包 {c['udp_packets']}　发送 {c['sent']} B / 接收 {c['received']} B　续期 {status['renewals']} 次；游戏/NAT 待验收"))
             if status['member']: self.show_member(status['member'])
         if self.closing and not self.busy:
             if self.provider:
@@ -625,7 +628,8 @@ class App:
         provider=self.provider
         def accepted(member):
             self.provider = None; self.busy = False
-            self.show_member(member); self.status_var.set('本预览共享已停止，官方已确认暂停账号计时。')
+            self.show_member(member)
+            self.status_var.set('免费项目已停止，账号计时状态未更改。' if provider.billing['kind']=='free' else '本预览共享已停止，官方已确认暂停账号计时。')
         def failed(message):
             self.busy=False
             if not provider.running:self.provider=None

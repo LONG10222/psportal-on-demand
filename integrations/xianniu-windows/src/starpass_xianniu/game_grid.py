@@ -180,6 +180,7 @@ class GameGrid(ttk.Frame):
         tile.grid(row=index//self.columns,column=index%self.columns,sticky='nsew',padx=4,pady=4)
         tile.columnconfigure(0,weight=1)
         top=tk.Frame(tile,background=color);top.grid(row=0,column=0,sticky='ew');top.columnconfigure(0,weight=1)
+        if game.get('is_free') is True:tk.Label(top,text='免费',background=color,foreground='#23875c',font=('Microsoft YaHei UI',8)).grid(row=0,column=0,sticky='w',padx=5)
         favorite=identity in self.app.config.get('favorite_games',[])
         tk.Button(top,text='★' if favorite else '☆',font=('Segoe UI',10),background=color,foreground='#c68d24' if favorite else '#94a3b8',borderwidth=0,padx=4,pady=0,cursor='hand2',command=lambda:self.favorite(identity)).grid(row=0,column=1,sticky='e')
         icon=tk.Label(tile,text=game['title'][:2],font=('Microsoft YaHei UI',15,'bold'),foreground='#4970aa',background=color,width=4,height=2)

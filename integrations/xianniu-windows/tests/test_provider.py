@@ -90,6 +90,52 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(p.running);self.assertTrue(p.stop_ok)
         self.assertIn('/client/member/suspend',self.api_calls)
 
+    async def test_official_free_game_starts_and_stops_while_account_timer_stays_paused(self):
+        def paused(cfg,path,value):
+            self.api_calls.append(path)
+            return {'pause_state':0,'total_datetime':3600}
+        cfg=config('managed');cfg['game_id']=12
+        with patch('starpass_xianniu.provider.control.call_api',side_effect=paused),patch('starpass_xianniu.provider.resolve_billing',return_value={'kind':'free','source':'official_fixture'}):
+            p=Provider(cfg);self.providers.append(p)
+            p.renew_seconds=.01
+            await p.start(exclusive=True)
+            self.assertTrue(p.running)
+            self.assertEqual(p.billing['kind'],'free')
+            self.start_mock.assert_called_once();self.refresh.assert_called_once()
+            await asyncio.sleep(.08)
+            self.assertGreaterEqual(p.renewals,1)
+            member=await p.stop_and_pause()
+        self.assertEqual(member['pause_state'],0)
+        self.stop_mock.assert_called_once()
+        self.assertNotIn('/client/member/recovery',self.api_calls)
+        self.assertNotIn('/client/member/suspend',self.api_calls)
+
+    async def test_rejected_free_session_never_falls_back_to_paid_recovery(self):
+        from xianniu_router.control import APIError
+        cfg=config('managed');cfg['game_id']=12
+        self.start_mock.side_effect=APIError(400065)
+        with patch('starpass_xianniu.provider.resolve_billing',return_value={'kind':'free','source':'official_fixture'}):
+            p=Provider(cfg);self.providers.append(p)
+            with self.assertRaises(APIError):await p.start(exclusive=True)
+        self.assertNotIn('/client/member/recovery',self.api_calls)
+        self.assertNotIn('/client/member/suspend',self.api_calls)
+        self.assertFalse(p.running);self.refresh.assert_not_called()
+
+    async def test_unknown_billing_rule_does_not_resume_or_start(self):
+        with patch('starpass_xianniu.provider.resolve_billing',return_value={'kind':'unknown','source':'fixture'}):
+            p=Provider(config('managed'));self.providers.append(p)
+            with self.assertRaises(ValueError):await p.start(exclusive=True)
+        self.start_mock.assert_not_called()
+        self.assertNotIn('/client/member/recovery',self.api_calls)
+
+    async def test_paid_project_keeps_existing_paused_timer_recovery(self):
+        def paused(cfg,path,value):
+            self.api_calls.append(path)
+            return {'pause_state':0,'total_datetime':3600}
+        with patch('starpass_xianniu.provider.control.call_api',side_effect=paused),patch('starpass_xianniu.provider.resolve_billing',return_value={'kind':'paid','source':'official_fixture'}):
+            await self.provider('managed')
+        self.assertEqual(self.api_calls.count('/client/member/recovery'),1)
+
     async def test_external_owner_cannot_be_stopped_by_managed(self):
         cfg=config('managed');cfg['external_session_owner']='N1'
         p=Provider(cfg);self.providers.append(p)

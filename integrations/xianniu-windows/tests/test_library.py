@@ -19,11 +19,32 @@ def write_xml(path,rows):
     root=ET.Element('root');games=ET.SubElement(root,'games')
     for row in rows:
         game=ET.SubElement(games,'game',id=str(row['id']),title=row['title'],keywords=row.get('keywords',''),icon='')
+        if type(row.get('is_free')) is bool:game.set('is_free','1' if row['is_free'] else '0')
         for area in row['areas']:ET.SubElement(game,'area',id=str(area['id']),title=area['title'])
     ET.ElementTree(root).write(path,encoding='utf-8',xml_declaration=True)
 
 
 class LibraryTests(unittest.TestCase):
+    def test_official_free_flag_survives_xml_validation_and_cache_without_name_inference(self):
+        from starpass_xianniu.billing import resolve_billing
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);xml=root/'gamelist.xml';bundled=root/'bundled.json'
+            rows=fixtures(3)
+            rows[0].update(title='Official free fixture',is_free=True)
+            rows[1].update(title='Steam paid fixture',is_free=False)
+            bundled.write_text(json.dumps(rows));write_xml(xml,rows)
+            repo=CatalogRepository(bundled,root/'private',{'official_catalog_path':str(xml)})
+            games=repo.load()
+            self.assertIs(games[0]['is_free'],True);self.assertIs(games[1]['is_free'],False)
+            self.assertIsNone(games[2]['is_free'])
+            for identity,kind in ((1,'free'),(2,'paid'),(3,'unknown')):
+                self.assertEqual(resolve_billing({'game_id':identity,'official_catalog_path':str(xml)})['kind'],kind)
+            # A changed official rule takes precedence over previously cached metadata.
+            rows[0]['is_free']=False;write_xml(xml,rows)
+            self.assertEqual(resolve_billing({'game_id':1,'official_catalog_path':str(xml)})['kind'],'paid')
+            self.assertEqual(resolve_billing({'game_id':1,'official_catalog_path':str(xml),'game_is_free':True})['kind'],'paid')
+            xml.write_text('<broken')
+            self.assertEqual(resolve_billing({'game_id':1,'official_catalog_path':str(xml)})['kind'],'unknown')
     def test_every_game_can_be_browsed_past_first_48(self):
         rows=fixtures(3018);model=LibraryModel(rows,{'game_id':1})
         ids=[]

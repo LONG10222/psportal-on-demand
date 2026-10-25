@@ -16,6 +16,7 @@ from xianniu_router.member_time import balances
 from xianniu_router.runtime import Service, NativeUDP, close_writer, race
 from xianniu_router.manager import Manager
 from . import __version__
+from .billing import resolve_billing
 
 
 class ReadyCore(RouterCore):
@@ -215,6 +216,7 @@ class Provider:
         self.retry_seconds = 30
         self.startup_stage = 'stopped'
         self.failure_site = []
+        self.billing={'kind':'unknown','source':'not_checked'}
 
     async def member_refresh(self):
         data = await asyncio.to_thread(control.call_api, self.config, '/client/member/details',
@@ -238,6 +240,9 @@ class Provider:
                 raise ValueError('请先在其他入口停止该账号会话，并在高级设置确认由 Windows 独占')
             if self.store and self.store.unresolved():
                 raise ValueError('上次会话未确认结束，请先核对官方客户端；本预览不会自动停止未知会话')
+            self.billing=resolve_billing(self.config,self.store.root if self.store else None)
+            if self.billing['kind']=='unknown':
+                raise ValueError('无法确认官方计费规则，请先同步鲜牛游戏目录；未恢复计时')
         # Reserve every listener before any billable API operation.
         try:
             self.startup_stage = 'reserve_listeners'
@@ -252,7 +257,7 @@ class Provider:
             if self.config['session_mode'] == 'managed':
                 self.startup_stage = 'member_details'
                 member = await self.member_refresh()
-                if member.get('pause_state') in (0, '0'):
+                if self.billing['kind']=='paid' and member.get('pause_state') in (0, '0'):
                     self.startup_stage = 'member_recovery'
                     await asyncio.to_thread(control.call_api, self.config, '/client/member/recovery',
                                             {'access_token': self.config['account']['access_token'], 'sender': 0})
@@ -317,6 +322,9 @@ class Provider:
             await self._stop()
             if self.stop_ok is not True:
                 raise ValueError('官方停止未确认，暂不暂停账号计时，请在官方客户端核对')
+            if self.billing['kind']=='free':
+                # A free project never owns the account's global timer.
+                return await self.member_refresh()
             await asyncio.to_thread(control.call_api, self.config, '/client/member/suspend',
                                     {'access_token': self.config['account']['access_token'], 'sender': 0})
             member = await self.member_refresh()
@@ -352,6 +360,7 @@ class Provider:
         return {'running': self.running, 'engine': 'xianniu-native', 'version': __version__, 'startup_stage':self.startup_stage, 'failure_site':list(self.failure_site),
                 'session_mode': self.config['session_mode'], 'game_id': self.config['game_id'],
                 'profile': dict(self.config['profile']), 'refresh_ok': self.service.refresh_ok,
+                'billing_policy':dict(self.billing),
                 'last_refresh': self.service.last_refresh, 'renewals': self.renewals,
                 'counters': dict(self.service.counters), 'member': dict(self.member),
                 'clients': dict(self.service.clients), 'http_clients': [dict(p.clients) for p in self.proxies],
