@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from .accelerator_registry import PROVIDERS,discover,launch_client
+from . import product_modes
 
 
 class GamesHub:
@@ -21,6 +22,11 @@ class GamesHub:
         header=ttk.Frame(frame,style='Portal.Page.TFrame');header.grid(row=0,column=0,sticky='ew',pady=(0,10))
         self.buttons={}
         ttk.Label(header,text='游戏加速',style='Portal.Section.TLabel').pack(side='left',padx=(0,16))
+        self.mode_var=tk.StringVar(value=self.host.view.tr('Accelerator mode'))
+        self.mode_combo=ttk.Combobox(header,textvariable=self.mode_var,state='readonly',width=12,
+            values=tuple(self.host.view.tr(product_modes.LABELS[m]) for m in product_modes.MODES))
+        self.mode_combo.pack(side='left',padx=(0,12));self.mode_combo.current(3)
+        self.mode_combo.bind('<<ComboboxSelected>>',self.change_mode)
         for spec in PROVIDERS[:1]:
             button=ttk.Button(header,text=spec.title+(' · 内置' if spec.built_in else ' · 客户端'),command=lambda key=spec.key:self.select(key))
             button.pack(side='left',padx=(0,8));self.buttons[spec.key]=button
@@ -48,6 +54,15 @@ class GamesHub:
 
     @property
     def running(self):return bool(self.xianniu and (self.xianniu.busy or self.xianniu.provider))
+
+    def change_mode(self,event=None):
+        mode=('game','mixed','clash','accelerator')[self.mode_combo.current()]
+        self.host.set_product_mode(mode)
+        if self.host.product_mode()=='accelerator':self.mode_combo.current(3)
+
+    def refresh_mode(self):
+        self.mode_combo.configure(values=tuple(self.host.view.tr(product_modes.LABELS[m]) for m in product_modes.MODES))
+        self.mode_combo.current(product_modes.MODES.index(self.host.product_mode()))
 
     def select(self,key):
         if self.running and key!=self.selected:

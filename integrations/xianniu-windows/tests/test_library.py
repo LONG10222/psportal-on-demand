@@ -79,6 +79,26 @@ class LibraryTests(unittest.TestCase):
             path.write_text('<!DOCTYPE root [<!ENTITY value "test">]><root/>')
             with self.assertRaises(ValueError):parse_official_xml(path)
 
+    def test_automatic_official_file_update_adds_games_and_areas_without_rewriting_unchanged_cache(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);xml=root/'gamelist.xml';bundled=root/'bundled.json'
+            bundled.write_text(json.dumps(fixtures(2)));write_xml(xml,fixtures(3))
+            repo=CatalogRepository(bundled,root/'private',{'official_catalog_path':str(xml)})
+            repo.load();before=repo.cache.read_bytes()
+            with patch('starpass_xianniu.library.parse_official_xml',side_effect=AssertionError('unchanged file reparsed')):
+                self.assertIsNone(repo.check_updates())
+            self.assertEqual(repo.cache.read_bytes(),before)
+            rows=fixtures(4);rows[0]['areas'].append({'id':9001,'title':'new region'})
+            write_xml(xml,rows)
+            updated=repo.check_updates()
+            self.assertEqual(len(updated),4)
+            self.assertEqual(updated[0]['areas'][-1]['id'],9001)
+            valid=repo.cache.read_bytes()
+            xml.write_text('<invalid')
+            with self.assertRaises(ET.ParseError):repo.check_updates()
+            self.assertEqual(repo.cache.read_bytes(),valid)
+            self.assertEqual(len(repo.games),4)
+
 
 class LibraryUITests(unittest.TestCase):
     def setUp(self):
@@ -124,6 +144,34 @@ class LibraryUITests(unittest.TestCase):
         grid.set_category('console');grid.query.set('nonexistent');grid.reset()
         self.assertEqual(self.app.selected_game['id'],72)
         self.assertEqual(grid.result_var.get(),'找到 0 款 · 显示 0—0')
+
+    def test_automatic_sync_updates_ui_but_preserves_selection_and_keeps_good_cache_on_failure(self):
+        self.app.config['favorite_games']=[1,72]
+        before=self.app.selected_game['id']
+        rows=fixtures(76);write_xml(self.xml,rows)
+        with patch.object(self.app,'start') as start:
+            self.app.sync_catalog(automatic=True);self.pump(.3)
+            self.assertFalse(self.app.catalog_syncing)
+            self.assertIn(76,self.app.library.by_id)
+            self.assertEqual(self.app.selected_game['id'],before)
+            self.assertEqual(self.app.config['favorite_games'],[1,72])
+            good=self.app.repository.cache.read_bytes()
+            self.xml.write_text('<broken')
+            self.app.sync_catalog(automatic=True);self.pump(.3)
+            self.assertIn('缓存',self.app.catalog_status_var.get())
+            self.assertEqual(self.app.repository.cache.read_bytes(),good)
+            self.assertIn(76,self.app.library.by_id)
+            start.assert_not_called()
+
+    def test_reselecting_reads_changed_official_lines_instead_of_a_fixed_snapshot(self):
+        with patch.object(self.app.catalog,'lines',side_effect=[
+            {'lines':[{'id':201,'title':'old official line'}]},
+            {'lines':[{'id':202,'title':'new official line'}]}]) as source:
+            self.app.fetch_lines();self.pump(.25)
+            self.assertEqual(self.app.lines[0]['id'],201)
+            self.app.fetch_lines();self.pump(.25)
+            self.assertEqual(self.app.lines[0]['id'],202)
+            self.assertEqual(source.call_count,2)
 
     def test_late_line_response_cannot_overwrite_new_selection(self):
         def lines(game,area):

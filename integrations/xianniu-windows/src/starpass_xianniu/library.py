@@ -70,11 +70,30 @@ class CatalogRepository:
         self.cache = self.private/'game-catalog.json'
         self.info = {}
         self.games = []
+        self.source_stamp = None
+
+    def source(self):
+        return next((p for p in official_catalog_paths(self.config) if p.is_file()),None)
+
+    @staticmethod
+    def stamp(path):
+        stat=path.stat()
+        return (str(path.resolve()),stat.st_mtime_ns,stat.st_size)
+
+    def check_updates(self):
+        path=self.source()
+        if path is None:raise ValueError('未找到鲜牛官方客户端目录，继续使用已缓存游戏')
+        if self.stamp(path)==self.source_stamp:return None
+        previous=self.info.get('source_sha256')
+        games=self.sync(path)
+        return games if self.info.get('source_sha256')!=previous else None
 
     def sync(self, path=None):
-        path = Path(path) if path else next((p for p in official_catalog_paths(self.config) if p.is_file()), None)
+        path = Path(path) if path else self.source()
         if path is None: raise ValueError('未找到鲜牛客户端目录，可选择其 gamedata/gamelist.xml 文件')
+        stamp=self.stamp(path)
         games, digest = parse_official_xml(path)
+        if self.stamp(path)!=stamp:raise ValueError('鲜牛正在更新目录，稍后自动重试')
         info = {'kind':'official_client', 'label':'鲜牛客户端目录', 'count':len(games),
                 'source_sha256':digest, 'source_modified_at':int(path.stat().st_mtime), 'read_at':int(time.time())}
         self.private.mkdir(parents=True, exist_ok=True)
@@ -82,6 +101,7 @@ class CatalogRepository:
         temporary.write_text(json.dumps({'games':games,'info':info},ensure_ascii=False),encoding='utf-8')
         os.replace(temporary,self.cache)
         self.games, self.info = games, info
+        self.source_stamp=stamp
         return games
 
     def load(self):

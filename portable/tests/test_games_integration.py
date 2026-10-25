@@ -61,6 +61,7 @@ class IntegratedGamesTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_games_are_embedded_in_same_window_without_mutating_other_modes_or_styles(self):
+        self.app.open_game_accelerator()
         raw=copy.deepcopy(self.app.raw)
         values={k:v.get() for k,v in self.app.vars.items()}
         title=self.root.title();protocol=self.root.protocol('WM_DELETE_WINDOW')
@@ -82,7 +83,7 @@ class IntegratedGamesTests(unittest.TestCase):
         self.assertIsNone(self.app.backend.process)
 
     def test_other_brands_do_not_show_xianniu_games_as_their_own(self):
-        self.app.view.show('Games');self.root.update()
+        self.app.open_game_accelerator();self.root.update()
         hub=self.app.games_hub;raw=copy.deepcopy(self.app.raw)
         hub.select('uu');self.root.update()
         self.assertFalse(hub.native_frame.winfo_ismapped())
@@ -92,7 +93,7 @@ class IntegratedGamesTests(unittest.TestCase):
         hub.select('leigod');self.assertFalse(hub.providers['leigod']['capabilities']['native_tcp_udp'])
 
     def test_navigation_away_disables_game_shortcuts(self):
-        self.app.view.show('Games');self.assertTrue(self.app.games_hub.xianniu.active)
+        self.app.open_game_accelerator();self.assertTrue(self.app.games_hub.xianniu.active)
         self.app.view.show('Overview');self.assertFalse(self.app.games_hub.xianniu.active)
 
     def pump_until(self,predicate):
@@ -101,8 +102,8 @@ class IntegratedGamesTests(unittest.TestCase):
             self.root.update();time.sleep(.02)
         self.assertTrue(predicate())
 
-    def test_accelerator_button_opens_simple_library_without_rewriting_normal_configuration(self):
-        raw=copy.deepcopy(self.app.raw);dirty=self.app.dirty
+    def test_accelerator_button_enters_real_mode_and_restores_previous_source_when_leaving(self):
+        raw=copy.deepcopy(self.app.raw)
         values={k:v.get() for k,v in self.app.vars.items()}
         self.app.view.product_mode_buttons['accelerator'].invoke();self.root.update()
         game=self.app.games_hub.xianniu
@@ -110,9 +111,33 @@ class IntegratedGamesTests(unittest.TestCase):
         self.assertFalse(game.devices_panel.winfo_manager())
         self.assertFalse(game.route_panel.winfo_manager())
         self.assertEqual(game.start_button.cget('text'),'一键加速')
-        self.assertEqual(self.app.raw,raw);self.assertEqual(self.app.dirty,dirty)
-        self.assertEqual({k:v.get() for k,v in self.app.vars.items()},values)
+        self.assertEqual(self.app.product_mode(),'accelerator')
+        self.assertEqual(self.app.raw['accelerator_previous_config']['raw'],raw)
+        self.assertEqual(self.app.vars['subscription_url'].get(),'')
         self.assertEqual(self.path.read_bytes(),self.original)
+        self.app.set_product_mode('mixed');self.root.update()
+        self.assertEqual(self.app.view.page,'Overview')
+        self.assertFalse(self.app.view.nav['Games'].winfo_manager())
+        self.assertEqual({k:v.get() for k,v in self.app.vars.items()},values)
+
+    def test_other_modes_cannot_show_game_page_even_in_advanced_navigation(self):
+        for mode in ('game','mixed','clash'):
+            self.app.set_product_mode(mode);self.root.update()
+            self.assertFalse(self.app.view.nav['Games'].winfo_manager())
+            self.app.view.show('Games')
+            self.assertEqual(self.app.view.page,'Overview')
+            self.assertIsNone(self.app.games_hub)
+            self.app.view.set_advanced(True)
+            self.assertFalse(self.app.view.nav['Games'].winfo_manager())
+        self.app.open_game_accelerator();self.root.update()
+        self.assertTrue(self.app.view.nav['Games'].winfo_manager())
+        self.assertEqual(self.app.view.page,'Games')
+        hub=self.app.games_hub
+        hub.mode_combo.current(0);hub.change_mode();self.root.update()
+        self.assertEqual(self.app.product_mode(),'game')
+        self.assertEqual(self.app.view.page,'Overview')
+        self.assertFalse(hub.xianniu.active)
+        self.app.view.show('Games');self.assertEqual(self.app.view.page,'Overview')
 
     def test_quick_action_fetches_a_line_then_starts_only_after_user_click(self):
         self.app.open_game_accelerator();game=self.app.games_hub.xianniu

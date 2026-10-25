@@ -532,10 +532,16 @@ class DesktopApp:
             self.backend.log('Appearance preference could not be saved.')
 
     def open_game_accelerator(self):
-        self.view.show('Games')
+        if self.product_mode()!='accelerator':self.set_product_mode('accelerator')
+        if self.product_mode()=='accelerator':self.view.show('Games')
 
     def set_product_mode(self, mode):
         previous = getattr(self, '_selected_product_mode', self.raw.get('product_mode', 'game'))
+        hub=getattr(self,'games_hub',None)
+        if mode!=previous and hub and hub.running:
+            self.vars['product_mode'].set(previous)
+            self.view.subtitle.set('请先停止鲜牛加速，再切换模式')
+            return
         if (mode not in product_modes.MODES or self.closing or self.importing
                 or getattr(self, 'setting_up', False) or getattr(self, 'xianniu_checking', False)
                 or self.backend.process is not None):
@@ -555,6 +561,8 @@ class DesktopApp:
         self._selected_product_mode = mode
         self.dirty = True
         self.engine_controls()
+        if mode!='accelerator' and getattr(self.view,'page',None)=='Games':
+            self.view.show('Overview')
         self.view.refresh()
 
     def _accelerator_preferences(self):
@@ -1845,7 +1853,8 @@ def main(argv=None) -> int:
         print('Desktop UI could not open a display. Use the CLI on headless systems.', file=sys.stderr)
         return 2
     application=DesktopApp(root, args.config)
-    if args.page=='games' or application.product_mode()=='accelerator':application.view.show('Games')
+    if args.page=='games':application.open_game_accelerator()
+    elif application.product_mode()=='accelerator':application.view.show('Games')
     root.mainloop()
     return 0
 

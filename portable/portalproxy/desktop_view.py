@@ -113,6 +113,8 @@ class DesktopView:
         ttk.Frame(sidebar, style='Portal.Side.TFrame').pack(fill='y', expand=True)
         self.label(sidebar, 'No system proxy, DNS, VPN or firewall settings are changed.',
                    style='Portal.SideNote.TLabel', wraplength=170, justify='left').pack(anchor='w', pady=(30, 0))
+        from .version import PREVIEW_VERSION
+        ttk.Label(sidebar,text='v'+PREVIEW_VERSION,style='Portal.SideNote.TLabel').pack(anchor='w',pady=(8,0))
 
         content = ttk.Frame(root, padding=(28, 26), style='Portal.Page.TFrame')
         content.grid(row=0, column=1, sticky='nsew')
@@ -675,6 +677,7 @@ class DesktopView:
         self.advanced = bool(enabled)
         for name, button in self.nav.items():
             button.pack_forget()
+            if name=='Games' and self.app.product_mode()!='accelerator':continue
             if self.advanced or name in ('Overview', 'Games', 'Proxies', 'Devices', 'LAN sharing'):
                 button.pack(fill='x', pady=3, ipady=2, before=self.advanced_button)
         for section in self.advanced_sections:
@@ -689,10 +692,12 @@ class DesktopView:
     def show(self, page):
         if page not in self.frames:
             raise ValueError('invalid page')
+        application=getattr(self,'app',None)
+        if page=='Games' and application is not None and application.product_mode()!='accelerator':
+            page='Overview'
         if self.page != page:
             self.navigation_generation += 1
         self.page = page
-        application=getattr(self,'app',None)
         if page=='Games' and application is not None and getattr(application,'games_hub',None) is None:
             if sys.platform=='win32':
                 from .games_hub import GamesHub
@@ -905,6 +910,15 @@ class DesktopView:
             self._preview_rendered = self.preview
         product_mode = self.app.product_mode()
         accelerator_mode = product_mode == 'accelerator'
+        if not accelerator_mode and self.page=='Games':
+            self.show('Overview');return
+        hub=getattr(self.app,'games_hub',None)
+        if hub:hub.refresh_mode()
+        if 'Games' in self.nav:
+            games_nav=self.nav['Games']
+            if accelerator_mode:
+                if not games_nav.winfo_manager():games_nav.pack(fill='x',pady=3,ipady=2,after=self.nav['Overview'])
+            else:games_nav.pack_forget()
         host_relay = self.app.raw.get('host_relay') == 'steam'
         linked = bool(self.app.raw.get('existing_proxy_port') or accelerator_mode)
         idle = (not self.app.importing and not self.app.setting_up and self.app.backend.process is None

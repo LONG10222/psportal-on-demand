@@ -76,6 +76,7 @@ class GameGrid(ttk.Frame):
         ttk.Label(heading,text='游戏库',style='SPGame.CardTitle.TLabel').pack(side='left')
         self.source_var = tk.StringVar()
         ttk.Label(heading,textvariable=self.source_var,style='SPGame.CardMuted.TLabel').pack(side='left',padx=12)
+        if getattr(app,'simple',False):ttk.Label(heading,textvariable=app.catalog_status_var,style='SPGame.CardMuted.TLabel').pack(side='right')
         self.sync_button = ttk.Menubutton(heading,text='同步官方目录',style='SPGame.Compact.TMenubutton')
         menu=tk.Menu(self.sync_button,tearoff=False)
         menu.add_command(label='读取已安装鲜牛的目录',command=app.sync_catalog)

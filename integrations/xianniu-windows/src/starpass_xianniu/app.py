@@ -52,6 +52,9 @@ class App:
         self.embedded=embedded
         self.simple=embedded
         self.quick_pending=None
+        self.catalog_syncing=False
+        self.pending_catalog=None
+        self.lines_fetched_at=0
         self.closed=False
         self.active=True
         self.config = store.load()
@@ -59,6 +62,7 @@ class App:
         self.repository = CatalogRepository(catalog_path(),store.root,self.config)
         self.games = self.repository.load()
         self.library = LibraryModel(self.games,self.config)
+        self.catalog_status_var=tk.StringVar(value='官方客户端 · 自动同步' if self.repository.info.get('kind')=='official_client' else '目录缓存 · 等待官方客户端更新')
         self.line_sequence = 0
         self.lines, self.all_lines, self.areas = [], [], []
         self.selected_game = None
@@ -180,6 +184,7 @@ class App:
         root.after(100, self.poll)
         root.after(200, self.refresh_member)
         root.after(60000, self.periodic_member)
+        root.after(1000,self.periodic_official_sync)
 
     def submit(self, coroutine, success=None, failure=None):
         future = asyncio.run_coroutine_threadsafe(coroutine, self.loop)
@@ -211,7 +216,8 @@ class App:
             if self.devices_panel.winfo_manager():self.devices_panel.grid_remove()
             else:self.devices_panel.grid()
             dialog.destroy()
-        for label,command in [('共享设备',devices),('刷新账号时长',self.refresh_member),('同步游戏目录',self.sync_catalog),('高级网络设置',self.advanced)]:
+        self.ttk.Label(frame,textvariable=self.catalog_status_var).pack(anchor='w',pady=(0,8))
+        for label,command in [('共享设备',devices),('刷新账号时长',self.refresh_member),('同步游戏与线路',self.sync_official),('高级网络设置',self.advanced)]:
             self.ttk.Button(frame,text=label,command=command).pack(fill='x',pady=4)
 
     def quick_toggle(self):
@@ -231,7 +237,7 @@ class App:
             from tkinter import messagebox
             if not messagebox.askyesno('首次使用鲜牛', '开启加速会恢复官方计时。\n请确认同账号的其他加速入口已停止，由星渡管理本次会话。',parent=self.root):return
             self.config['exclusive_confirmed']=True
-        if self.config.get('session_mode')=='managed' and (not self.lines or self.line.current()<0):
+        if self.config.get('session_mode')=='managed' and (not self.lines or self.line.current()<0 or time.monotonic()-self.lines_fetched_at>=60):
             self.quick_pending=(self.selected_game['id'],self.areas[self.area.current()]['id'])
             self.status_var.set('正在自动选择可用线路…')
             self.fetch_lines();return
@@ -294,6 +300,7 @@ class App:
 
     def select_game_id(self, identity):
         self.quick_pending=None
+        self.lines_fetched_at=0
         self.line_sequence += 1
         self.selected_game = self.library.by_id.get(identity)
         self.lines, self.all_lines = [], []
@@ -325,6 +332,7 @@ class App:
         def accepted(data):
             if sequence != self.line_sequence or not self.selected_game or self.selected_game['id'] != game or self.areas[self.area.current()]['id'] != area: return
             self.lines = data['lines']; self.line['values'] = [r['title'] for r in self.lines]
+            self.lines_fetched_at=time.monotonic()
             self.all_lines = data.get('all_lines',[])
             if self.lines:
                 saved=self.config.get('game_profiles',{}).get(str(game),{})
@@ -346,20 +354,42 @@ class App:
         self.config.setdefault('game_profiles',{})[str(self.selected_game['id'])]={'area_id':self.areas[self.area.current()]['id'],'line_id':self.lines[self.line.current()]['id']}
         self.store.save(self.config)
 
-    def sync_catalog(self,path=None):
-        if self.busy or self.provider:
-            self.status_var.set('请先停止共享，再同步目录');return
-        self.busy=True
-        self.status_var.set('正在读取鲜牛客户端的完整游戏目录…')
-        async def read():return await asyncio.to_thread(self.repository.sync,path)
+    def apply_catalog(self,games):
+        previous=self.selected_game
+        self.games=games;self.library.replace(games);self.library_grid.refresh()
+        current=self.library.by_id.get(self.library.selected_id)
+        if previous!=current:self.select_game_id(self.library.selected_id)
+
+    def sync_catalog(self,path=None,automatic=False):
+        if self.closing or self.busy or self.provider or self.quick_pending or self.catalog_syncing:return
+        self.catalog_syncing=True
+        self.catalog_status_var.set('正在检查官方更新…')
+        async def read():
+            return await asyncio.to_thread(self.repository.check_updates if automatic else self.repository.sync,*(() if automatic else (path,)))
         def accepted(games):
-            self.busy=False
+            self.catalog_syncing=False
             if path:
                 self.config['official_catalog_path']=str(path);self.store.save(self.config)
-            self.games=games;self.library.replace(games);self.library_grid.reset()
-            self.select_game_id(self.library.selected_id)
-            self.status_var.set(f'已从鲜牛客户端读取完整目录：{len(games):,} 款。同步目录不会启动计时。')
-        self.submit(read(),accepted)
+            if games:
+                if self.busy or self.provider or self.quick_pending:self.pending_catalog=games
+                else:self.apply_catalog(games)
+            self.catalog_status_var.set('官方客户端已检查 · '+time.strftime('%H:%M'))
+        def failed(message):
+            self.catalog_syncing=False
+            self.catalog_status_var.set('同步未完成 · 保留目录缓存')
+            if not automatic:self.status_var.set(message)
+        self.submit(read(),accepted,failed)
+
+    def sync_official(self):
+        self.sync_catalog()
+        if not self.busy and not self.provider and not self.quick_pending:self.fetch_lines()
+
+    def periodic_official_sync(self):
+        if self.closing:return
+        if self.active and not self.busy and not self.provider and not self.quick_pending:
+            self.sync_catalog(automatic=True)
+            if time.monotonic()-self.lines_fetched_at>=60:self.fetch_lines()
+        self.root.after(60000,self.periodic_official_sync)
 
     def choose_catalog_file(self):
         if self.busy or self.provider:return
@@ -561,6 +591,9 @@ class App:
                     # A failed image/widget update must not stop the event pump.
                     self.status_var.set(error_text(error))
         locked=self.busy or self.provider is not None
+        if self.pending_catalog is not None and not locked and not self.quick_pending:
+            games,self.pending_catalog=self.pending_catalog,None
+            self.apply_catalog(games)
         if self.simple:
             self.start_button.configure(state='disabled' if self.busy else 'normal',text='处理中…' if self.busy else '停止加速' if self.provider else '取消准备' if self.quick_pending else '一键加速')
         else:self.start_button.configure(state='disabled' if locked else 'normal')
