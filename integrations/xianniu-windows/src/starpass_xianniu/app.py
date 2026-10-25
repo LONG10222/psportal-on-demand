@@ -58,64 +58,84 @@ class App:
         self.thread = threading.Thread(target=self.loop.run_forever, daemon=True)
         self.thread.start()
         root.title('星渡 · 鲜牛游戏共享预览 ' + __version__)
-        root.geometry('1080x860'); root.minsize(960, 780)
+        root.geometry('1000x720'); root.minsize(920, 680)
+        root.configure(background='#f4f6fa')
         style = ttk.Style(root); style.theme_use('clam')
-        style.configure('.', font=('Microsoft YaHei UI', 10))
-        style.configure('Title.TLabel', font=('Microsoft YaHei UI', 22, 'bold'))
-        style.configure('Accent.TButton', font=('Microsoft YaHei UI', 12, 'bold'), padding=10)
-        outer = ttk.Frame(root, padding=22); outer.pack(fill='both', expand=True)
-        ttk.Label(outer, text='星渡  /  鲜牛游戏共享', style='Title.TLabel').pack(anchor='w')
-        ttk.Label(outer, text='Windows 独立预览 · 原生 TCP / UDP provider · 当前一次共享一个游戏会话').pack(anchor='w', pady=(4, 12))
-        account = ttk.LabelFrame(outer, text='1  官方账号与时长', padding=12); account.pack(fill='x')
+        style.configure('.', font=('Microsoft YaHei UI', 10), background='#f4f6fa', foreground='#17243b')
+        style.configure('TFrame', background='#f4f6fa')
+        style.configure('TLabel', background='#f4f6fa', foreground='#17243b')
+        style.configure('Card.TFrame', background='white')
+        style.configure('Card.TLabel', background='white')
+        style.configure('Muted.TLabel', foreground='#64748b')
+        style.configure('CardMuted.TLabel', foreground='#64748b', background='white')
+        style.configure('CardTitle.TLabel', font=('Microsoft YaHei UI', 12, 'bold'), background='white')
+        style.configure('Title.TLabel', font=('Microsoft YaHei UI', 23, 'bold'))
+        style.configure('TButton', padding=(12, 7), background='#e9eef6', borderwidth=0)
+        style.map('TButton', background=[('active', '#dce5f2')])
+        style.configure('Accent.TButton', font=('Microsoft YaHei UI', 11, 'bold'), padding=(24, 11), background='#3266e3', foreground='white')
+        style.map('Accent.TButton', background=[('active', '#2455ca'), ('disabled', '#b9c8e8')], foreground=[('disabled', '#f3f6fc')])
+        style.configure('Card.TCheckbutton', background='white', padding=(4, 8))
+        style.map('Card.TCheckbutton', background=[('active', '#eef4ff')])
+        style.configure('TCombobox', padding=5, fieldbackground='white')
+        outer = ttk.Frame(root, padding=24); outer.pack(fill='both', expand=True)
+        header = ttk.Frame(outer); header.pack(fill='x', pady=(0, 17))
+        ttk.Label(header, text='星渡', style='Title.TLabel').pack(side='left')
+        ttk.Label(header, text='鲜牛游戏共享', style='Muted.TLabel').pack(side='left', padx=16)
+        ttk.Button(header, text='设置', command=self.advanced).pack(side='right')
+        ttk.Label(header, text='预览版', style='Muted.TLabel').pack(side='right', padx=12)
+        account = ttk.Frame(outer, style='Card.TFrame', padding=18); account.pack(fill='x', pady=(0, 16))
+        account_row = ttk.Frame(account, style='Card.TFrame'); account_row.pack(fill='x')
         self.account_var = tk.StringVar()
-        ttk.Label(account, textvariable=self.account_var).pack(side='left', fill='x', expand=True)
-        ttk.Button(account, text='微信扫码登录', command=self.login).pack(side='right')
-        ttk.Button(account, text='刷新官方时长', command=self.refresh_member).pack(side='right', padx=8)
-        self.member_var = tk.StringVar(value='剩余时长：暂未获取　试用：暂未获取')
-        ttk.Label(outer, textvariable=self.member_var).pack(anchor='w', pady=(5, 10))
-        devices = ttk.LabelFrame(outer, text='2  允许使用共享的设备', padding=10); devices.pack(fill='x')
+        ttk.Label(account_row, textvariable=self.account_var, style='CardTitle.TLabel').pack(side='left', fill='x', expand=True)
+        ttk.Button(account_row, text='微信登录', command=self.login).pack(side='right')
+        ttk.Button(account_row, text='刷新时长', command=self.refresh_member).pack(side='right', padx=8)
+        self.member_var = tk.StringVar(value='可用时长：暂未获取　　试用：暂未获取')
+        ttk.Label(account, textvariable=self.member_var, style='CardMuted.TLabel').pack(anchor='w', pady=(9, 0))
+        body = ttk.Frame(outer); body.pack(fill='both', expand=True)
+        body.columnconfigure(1, weight=1); body.rowconfigure(0, weight=1)
+        devices = ttk.Frame(body, style='Card.TFrame', padding=18, width=258)
+        devices.grid(row=0, column=0, sticky='nsew', padx=(0, 16)); devices.grid_propagate(False)
+        ttk.Label(devices, text='共享给谁', style='CardTitle.TLabel').pack(anchor='w')
+        ttk.Label(devices, text='勾选允许接入的设备', style='CardMuted.TLabel').pack(anchor='w', pady=(5, 12))
         self.device_vars = {}
-        self.cards = ttk.Frame(devices); self.cards.pack(fill='x')
+        self.cards = ttk.Frame(devices, style='Card.TFrame'); self.cards.pack(fill='both', expand=True)
         self.device_entry = tk.StringVar()
-        add = ttk.Frame(devices); add.pack(fill='x', pady=(8, 0))
-        ttk.Entry(add, textvariable=self.device_entry, width=30).pack(side='left')
-        ttk.Button(add, text='添加设备 IPv4', command=self.add_device).pack(side='left', padx=6)
-        ttk.Button(add, text='读取邻居设备', command=self.discover).pack(side='left')
-        ttk.Label(add, text='只授权已勾选设备；本机始终可测试').pack(side='left', padx=12)
+        ttk.Button(devices, text='管理设备', command=self.manage_devices).pack(fill='x', pady=(12, 0))
         self.rebuild_devices()
-        choose = ttk.LabelFrame(outer, text='3  游戏、区服与线路', padding=10); choose.pack(fill='both', expand=True, pady=10)
-        search = ttk.Frame(choose); search.pack(fill='x')
+        choose = ttk.Frame(body, style='Card.TFrame', padding=18); choose.grid(row=0, column=1, sticky='nsew')
+        ttk.Label(choose, text='选择游戏', style='CardTitle.TLabel').pack(anchor='w', pady=(0, 12))
+        search = ttk.Frame(choose, style='Card.TFrame'); search.pack(fill='x')
         self.query = tk.StringVar(); self.platform = tk.StringVar(value='全部')
-        ttk.Label(search, text='模糊搜索').pack(side='left')
-        entry = ttk.Entry(search, textvariable=self.query); entry.pack(side='left', fill='x', expand=True, padx=8)
+        ttk.Label(search, text='搜索', style='CardMuted.TLabel').pack(side='left')
+        entry = ttk.Entry(search, textvariable=self.query); entry.pack(side='left', fill='x', expand=True, padx=(8, 10))
         entry.bind('<KeyRelease>', lambda _: self.filter_games())
         category = ttk.Combobox(search, textvariable=self.platform, values=['全部', 'PC', '主机', 'Switch'], state='readonly', width=10)
         category.pack(side='left'); category.bind('<<ComboboxSelected>>', lambda _: self.filter_games())
-        self.game_list = tk.Listbox(choose, height=5, exportselection=False, font=('Microsoft YaHei UI', 10))
-        self.game_list.pack(fill='both', expand=True, pady=8)
+        self.game_list = tk.Listbox(choose, height=5, exportselection=False, font=('Microsoft YaHei UI', 10),
+            background='white', foreground='#334155', selectbackground='#e8efff', selectforeground='#2455ca',
+            borderwidth=0, highlightthickness=0, activestyle='none')
+        self.game_list.pack(fill='both', expand=True, pady=12)
         self.game_list.bind('<<ListboxSelect>>', self.select_game)
-        row = ttk.Frame(choose); row.pack(fill='x')
+        row = ttk.Frame(choose, style='Card.TFrame'); row.pack(fill='x')
+        row.columnconfigure(0, weight=1); row.columnconfigure(1, weight=1)
         self.area_var = tk.StringVar(); self.line_var = tk.StringVar()
-        ttk.Label(row, text='区服').pack(side='left')
-        self.area = ttk.Combobox(row, textvariable=self.area_var, state='readonly', width=28); self.area.pack(side='left', padx=8)
+        ttk.Label(row, text='区服', style='CardMuted.TLabel').grid(row=0, column=0, sticky='w', pady=(0, 5))
+        self.area = ttk.Combobox(row, textvariable=self.area_var, state='readonly', width=18); self.area.grid(row=1, column=0, sticky='ew', padx=(0, 10))
         self.area.bind('<<ComboboxSelected>>', lambda _: self.fetch_lines())
-        ttk.Label(row, text='线路').pack(side='left')
-        self.line = ttk.Combobox(row, textvariable=self.line_var, state='readonly', width=32); self.line.pack(side='left', padx=8)
-        ttk.Button(row, text='获取官方线路', command=self.fetch_lines).pack(side='left')
+        ttk.Label(row, text='线路', style='CardMuted.TLabel').grid(row=0, column=1, sticky='w', pady=(0, 5))
+        self.line = ttk.Combobox(row, textvariable=self.line_var, state='readonly', width=24); self.line.grid(row=1, column=1, sticky='ew')
+        ttk.Button(choose, text='刷新线路', command=self.fetch_lines).pack(anchor='e', pady=(8, 0))
         self.owner_var = tk.StringVar()
-        ttk.Label(outer, textvariable=self.owner_var, wraplength=1000).pack(anchor='w', pady=(0, 8))
-        actions = ttk.Frame(outer); actions.pack(fill='x')
+        actions = ttk.Frame(outer); actions.pack(fill='x', pady=(16, 8))
         self.start_button = ttk.Button(actions, text='启动加速与共享', style='Accent.TButton', command=self.start)
         self.start_button.pack(side='left')
-        ttk.Button(actions, text='停止本预览共享', command=self.stop).pack(side='left', padx=10)
+        ttk.Button(actions, text='停止共享', command=self.stop).pack(side='left', padx=10)
         ttk.Button(actions, text='停止并暂停计时', command=self.pause).pack(side='left')
-        ttk.Button(actions, text='高级设置', command=self.advanced).pack(side='right')
-        self.status_var = tk.StringVar(value='已停止。请选择设备和游戏，再启动共享。')
-        ttk.Label(outer, textvariable=self.status_var, wraplength=1000).pack(anchor='w', pady=(10, 4))
+        ttk.Label(actions, text='主机 UDP / NAT 尚待验证', foreground='#a06b18').pack(side='right')
+        self.status_var = tk.StringVar(value='已停止 · 选择设备和游戏后启动')
+        ttk.Label(outer, textvariable=self.status_var, wraplength=950, style='Muted.TLabel').pack(anchor='w', pady=(3, 5))
         self.entry_var = tk.StringVar()
-        ttk.Label(outer, textvariable=self.entry_var, wraplength=1000).pack(anchor='w')
-        ttk.Label(outer, text='PS5 / Switch 手动 HTTP 代理仅带入遵循代理的 TCP。游戏 UDP 需要实际 SOCKS5 客户端或网络入口；主机 UDP / NAT 尚未验收。',
-                  wraplength=1000, foreground='#9a5900').pack(anchor='w', pady=(8, 0))
+        ttk.Label(outer, textvariable=self.entry_var, style='Muted.TLabel').pack(anchor='w')
         root.protocol('WM_DELETE_WINDOW', self.close)
         self.filter_games(); self.update_account(); self.update_entry()
         root.after(100, self.poll)
@@ -139,7 +159,7 @@ class App:
         self.start_button.configure(text='启动现有会话共享' if borrowed else '启动加速与共享')
 
     def update_entry(self):
-        self.entry_var.set(f"HTTP：{self.config['listen_host']}:{self.config['http_port']}　SOCKS5 TCP/UDP：{self.config['listen_host']}:{self.config['socks_port']}\nSteam 商店明确域名默认直连；其他目标经鲜牛，失败不切换出口。")
+        self.entry_var.set(f"共享地址  {self.config['listen_host']}:{self.config['http_port']}   ·   SOCKS5  {self.config['socks_port']}")
 
     def rebuild_devices(self):
         for child in self.cards.winfo_children(): child.destroy()
@@ -148,10 +168,23 @@ class App:
         for i, address in enumerate(inventory):
             var = self.tk.BooleanVar(value=old[address].get() if address in old else address in self.config.get('devices', []))
             self.device_vars[address] = var
-            self.ttk.Checkbutton(self.cards, text=address, variable=var).grid(row=i//5, column=i%5, sticky='w', padx=(0, 18), pady=3)
-        if not inventory: self.ttk.Label(self.cards, text='还没有设备。可读取邻居列表，或填写设备当前的 IPv4。').pack(anchor='w')
+            name = self.config.get('device_names', {}).get(address, '')
+            self.ttk.Checkbutton(self.cards, text=(name+'\n' if name else '')+address, variable=var, style='Card.TCheckbutton').grid(row=i, column=0, sticky='w', pady=4)
+        if not inventory: self.ttk.Label(self.cards, text='还没有设备\n点击下方添加', style='CardMuted.TLabel').pack(anchor='w')
+
+    def manage_devices(self):
+        dialog = self.tk.Toplevel(self.root); dialog.title('管理共享设备'); dialog.geometry('500x200')
+        frame = self.ttk.Frame(dialog, padding=20); frame.pack(fill='both', expand=True)
+        self.ttk.Label(frame, text='输入设备当前的 IPv4，或读取邻居缓存').pack(anchor='w', pady=(0, 12))
+        self.ttk.Entry(frame, textvariable=self.device_entry, width=30).pack(fill='x')
+        actions = self.ttk.Frame(frame); actions.pack(fill='x', pady=14)
+        self.ttk.Button(actions, text='添加设备', command=self.add_device).pack(side='left')
+        self.ttk.Button(actions, text='读取邻居', command=self.discover).pack(side='left', padx=8)
+        self.ttk.Button(actions, text='完成', command=dialog.destroy).pack(side='right')
 
     def add_device(self):
+        if self.busy or self.provider:
+            self.status_var.set('请先停止共享，再修改设备'); return
         import ipaddress
         try:
             address = str(ipaddress.IPv4Address(self.device_entry.get().strip()))
@@ -161,6 +194,8 @@ class App:
         except ValueError: self.status_var.set('请输入有效的局域网 IPv4 地址')
 
     def discover(self):
+        if self.busy or self.provider:
+            self.status_var.set('请先停止共享，再修改设备'); return
         async def read():
             def collect():
                 result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command',
@@ -179,7 +214,7 @@ class App:
         categories = {'全部': '', 'PC': 'pc', '主机': 'console', 'Switch': 'switch'}
         self.filtered = self.catalog.catalog(self.query.get(), categories[self.platform.get()], 0, 48)['games']
         self.game_list.delete(0, 'end')
-        for game in self.filtered: self.game_list.insert('end', f"{game['title']}    ·    {game.get('platform','pc')}    #{game['id']}")
+        for game in self.filtered: self.game_list.insert('end', '  '+game['title'])
         index = next((i for i, g in enumerate(self.filtered) if g['id'] == self.config['game_id']), 0)
         if self.filtered:
             self.game_list.selection_set(index); self.select_game()
@@ -195,9 +230,12 @@ class App:
         self.lines = []
         self.line['values'] = [f"当前会话线路 #{self.config['profile']['line_id']}"]
         self.line.current(0)
+        if hasattr(self, 'line_refresh_timer'):
+            self.root.after_cancel(self.line_refresh_timer)
+        self.line_refresh_timer = self.root.after(400, self.fetch_lines)
 
     def fetch_lines(self):
-        if not self.areas: return
+        if not self.areas or not self.config.get('account',{}).get('access_token') or self.closing: return
         game, area = self.selected_game['id'], self.areas[self.area.current()]['id']
         async def read(): return await asyncio.to_thread(self.catalog.lines, game, area)
         def accepted(data):
@@ -274,7 +312,7 @@ class App:
     def advanced(self):
         if self.busy or self.provider:
             self.status_var.set('请先停止共享，再修改高级设置'); return
-        dialog = self.tk.Toplevel(self.root); dialog.title('鲜牛共享高级设置'); dialog.geometry('670x440')
+        dialog = self.tk.Toplevel(self.root); dialog.title('鲜牛共享设置'); dialog.geometry('700x560')
         frame = self.ttk.Frame(dialog, padding=18); frame.pack(fill='both', expand=True)
         fields = {}
         for i, (key, title) in enumerate([('listen_host', '电脑当前 LAN IPv4（127.0.0.1 为仅本机）'), ('http_port', 'HTTP 端口'), ('socks_port', 'SOCKS5 端口'), ('dns_server', '实际局域网 DNS')]):
@@ -303,6 +341,8 @@ class App:
             # User initiates this optional step and handles the Windows UAC prompt.
             os.startfile(str(Path(sys.executable).parent / 'AllowLan.cmd'))
         self.ttk.Button(frame, text='局域网入站规则（需管理员）', command=firewall).grid(row=7, column=0, columnspan=2)
+        self.ttk.Label(frame, textvariable=self.owner_var, wraplength=640).grid(row=8, column=0, columnspan=2, sticky='w', pady=14)
+        self.ttk.Label(frame, text='Steam 商店明确域名默认直连。手动 HTTP 代理只带入遵循代理的 TCP，\n完整游戏 UDP 需要实际入口。其他目标经鲜牛，失败不会改走其他出口。').grid(row=9, column=0, columnspan=2, sticky='w')
 
     def start(self):
         if self.busy or self.provider: return
@@ -310,6 +350,8 @@ class App:
         try:
             config = copy.deepcopy(self.config)
             config['devices'] = [ip for ip, var in self.device_vars.items() if var.get()]
+            if config['session_mode'] == 'borrowed' and (self.selected_game['id'] != config['game_id'] or self.areas[self.area.current()]['id'] != config['profile']['area_id']):
+                raise ValueError('复用会话只能使用原入口的游戏和区服；切换方案请在原入口操作')
             if config['session_mode'] == 'managed':
                 if not self.lines or self.line.current() < 0: raise ValueError('请先获取并选择官方线路')
                 config['game_id'] = self.selected_game['id']
