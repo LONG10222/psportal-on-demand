@@ -34,3 +34,13 @@
 2026-10-25 检查了[雷神官方帮助中心](https://www.leigod.com/help-center/?language=zh_CN)、[官方下载](https://www.leigod.com/download)及[网易官方主机加速说明](https://uu.baike.netease.com/gonglue/270.html)。官方资料说明各自客户端、主机或路由方案，不构成可重分发 Windows 引擎、通用 SDK 或账号控制接口的证明。本轮没有找到可据此直接内置 UU/雷神内核的公开接口，也未安装它们进行现场传输验收。
 
 完整主机 UDP 仍需真实网络入口。HTTP 代理、客户端发现和品牌选择器不改变这一前提。原网络约束继续保留。
+
+## 0.3.1：微信二维码与安卓隔离复测
+
+官方二维码当前返回 JPEG。已改用 Pillow 解码 JPEG/PNG，再显示到 Tk，避免原生 Tk 图片加载失败；获取/轮询失败会在登录窗口中提示并提供重新获取。图片或控件回调异常不再中断页面事件泵，避免登录失败后无法正常退出。真正的扫码、微信授权和额外验证仍由用户完成。
+
+2026-10-25 使用本机专用 MuMu `StarPassValidation` 实例及无账号的 Android instrumentation 测试应用复测源码 provider。宿主机防火墙不足以阻断模拟器通过 NAT 到电脑其他 loopback 代理，最初的负向探测因此拒绝验收。补充客体 IPv4/IPv6 OUTPUT 限制后，只保留 `10.0.2.2:18082` HTTP 测试入口、客体 loopback 与已建立的 ADB 回复；外网 IPv4/IPv6 TCP、直连 DNS、电脑 Clash 入口均被实际探测拒绝。
+
+选择鲜牛 Steam 商店/社区（游戏 12、区服 154、线路 120），并在测试配置中明确关闭 `steam_store_direct`。安卓应用通过系统 HTTP 代理访问 Steam 商店和公开 Web API，两项 HTTPS 均返回 200、使用默认信任链和主机名校验；provider 记录 2 条原生 TCP、0 条错误，没有直连计数。停止 provider 后，两项请求均失败，负向隔离测试在加速前和加速中均通过。
+
+该结果验证安卓 Wi-Fi/NAT 下的 Steam HTTPS 代理链路与断路行为，不是 Steam 原生客户端、实际游戏 UDP、PS5 NAT、Wi-Fi 手机现场或新冻结程序传输的验收。测试后官方 stop 与暂停均确认，监听关闭，模拟器退出，临时 APK 卸载，5 个代理键恢复，测试实例 root 开关恢复关闭，专用宿主防火墙规则移除。

@@ -171,11 +171,11 @@ class App:
         root.after(200, self.refresh_member)
         root.after(60000, self.periodic_member)
 
-    def submit(self, coroutine, success=None):
+    def submit(self, coroutine, success=None, failure=None):
         future = asyncio.run_coroutine_threadsafe(coroutine, self.loop)
         def done(result):
             try: self.events.put(('success', success, result.result()))
-            except Exception as error: self.events.put(('error', None, error_text(error)))
+            except Exception as error: self.events.put(('error', failure, error_text(error)))
         future.add_done_callback(done)
         return future
 
@@ -358,19 +358,25 @@ class App:
             self.status_var.set('请先停止共享，再切换账号'); return
         if self.config.get('external_session_owner'):
             self.status_var.set('当前复用其他入口会话。登录前先在高级设置解除复用，并核对同账号会话归属。'); return
+        current = getattr(self, 'login_dialog', None)
+        if current is not None and current.winfo_exists():
+            current.lift(); return
         self.qr_generation += 1
         generation = self.qr_generation
         dialog = self.tk.Toplevel(self.root); dialog.title('鲜牛官方微信登录'); dialog.geometry('430x510')
+        self.login_dialog = dialog
+        dialog.configure(background='#f4f6fa')
+        dialog.transient(self.root.winfo_toplevel())
         label = self.ttk.Label(dialog, text='正在获取官方二维码…'); label.pack(pady=12)
         image_label = self.ttk.Label(dialog); image_label.pack(pady=8)
         self.ttk.Label(dialog, text='请自行扫码并在微信确认。\n授权结果只保存在当前 Windows 用户私有目录。', justify='center').pack()
         def closed():
-            self.qr_generation += 1; dialog.destroy()
+            self.qr_generation += 1; self.login_dialog = None; dialog.destroy()
         dialog.protocol('WM_DELETE_WINDOW', closed)
         def show_image(data):
             if generation != self.qr_generation: return
-            import base64
-            image_label.image = self.tk.PhotoImage(data=base64.b64encode(data).decode('ascii'))
+            from .login_image import qr_photo
+            image_label.image = qr_photo(data, dialog)
             image_label.configure(image=image_label.image)
             label.configure(text='请用微信扫描鲜牛官方二维码')
         async def flow():
@@ -384,6 +390,8 @@ class App:
                 if result['status'] == 'authorized':
                     account = await asyncio.to_thread(authenticate, copy.deepcopy(self.config), 'other', {'code': authorization_code(result)})
                     return account
+                if result['status'] == 'scanned':
+                    self.events.put(('success', lambda _: label.configure(text='已扫码，请在微信中确认登录'), None))
                 if result['status'] in ('expired', 'cancelled'):
                     raise ValueError('二维码已过期或已取消，请关闭后重新扫码')
                 await asyncio.sleep(2)
@@ -392,7 +400,14 @@ class App:
             self.config['account'] = {'access_token': account['access_token']}
             self.config['login_info'] = {'method': 'wechat', 'at': int(time.time())}
             self.store.save(self.config); closed(); self.update_account(); self.refresh_member()
-        self.submit(flow(), accepted)
+        def failed(message):
+            if generation != self.qr_generation: return
+            label.configure(text=message, wraplength=390)
+            self.status_var.set(message)
+        def retry():
+            closed(); self.login()
+        self.ttk.Button(dialog, text='重新获取二维码', command=retry).pack(pady=12)
+        self.submit(flow(), accepted, failed)
 
     def advanced(self):
         if self.busy or self.provider:
@@ -431,6 +446,9 @@ class App:
 
     def start(self):
         if self.busy or self.provider: return
+        dialog = getattr(self, 'login_dialog', None)
+        if dialog is not None and dialog.winfo_exists():
+            self.status_var.set('请先完成或关闭微信登录，再启动加速'); return
         self.busy = True
         try:
             if not self.selected_game or not self.areas:raise ValueError('请先从游戏库选择游戏和区服')
@@ -474,9 +492,13 @@ class App:
         for _ in range(50):
             try: kind, callback, value = self.events.get_nowait()
             except queue.Empty: break
-            if kind == 'error':
+            if kind == 'error' and not callback:
                 self.busy = False; self.status_var.set(value)
-            elif callback: callback(value)
+            elif callback:
+                try: callback(value)
+                except Exception as error:
+                    # A failed image/widget update must not stop the event pump.
+                    self.status_var.set(error_text(error))
         locked=self.busy or self.provider is not None
         self.start_button.configure(state='disabled' if locked else 'normal')
         self.area.configure(state='disabled' if locked or not self.areas else 'readonly')
