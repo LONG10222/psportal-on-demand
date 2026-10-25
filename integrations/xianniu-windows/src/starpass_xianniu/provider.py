@@ -15,6 +15,7 @@ from xianniu_router.http_proxy import RouterCore, make_proxy, steam_store_host
 from xianniu_router.member_time import balances
 from xianniu_router.runtime import Service, NativeUDP, close_writer, race
 from xianniu_router.manager import Manager
+from . import __version__
 
 
 class ReadyCore(RouterCore):
@@ -348,7 +349,7 @@ class Provider:
                 self.last_error = '官方停止未确认，请在官方客户端核对；未自动暂停会员计时'
 
     def status(self):
-        return {'running': self.running, 'engine': 'xianniu-native', 'version': '0.1.0', 'startup_stage':self.startup_stage, 'failure_site':list(self.failure_site),
+        return {'running': self.running, 'engine': 'xianniu-native', 'version': __version__, 'startup_stage':self.startup_stage, 'failure_site':list(self.failure_site),
                 'session_mode': self.config['session_mode'], 'game_id': self.config['game_id'],
                 'profile': dict(self.config['profile']), 'refresh_ok': self.service.refresh_ok,
                 'last_refresh': self.service.last_refresh, 'renewals': self.renewals,

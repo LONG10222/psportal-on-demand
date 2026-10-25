@@ -1,0 +1,54 @@
+{
+  "version": "0.2.0",
+  "source": "installed_official_gamelist.xml",
+  "source_sha256": "34aeafbde45533c3b2d8922a52d2e1eb9ced25c3236216c218721612ab0e0817",
+  "game_count": 3018,
+  "unique_game_count": 3018,
+  "page_size": 24,
+  "pages": 126,
+  "all_pages_cover_every_game_once": true,
+  "last_page_count": 18,
+  "controlled_tests": {
+    "passed": 27,
+    "failed": 0
+  },
+  "catalog_tests": 10,
+  "provider_tests": 17,
+  "official_line_reads": {
+    "PS5": {
+      "game_id": 797,
+      "area_id": 933,
+      "area_choices": 3,
+      "compatible_lines": 5,
+      "all_lines": 6
+    },
+    "PC": {
+      "game_id": 227,
+      "area_id": 3349,
+      "area_choices": 19,
+      "compatible_lines": 3,
+      "all_lines": 29
+    },
+    "Switch": {
+      "game_id": 1951,
+      "area_id": 1916,
+      "area_choices": 6,
+      "compatible_lines": 2,
+      "all_lines": 18
+    }
+  },
+  "game_acceleration_started": false,
+  "official_start_stop_calls": 0,
+  "transport_retested_this_update": false,
+  "prior_transport_evidence": "evidence.json",
+  "official_timing_remains_paused": true,
+  "ownership_journal_clear": true,
+  "installed_keyboard_next_page_verified": true,
+  "paging_preserves_selected_ps5_profile": true,
+  "installed_frozen_smoke_passed": true,
+  "official_first_page_icons_loaded": 24,
+  "private_account_preserved": true,
+  "existing_inbound_rule_paths_preserved": true,
+  "visual_inspection_completed": true,
+  "small_window_pager_and_launch_visible": true
+}

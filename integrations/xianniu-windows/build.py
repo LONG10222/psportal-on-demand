@@ -40,10 +40,16 @@ def main():
     for item in importlib.metadata.distribution('pyinstaller').files or ():
         if str(item).endswith('COPYING.txt'):
             shutil.copy2(importlib.metadata.distribution('pyinstaller').locate_file(item), notices / 'PyInstaller-COPYING.txt')
+    pillow=importlib.metadata.distribution('Pillow')
+    for item in pillow.files or ():
+        if '/licenses/' in str(item).replace('\\','/') and not str(item).endswith('/'):
+            origin=Path(pillow.locate_file(item))
+            if origin.is_file():
+                target=notices/'Pillow'/origin.name;target.parent.mkdir(exist_ok=True);shutil.copy2(origin,target)
     for name in ('README.zh-CN.md', 'DESIGN.zh-CN.md', 'VALIDATION.md', 'InstallPreview.cmd', 'InstallPreview.ps1', 'StartPreview.cmd', 'AllowLan.cmd', 'AllowLan.ps1'):
         if (ROOT / name).is_file(): shutil.copy2(ROOT / name, folder / name)
     subprocess.run([str(folder / 'StarPassXianniuPreview.exe'), '--smoke-test'], check=True)
-    (folder / 'build-info.json').write_text(json.dumps({'version':'0.1.0','python':sys.version,
+    (folder / 'build-info.json').write_text(json.dumps({'version':'0.2.0','python':sys.version,
         'pyinstaller':importlib.metadata.version('pyinstaller'),'source_base':'f91123f147cd2d931c04c70820c59e02bf3dee1a',
         'local_unsigned_preview':True,'contains_account_data':False},indent=2),encoding='utf-8')
     print(folder)

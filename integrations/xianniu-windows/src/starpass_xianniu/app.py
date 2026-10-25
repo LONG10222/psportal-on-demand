@@ -15,6 +15,8 @@ import time
 from . import __version__
 from .provider import Catalog, Provider
 from .storage import Store
+from .library import CatalogRepository, LibraryModel
+from .game_grid import GameGrid
 
 
 def catalog_path():
@@ -48,7 +50,12 @@ class App:
         self.tk, self.ttk, self.root, self.store = tk, ttk, root, store
         self.config = store.load()
         self.catalog = Catalog(self.config, catalog_path())
-        self.games = json.loads(catalog_path().read_text(encoding='utf-8'))
+        self.repository = CatalogRepository(catalog_path(),store.root,self.config)
+        self.games = self.repository.load()
+        self.library = LibraryModel(self.games,self.config)
+        self.line_sequence = 0
+        self.lines, self.all_lines, self.areas = [], [], []
+        self.selected_game = None
         self.provider = None
         self.events = queue.Queue()
         self.busy = False
@@ -58,7 +65,10 @@ class App:
         self.thread = threading.Thread(target=self.loop.run_forever, daemon=True)
         self.thread.start()
         root.title('星渡 · 鲜牛游戏共享预览 ' + __version__)
-        root.geometry('1000x720'); root.minsize(920, 680)
+        width=min(1160,max(900,root.winfo_screenwidth()-64))
+        height=min(820,max(650,root.winfo_screenheight()-96))
+        root.geometry(f'{width}x{height}+{max(0,(root.winfo_screenwidth()-width)//2)}+{max(0,(root.winfo_screenheight()-height)//2-20)}')
+        root.minsize(min(1040,width),min(760,height))
         root.configure(background='#f4f6fa')
         style = ttk.Style(root); style.theme_use('clam')
         style.configure('.', font=('Microsoft YaHei UI', 10), background='#f4f6fa', foreground='#17243b')
@@ -69,32 +79,36 @@ class App:
         style.configure('Muted.TLabel', foreground='#64748b')
         style.configure('CardMuted.TLabel', foreground='#64748b', background='white')
         style.configure('CardTitle.TLabel', font=('Microsoft YaHei UI', 12, 'bold'), background='white')
-        style.configure('Title.TLabel', font=('Microsoft YaHei UI', 23, 'bold'))
+        style.configure('Title.TLabel', font=('Microsoft YaHei UI', 18, 'bold'))
         style.configure('TButton', padding=(12, 7), background='#e9eef6', borderwidth=0)
         style.map('TButton', background=[('active', '#dce5f2')])
-        style.configure('Accent.TButton', font=('Microsoft YaHei UI', 11, 'bold'), padding=(24, 11), background='#3266e3', foreground='white')
+        style.configure('Compact.TButton',padding=(8,4))
+        style.configure('Compact.TMenubutton',padding=(8,4))
+        style.configure('Accent.TButton', font=('Microsoft YaHei UI', 11, 'bold'), padding=(20, 8), background='#3266e3', foreground='white')
         style.map('Accent.TButton', background=[('active', '#2455ca'), ('disabled', '#b9c8e8')], foreground=[('disabled', '#f3f6fc')])
+        style.configure('SelectedTab.TButton',background='#e7efff',foreground='#2455ca',padding=(8,4))
         style.configure('Card.TCheckbutton', background='white', padding=(4, 8))
         style.map('Card.TCheckbutton', background=[('active', '#eef4ff')])
-        style.configure('TCombobox', padding=5, fieldbackground='white')
-        outer = ttk.Frame(root, padding=24); outer.pack(fill='both', expand=True)
-        header = ttk.Frame(outer); header.pack(fill='x', pady=(0, 17))
+        style.configure('TCombobox', padding=3, fieldbackground='white')
+        outer = ttk.Frame(root, padding=16); outer.pack(fill='both', expand=True)
+        header = ttk.Frame(outer); header.pack(fill='x', pady=(0, 8))
         ttk.Label(header, text='星渡', style='Title.TLabel').pack(side='left')
         ttk.Label(header, text='鲜牛游戏共享', style='Muted.TLabel').pack(side='left', padx=16)
-        ttk.Button(header, text='设置', command=self.advanced).pack(side='right')
+        ttk.Button(header, text='设置', command=self.advanced,style='Compact.TButton').pack(side='right')
         ttk.Label(header, text='预览版', style='Muted.TLabel').pack(side='right', padx=12)
-        account = ttk.Frame(outer, style='Card.TFrame', padding=18); account.pack(fill='x', pady=(0, 16))
+        account = ttk.Frame(outer, style='Card.TFrame', padding=10); account.pack(fill='x', pady=(0, 10))
         account_row = ttk.Frame(account, style='Card.TFrame'); account_row.pack(fill='x')
         self.account_var = tk.StringVar()
         ttk.Label(account_row, textvariable=self.account_var, style='CardTitle.TLabel').pack(side='left', fill='x', expand=True)
-        ttk.Button(account_row, text='微信登录', command=self.login).pack(side='right')
-        ttk.Button(account_row, text='刷新时长', command=self.refresh_member).pack(side='right', padx=8)
+        ttk.Button(account_row, text='微信登录', command=self.login,style='Compact.TButton').pack(side='right')
+        ttk.Button(account_row, text='刷新时长', command=self.refresh_member,style='Compact.TButton').pack(side='right', padx=8)
         self.member_var = tk.StringVar(value='可用时长：暂未获取　　试用：暂未获取')
-        ttk.Label(account, textvariable=self.member_var, style='CardMuted.TLabel').pack(anchor='w', pady=(9, 0))
+        ttk.Label(account, textvariable=self.member_var, style='CardMuted.TLabel').pack(anchor='w', pady=(5, 0))
+        footer=ttk.Frame(outer);footer.pack(side='bottom',fill='x')
         body = ttk.Frame(outer); body.pack(fill='both', expand=True)
         body.columnconfigure(1, weight=1); body.rowconfigure(0, weight=1)
-        devices = ttk.Frame(body, style='Card.TFrame', padding=18, width=258)
-        devices.grid(row=0, column=0, sticky='nsew', padx=(0, 16)); devices.grid_propagate(False)
+        devices = ttk.Frame(body, style='Card.TFrame', padding=16, width=210)
+        devices.grid(row=0, column=0, rowspan=2, sticky='nsew', padx=(0, 14)); devices.grid_propagate(False)
         ttk.Label(devices, text='共享给谁', style='CardTitle.TLabel').pack(anchor='w')
         ttk.Label(devices, text='勾选允许接入的设备', style='CardMuted.TLabel').pack(anchor='w', pady=(5, 12))
         self.device_vars = {}
@@ -102,20 +116,12 @@ class App:
         self.device_entry = tk.StringVar()
         ttk.Button(devices, text='管理设备', command=self.manage_devices).pack(fill='x', pady=(12, 0))
         self.rebuild_devices()
-        choose = ttk.Frame(body, style='Card.TFrame', padding=18); choose.grid(row=0, column=1, sticky='nsew')
-        ttk.Label(choose, text='选择游戏', style='CardTitle.TLabel').pack(anchor='w', pady=(0, 12))
-        search = ttk.Frame(choose, style='Card.TFrame'); search.pack(fill='x')
-        self.query = tk.StringVar(); self.platform = tk.StringVar(value='全部')
-        ttk.Label(search, text='搜索', style='CardMuted.TLabel').pack(side='left')
-        entry = ttk.Entry(search, textvariable=self.query); entry.pack(side='left', fill='x', expand=True, padx=(8, 10))
-        entry.bind('<KeyRelease>', lambda _: self.filter_games())
-        category = ttk.Combobox(search, textvariable=self.platform, values=['全部', 'PC', '主机', 'Switch'], state='readonly', width=10)
-        category.pack(side='left'); category.bind('<<ComboboxSelected>>', lambda _: self.filter_games())
-        self.game_list = tk.Listbox(choose, height=5, exportselection=False, font=('Microsoft YaHei UI', 10),
-            background='white', foreground='#334155', selectbackground='#e8efff', selectforeground='#2455ca',
-            borderwidth=0, highlightthickness=0, activestyle='none')
-        self.game_list.pack(fill='both', expand=True, pady=12)
-        self.game_list.bind('<<ListboxSelect>>', self.select_game)
+        self.library_grid = GameGrid(body,self,self.library)
+        self.library_grid.grid(row=0,column=1,sticky='nsew')
+        choose = ttk.Frame(body, style='Card.TFrame', padding=10); choose.grid(row=1, column=1, sticky='ew',pady=(8,0))
+        selected_heading = ttk.Frame(choose,style='Card.TFrame');selected_heading.pack(fill='x',pady=(0,4))
+        self.selected_title_var = tk.StringVar(value='请选择一个游戏')
+        ttk.Label(selected_heading,textvariable=self.selected_title_var,style='CardTitle.TLabel',wraplength=580).pack(side='left')
         row = ttk.Frame(choose, style='Card.TFrame'); row.pack(fill='x')
         row.columnconfigure(0, weight=1); row.columnconfigure(1, weight=1)
         self.area_var = tk.StringVar(); self.line_var = tk.StringVar()
@@ -124,20 +130,22 @@ class App:
         self.area.bind('<<ComboboxSelected>>', lambda _: self.fetch_lines())
         ttk.Label(row, text='线路', style='CardMuted.TLabel').grid(row=0, column=1, sticky='w', pady=(0, 5))
         self.line = ttk.Combobox(row, textvariable=self.line_var, state='readonly', width=24); self.line.grid(row=1, column=1, sticky='ew')
-        ttk.Button(choose, text='刷新线路', command=self.fetch_lines).pack(anchor='e', pady=(8, 0))
+        ttk.Button(row,text='全部线路',command=self.show_all_lines,style='Compact.TButton').grid(row=1,column=2,padx=(8,0))
+        self.line.bind('<<ComboboxSelected>>',lambda _:self.save_game_profile())
         self.owner_var = tk.StringVar()
-        actions = ttk.Frame(outer); actions.pack(fill='x', pady=(16, 8))
+        actions = ttk.Frame(footer); actions.pack(fill='x', pady=(8, 5))
         self.start_button = ttk.Button(actions, text='启动加速与共享', style='Accent.TButton', command=self.start)
         self.start_button.pack(side='left')
         ttk.Button(actions, text='停止共享', command=self.stop).pack(side='left', padx=10)
         ttk.Button(actions, text='停止并暂停计时', command=self.pause).pack(side='left')
         ttk.Label(actions, text='主机 UDP / NAT 尚待验证', foreground='#a06b18').pack(side='right')
         self.status_var = tk.StringVar(value='已停止 · 选择设备和游戏后启动')
-        ttk.Label(outer, textvariable=self.status_var, wraplength=950, style='Muted.TLabel').pack(anchor='w', pady=(3, 5))
+        ttk.Label(footer, textvariable=self.status_var, wraplength=1050, style='Muted.TLabel').pack(anchor='w', pady=(0, 3))
         self.entry_var = tk.StringVar()
-        ttk.Label(outer, textvariable=self.entry_var, style='Muted.TLabel').pack(anchor='w')
+        ttk.Label(footer, textvariable=self.entry_var, style='Muted.TLabel').pack(anchor='w')
         root.protocol('WM_DELETE_WINDOW', self.close)
-        self.filter_games(); self.update_account(); self.update_entry()
+        self.update_account(); self.update_entry()
+        self.select_game_id(self.library.selected_id)
         root.after(100, self.poll)
         root.after(200, self.refresh_member)
         root.after(60000, self.periodic_member)
@@ -211,40 +219,96 @@ class App:
         self.submit(read(), accepted)
 
     def filter_games(self):
-        categories = {'全部': '', 'PC': 'pc', '主机': 'console', 'Switch': 'switch'}
-        self.filtered = self.catalog.catalog(self.query.get(), categories[self.platform.get()], 0, 48)['games']
-        self.game_list.delete(0, 'end')
-        for game in self.filtered: self.game_list.insert('end', '  '+game['title'])
-        index = next((i for i, g in enumerate(self.filtered) if g['id'] == self.config['game_id']), 0)
-        if self.filtered:
-            self.game_list.selection_set(index); self.select_game()
+        self.library_grid.reset()
 
-    def select_game(self, event=None):
-        selection = self.game_list.curselection()
-        if not selection: return
-        self.selected_game = self.filtered[selection[0]]
+    def select_game_id(self, identity):
+        self.line_sequence += 1
+        self.selected_game = self.library.by_id.get(identity)
+        self.lines, self.all_lines = [], []
+        self.line['values']=[];self.line_var.set('请选择区服');self.line.configure(state='disabled')
+        if not self.selected_game:
+            self.areas=[];self.area['values']=[];self.selected_title_var.set('请选择一个游戏');return
+        self.selected_title_var.set(self.selected_game['title'])
         self.areas = self.selected_game['areas']
         self.area['values'] = [str(r.get('title') or r.get('name') or r['id']) for r in self.areas]
-        index = next((i for i, r in enumerate(self.areas) if r['id'] == self.config['profile']['area_id']), 0)
+        saved=self.config.get('game_profiles',{}).get(str(identity),{})
+        preferred=saved.get('area_id',self.config['profile']['area_id'] if identity==self.config['game_id'] else None)
+        index = next((i for i, r in enumerate(self.areas) if r['id'] == preferred), 0)
         if self.areas: self.area.current(index)
-        self.lines = []
-        self.line['values'] = [f"当前会话线路 #{self.config['profile']['line_id']}"]
-        self.line.current(0)
         if hasattr(self, 'line_refresh_timer'):
             self.root.after_cancel(self.line_refresh_timer)
         self.line_refresh_timer = self.root.after(400, self.fetch_lines)
 
     def fetch_lines(self):
+        if hasattr(self,'line_refresh_timer'):
+            self.root.after_cancel(self.line_refresh_timer)
+            del self.line_refresh_timer
         if not self.areas or not self.config.get('account',{}).get('access_token') or self.closing: return
         game, area = self.selected_game['id'], self.areas[self.area.current()]['id']
+        self.line_sequence += 1
+        sequence = self.line_sequence
+        self.lines, self.all_lines = [], []
+        self.line['values']=[];self.line_var.set('正在获取官方线路…');self.line.configure(state='disabled')
         async def read(): return await asyncio.to_thread(self.catalog.lines, game, area)
         def accepted(data):
-            if self.selected_game['id'] != game or self.areas[self.area.current()]['id'] != area: return
+            if sequence != self.line_sequence or not self.selected_game or self.selected_game['id'] != game or self.areas[self.area.current()]['id'] != area: return
             self.lines = data['lines']; self.line['values'] = [r['title'] for r in self.lines]
+            self.all_lines = data.get('all_lines',[])
             if self.lines:
-                self.line.current(next((i for i, r in enumerate(self.lines) if r['id'] == self.config['profile']['line_id']), 0))
-            self.status_var.set(f"官方返回 {len(self.lines)} 条适用线路，共 {data['total']} 条线路记录。")
+                saved=self.config.get('game_profiles',{}).get(str(game),{})
+                preferred=saved.get('line_id') if saved.get('area_id')==area else self.config['profile']['line_id'] if game==self.config['game_id'] and area==self.config['profile']['area_id'] else None
+                self.line.current(next((i for i, r in enumerate(self.lines) if r['id'] == preferred), 0))
+                self.line.configure(state='readonly')
+            else:self.line_var.set('当前区服暂无可用线路')
+            self.status_var.set(f"已选择 {self.selected_game['title']} · {len(self.lines)} 条适用线路")
         self.submit(read(), accepted)
+
+    def save_game_profile(self):
+        if not self.selected_game or not self.lines or self.line.current()<0 or self.area.current()<0:return
+        self.config.setdefault('game_profiles',{})[str(self.selected_game['id'])]={'area_id':self.areas[self.area.current()]['id'],'line_id':self.lines[self.line.current()]['id']}
+        self.store.save(self.config)
+
+    def sync_catalog(self,path=None):
+        if self.busy or self.provider:
+            self.status_var.set('请先停止共享，再同步目录');return
+        self.busy=True
+        self.status_var.set('正在读取鲜牛客户端的完整游戏目录…')
+        async def read():return await asyncio.to_thread(self.repository.sync,path)
+        def accepted(games):
+            self.busy=False
+            if path:
+                self.config['official_catalog_path']=str(path);self.store.save(self.config)
+            self.games=games;self.library.replace(games);self.library_grid.reset()
+            self.select_game_id(self.library.selected_id)
+            self.status_var.set(f'已从鲜牛客户端读取完整目录：{len(games):,} 款。同步目录不会启动计时。')
+        self.submit(read(),accepted)
+
+    def choose_catalog_file(self):
+        if self.busy or self.provider:return
+        from tkinter import filedialog
+        path=filedialog.askopenfilename(parent=self.root,title='选择鲜牛公开游戏目录 gamelist.xml',filetypes=[('鲜牛游戏目录','gamelist.xml'),('XML 文件','*.xml')])
+        if path:self.sync_catalog(path)
+
+    def show_all_lines(self):
+        dialog=self.tk.Toplevel(self.root);dialog.title('官方完整线路');dialog.geometry('920x430')
+        frame=self.ttk.Frame(dialog,padding=16);frame.pack(fill='both',expand=True)
+        self.ttk.Label(frame,text=self.selected_game['title'] if self.selected_game else '请先选择游戏',style='CardTitle.TLabel').pack(anchor='w',pady=(0,10))
+        columns=('title','compatible','entry','exit','isp')
+        tree=self.ttk.Treeview(frame,columns=columns,show='headings',selectmode='browse')
+        for key,title,width in [('title','线路',220),('compatible','当前区服',90),('entry','入口',150),('exit','出口',150),('isp','运营商',150)]:
+            tree.heading(key,text=title);tree.column(key,width=width,minwidth=70)
+        tree.pack(fill='both',expand=True)
+        for row in self.all_lines:tree.insert('', 'end',iid=str(row['id']),values=(row['title'],'适用' if row['compatible'] else '不适用',row.get('entry',''),row.get('exit',''),row.get('isp','') or row.get('provider','')))
+        def choose():
+            if self.busy or self.provider:self.status_var.set('请先停止共享，再切换线路');return
+            selected=tree.selection()
+            if not selected:return
+            identity=int(selected[0])
+            index=next((i for i,row in enumerate(self.lines) if row['id']==identity),None)
+            if index is None:self.status_var.set('这条线路不适用于当前区服');return
+            self.line.current(index);self.save_game_profile();dialog.destroy()
+        self.ttk.Button(frame,text='使用所选线路',command=choose).pack(anchor='e',pady=(12,0))
+        tree.bind('<Double-1>',lambda _:choose())
 
     def refresh_member(self):
         if not self.config.get('account', {}).get('access_token') or self.closing: return
@@ -348,6 +412,8 @@ class App:
         if self.busy or self.provider: return
         self.busy = True
         try:
+            if not self.selected_game or not self.areas:raise ValueError('请先从游戏库选择游戏和区服')
+            self.save_game_profile()
             config = copy.deepcopy(self.config)
             config['devices'] = [ip for ip, var in self.device_vars.items() if var.get()]
             if config['session_mode'] == 'borrowed' and (self.selected_game['id'] != config['game_id'] or self.areas[self.area.current()]['id'] != config['profile']['area_id']):
@@ -390,6 +456,13 @@ class App:
             if kind == 'error':
                 self.busy = False; self.status_var.set(value)
             elif callback: callback(value)
+        locked=self.busy or self.provider is not None
+        self.start_button.configure(state='disabled' if locked else 'normal')
+        self.area.configure(state='disabled' if locked or not self.areas else 'readonly')
+        self.line.configure(state='disabled' if locked or not self.lines else 'readonly')
+        self.library_grid.sync_button.configure(state='disabled' if locked else 'normal')
+        for widget in self.cards.winfo_children():
+            if isinstance(widget,self.ttk.Checkbutton):widget.configure(state='disabled' if locked else 'normal')
         if self.provider and not self.busy:
             status = self.provider.status()
             c = status['counters']
