@@ -300,7 +300,11 @@ func unsafeOptions(v any) bool {
 	case map[string]any:
 		for k, value := range x {
 			switch strings.ToLower(k) {
-			case "dialer-proxy", "interface-name", "routing-mark", "certificate", "private-key", "ca", "ca-str", "client-cert", "client-key", "ech-opts", "ip-version", "ip", "xhttp-opts", "realm-opts", "server-url", "stun":
+			case "ech-opts":
+				if !validECHOptions(value) {
+					return true
+				}
+			case "dialer-proxy", "interface-name", "routing-mark", "certificate", "private-key", "ca", "ca-str", "client-cert", "client-key", "ip-version", "ip", "xhttp-opts", "realm-opts", "server-url", "stun":
 				return true
 			}
 			if unsafeOptions(value) {

@@ -122,8 +122,8 @@ func lookupFamily(ctx context.Context, host string, v4 bool) ([]netip.Addr, erro
 	}
 	return out, nil
 }
-func (publicResolver) ResolveECH(context.Context, string) ([]byte, error) {
-	return nil, errors.New("ECH DNS discovery is unsupported")
+func (publicResolver) ResolveECH(ctx context.Context, host string) ([]byte, error) {
+	return resolvePublicECH(ctx, host)
 }
 func (publicResolver) ExchangeContext(context.Context, *dns.Msg) (*dns.Msg, error) {
 	return nil, errors.New("arbitrary DNS exchanges are unsupported")

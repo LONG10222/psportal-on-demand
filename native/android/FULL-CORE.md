@@ -1,5 +1,7 @@
 # Android single-app routing and optional phone VPN
 
+ECH node options accept bounded inline configuration or a public DNS name. LAN-only sessions obtain ECH HTTPS records from an application-owned numeric HTTPS DNS endpoint with normal certificate checks, bounded replies and cancellation. Subscription-provided DNS URLs, local files and private endpoint overrides remain unsupported. This does not claim every ECH node or DNS alias chain was tested.
+
 ## Design and scope
 
 Android v4 links the pinned Mihomo core through `native/androidcore` and the Android-only `native/androidmobile` binding. This is separate from the existing iOS and desktop experimental adapter binding. No external Clash app, downloaded executable, public controller or second proxy app is required.
