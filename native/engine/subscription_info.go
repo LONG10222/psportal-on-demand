@@ -39,6 +39,11 @@ func SubscriptionInfo(rawURL string) string {
 	return subscriptionInfoWithContext(context.Background(), rawURL)
 }
 
+// SubscriptionInfoContext lets a full-core host bind refresh to its session.
+func SubscriptionInfoContext(ctx context.Context, rawURL string) string {
+	return subscriptionInfoWithContext(ctx, rawURL)
+}
+
 // SubscriptionInfo fetches metadata only for this running engine's configured
 // subscription. It shares the core lifetime without blocking Stop on a lock.
 func (e *Engine) SubscriptionInfo(rawURL string) string {

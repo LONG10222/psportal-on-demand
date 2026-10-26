@@ -95,6 +95,10 @@ public final class MainActivity extends Activity {
     private boolean updatingProductMode;
     private long preparationGeneration;
     private SubscriptionAccounting subscriptionInfo;
+    private final TrafficPresentation trafficPresentation = new TrafficPresentation();
+    private TextView traffic;
+    private boolean usageBusy, usageStale;
+    private long usageSession=-1, usageNext, usageAttempt=-10000, usageGeneration;
 
     private static final class Label {
         final TextView view; final String zh, en;
@@ -158,6 +162,7 @@ public final class MainActivity extends Activity {
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         network = text(stateCard, "正在识别网络", "Detecting network", 13, false, true);
         metrics = text(stateCard, "", "", 14, false, true);
+        traffic = text(stateCard, "启动后显示通道实时流量", "Live input traffic appears after Connect", 14, false, true);
         phoneVpnStatus = text(stateCard, "", "", 13, false, true);
         profileWarning = text(stateCard, "", "", 12, false, true);
         LinearLayout modeCard = card(home);
@@ -196,6 +201,9 @@ public final class MainActivity extends Activity {
         accounting.setContentDescription(t("查看订阅用量详情", "View subscription usage details"));
         usage = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); usage.setMax(100); usage.setVisibility(View.GONE);
         subscriptionCard.addView(usage, new LinearLayout.LayoutParams(-1, dp(4)));
+        button(subscriptionCard, "刷新订阅用量", "Refresh usage", false, v -> {
+            usageNext=0; refreshAccounting(session.snapshot());
+        });
 
         section(nodes, "节点", "Proxies");
         LinearLayout nodeCard = card(nodes);
@@ -788,6 +796,8 @@ public final class MainActivity extends Activity {
         String activeMode = nativeState.optString("routing_mode", "");
         String coreName = "mihomo-full-core".equals(nativeState.optString("engine", "")) ? t("内置 Mihomo 完整核心", "Embedded Mihomo full core") : t("核心状态未提供", "Core status not provided");
         engine.setText(snapshot.isActive() ? coreName + " · " + t("模式：", "Mode: ") + routingLabel(activeMode) : t("内置代理引擎 · 启动后显示实际模式", "Embedded proxy engine · applied mode appears after Start"));
+        renderTraffic(nativeState, snapshot);
+        refreshAccounting(snapshot);
         phoneVpnStatus.setText(phoneVpnDescription());
         boolean vpnFeedback = phoneApps.isChecked() || PhoneVpnService.isRequested() || vpnConsentPending ||
                 Arrays.asList("consent_required", "permission_denied", "revoked", "vpn_conflict", "no_network", "core_unavailable", "start_failed").contains(PhoneVpnService.stateCode());
@@ -910,9 +920,65 @@ public final class MainActivity extends Activity {
             expiry = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, locale()).format(date);
             if (date.before(new Date())) expiry += t(" · 已到期", " · Expired");
         }
-        accounting.setText(SubscriptionAccounting.bytes(subscriptionInfo.used, missing, locale()) + " / " + SubscriptionAccounting.bytes(subscriptionInfo.total, missing, locale()) +
-                "\n" + t("到期：", "Expires: ") + expiry + t(" · 服务器快照", " · Server snapshot"));
+        String updated=subscriptionInfo.updatedAt==null ? missing : DateFormat.getTimeInstance(DateFormat.SHORT,locale()).format(new Date(subscriptionInfo.updatedAt*1000));
+        accounting.setText(t("已用 / 总量：", "Used / total: ")+SubscriptionAccounting.bytes(subscriptionInfo.used, missing, locale()) + " / " + SubscriptionAccounting.bytes(subscriptionInfo.total, missing, locale()) +
+                "\n"+t("剩余：", "Remaining: ")+SubscriptionAccounting.bytes(subscriptionInfo.remaining,missing,locale())+
+                "\n" + t("到期：", "Expires: ") + expiry + "\n"+t("服务器更新：", "Server updated: ")+updated+
+                (usageBusy ? t(" · 刷新中", " · Refreshing") : usageStale ? t(" · 刷新失败，保留上次数据", " · Refresh failed; previous data") : t(" · 每分钟核对", " · Checked every minute")));
         usage.setVisibility(subscriptionInfo.percent() < 0 ? View.GONE : View.VISIBLE); usage.setProgress(Math.max(0, subscriptionInfo.percent()));
+    }
+    private void refreshAccounting(SessionController.Snapshot snapshot) {
+        if (!visible || snapshot.phase != SessionController.Phase.RUNNING) return;
+        long id=session.sessionId(), now=android.os.SystemClock.elapsedRealtime();
+        if (usageSession!=id) {
+            usageSession=id; usageBusy=false; usageGeneration++;
+            usageNext=subscriptionInfo!=null && subscriptionInfo.updatedAt!=null ? now+60000 : 0;
+            usageAttempt=-10000;
+        }
+        if (usageBusy || now<usageNext || now-usageAttempt<5000) return;
+        usageBusy=true; usageAttempt=now; usageNext=now+60000;
+        long generation=++usageGeneration;
+        preparation.submit(() -> {
+            SubscriptionAccounting next=null;
+            try {
+                JSONObject raw=new JSONObject(Androidmobile.currentSubscriptionInfo());
+                next=new SubscriptionAccounting(raw.optString("upload",""),raw.optString("download",""),raw.optString("total",""),raw.optString("expire",""),System.currentTimeMillis()/1000);
+            } catch (Exception | LinkageError unavailable) { /* No native URL or message enters UI. */ }
+            final SubscriptionAccounting result=next;
+            main.post(() -> {
+                if (generation!=usageGeneration || id!=session.sessionId()) return;
+                usageBusy=false;
+                if (!visible || isFinishing() || isDestroyed()) return;
+                usageStale=result==null || result.updatedAt==null;
+                if (!usageStale) subscriptionInfo=result;
+                renderAccounting();
+            });
+        });
+        renderAccounting();
+    }
+    private void renderTraffic(JSONObject state, SessionController.Snapshot snapshot) {
+        JSONObject scopes=state.optJSONObject("traffic");
+        JSONObject local=scopes==null ? null : scopes.optJSONObject("local");
+        JSONObject external=scopes==null ? null : scopes.optJSONObject("external");
+        if (snapshot.phase!=SessionController.Phase.RUNNING || local==null || external==null) {
+            traffic.setText(t("启动后显示通道实时流量", "Live input traffic appears after Connect")); return;
+        }
+        Long[] values={count(local,"upload_bytes"),count(local,"download_bytes"),count(external,"upload_bytes"),count(external,"download_bytes")};
+        for (Long value:values) if (value==null) { traffic.setText(t("流量状态暂不可用", "Traffic data unavailable")); return; }
+        long[] totals={values[0],values[1],values[2],values[3]};
+        trafficPresentation.sample(session.sessionId(),android.os.SystemClock.elapsedRealtime(),totals);
+        StringBuilder text=new StringBuilder();
+        for (int scope=0;scope<2;scope++) {
+            int i=scope*2;
+            if (scope>0) text.append("\n");
+            text.append(scope==0 ? t("局域网", "LAN") : t("外网", "Internet"))
+                .append(" ↑ ").append(SubscriptionAccounting.bytes(trafficPresentation.bytesPerSecond(i),"—",locale())).append("/s")
+                .append(" ↓ ").append(SubscriptionAccounting.bytes(trafficPresentation.bytesPerSecond(i+1),"—",locale())).append("/s")
+                .append("\n").append(t("本次累计 ↑ ","Session ↑ ")).append(SubscriptionAccounting.bytes(totals[i],"—",locale()))
+                .append(" ↓ ").append(SubscriptionAccounting.bytes(totals[i+1],"—",locale()));
+        }
+        text.append("\n").append(t("按目标地址区分；仅本应用通道，不等于套餐流量。", "By destination; this app's inputs only, separate from plan usage."));
+        traffic.setText(text.toString());
     }
     private void showAccountingDetails() {
         if (subscriptionInfo == null) return;

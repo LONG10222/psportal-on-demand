@@ -97,3 +97,12 @@ func SelectGroup(name, choice string) error {
 	return e.SelectGroup(name, choice)
 }
 func SubscriptionInfo(url string) string { return engine.SubscriptionInfo(url) }
+
+// CurrentSubscriptionInfo never exposes or accepts another session's URL.
+func CurrentSubscriptionInfo() string {
+	e, err := activeEngine()
+	if err != nil {
+		return `{"available":false}`
+	}
+	return e.SubscriptionInfo()
+}

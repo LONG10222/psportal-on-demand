@@ -5,8 +5,8 @@ import json
 import re
 
 PACKAGE = 'org.psportal.host'
-VERSION_CODE = 5
-VERSION_NAME = '0.5.0-dev'
+VERSION_CODE = 6
+VERSION_NAME = '0.6.0-dev'
 VPN_PERMISSION = 'android.permission.BIND_VPN_SERVICE'
 EXPECTED_PERMISSIONS = {
     'android.permission.INTERNET',
