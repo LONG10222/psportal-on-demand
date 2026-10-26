@@ -29,7 +29,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise CoreError('Subscription redirects are disabled; use the final HTTPS URL')
 
 
-def download_subscription(url, destination):
+def download_subscription(url, destination, *, headers_only=False):
     # Resolve once, reject every non-public address, then pin TLS to an approved
     # numeric address while authenticating the original HTTPS hostname.
     from .policy import destination as classify
@@ -92,10 +92,13 @@ def download_subscription(url, destination):
         path = parsed.path or '/'
         if parsed.query:
             path += '?' + parsed.query
-        connection.request('GET', path, headers={'User-Agent':'clash.meta/1.19.32 PSPortal-OnDemand/0.1', 'Accept-Encoding':'identity'})
+        connection.request('HEAD' if headers_only else 'GET', path, headers={'User-Agent':'clash.meta/1.19.32 PSPortal-OnDemand/0.1', 'Accept-Encoding':'identity'})
         response = connection.getresponse()
         if response.status != 200:
             raise CoreError('Subscription requires HTTP 200; redirects are disabled')
+        if headers_only:
+            from .subscription_info import from_headers
+            return from_headers(response.headers, url)
         lengths = response.headers.get_all('Content-Length', [])
         transfers = response.headers.get_all('Transfer-Encoding', [])
         if len(lengths) > 1 or len(transfers) > 1 or (lengths and transfers):

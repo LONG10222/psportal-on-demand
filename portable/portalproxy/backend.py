@@ -294,6 +294,17 @@ def parse_status(line: str) -> dict | None:
             result['node_policies'] = policies
         if 'clients' in value:
             result['clients'] = clients
+        if 'traffic' in value:
+            from .traffic import validate_traffic
+            result['traffic'] = validate_traffic(value['traffic'])
+        if 'shared_core' in value:
+            if type(value['shared_core']) is not bool: return None
+            result['shared_core']=value['shared_core']
+        if 'local_address' in value:
+            import re
+            match=re.fullmatch(r'127\.0\.0\.1:([0-9]{1,5})',value['local_address']) if isinstance(value['local_address'],str) else None
+            if not match or not 1024<=int(match[1])<=65535:return None
+            result['local_address']=value['local_address']
         return result
     except (TypeError, ValueError, UnicodeError, OverflowError, RecursionError):
         return None

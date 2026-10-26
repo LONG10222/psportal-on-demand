@@ -336,6 +336,38 @@ class IntegratedGamesTests(unittest.TestCase):
         self.assertEqual(self.app.vars['subscription_url'].get(),original)
         self.assertNotIn('existing_proxy_port',self.app.raw)
 
+    def test_shared_owned_core_can_switch_views_without_restart_or_source_change(self):
+        home=self.home();home.select('game')
+        self.app.raw['shared_core']=True
+        process=object();self.app.backend.process=process
+        original=self.app.vars['subscription_url'].get()
+        try:
+            home.select('subscription')
+            self.assertEqual(home.selected,'subscription')
+            self.app.view.show('Workspaces')
+            self.assertEqual(home.selected,'subscription')
+            self.assertIs(self.app.backend.process,process)
+            self.assertEqual(self.app.vars['subscription_url'].get(),original)
+            self.assertFalse(home.buttons['game'].instate(['disabled']))
+        finally:self.app.backend.process=None
+
+    def test_game_can_follow_existing_clash_without_importing_second_subscription(self):
+        home=self.home();home.select('game');home.game_source.set('跟随 Clash')
+        with patch.object(self.app,'use_existing_proxy') as linked:
+            home.toggle();self.pump_until(lambda:linked.called)
+            linked.assert_called_once_with(mode='game')
+        self.assertFalse(home.source.winfo_manager())
+
+    def test_subscription_panel_displays_metered_scopes_and_quota(self):
+        from portalproxy.traffic import TrafficMeter
+        home=self.home()
+        self.app.view.subscription_info={'upload':1,'download':2,'total':10}
+        meter=TrafficMeter();meter.add('local','upload',123);meter.add('external','download',456)
+        self.app.view.runtime={'traffic':meter.snapshot()}
+        home.refresh()
+        self.assertIn('剩余',home.usage_text.get())
+        self.assertIn('局域网',home.traffic_text.get());self.assertIn('外网',home.traffic_text.get())
+
 
 class InitialPageTests(unittest.TestCase):
     def test_windows_default_is_home_and_explicit_overview_is_honored(self):

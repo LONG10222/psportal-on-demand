@@ -212,6 +212,8 @@ class ProxyServer:
         self.stats = {"accepted": 0, "denied_clients": 0, "local_requests": 0,
                       "external_requests": 0, "errors": 0, "active": 0, "waking": 0, "forwarding": 0}
         self.clients = {}
+        from .traffic import TrafficMeter
+        self.traffic = TrafficMeter()
 
     def snapshot(self):
         """Only clients that actually reached this listener, never a Wi-Fi scan."""
@@ -249,7 +251,7 @@ class ProxyServer:
                     address=f"{self.config['listen_host']}:{self.config['listen_port']}",
                     connected_clients=len(self._clients), active_connections=self.stats['active'],
                     client_ips=sorted(self._clients), clients=self.snapshot()['clients'],
-                    stats=dict(self.stats), error=error)
+                    stats=dict(self.stats), error=error, traffic=self.traffic.snapshot())
 
     async def start(self) -> None:
         if self._server is not None:
@@ -483,6 +485,10 @@ class ProxyServer:
                 await asyncio.wait_for(self.core.prepare_connection(upstream_reader, upstream_writer,
                     request.host, request.port), self.timeout)
             forwarding = True
+            from .traffic import MeteredReader, MeteredWriter
+            self.traffic.add(route.kind, 'upload', len(header))
+            reader = MeteredReader(reader, lambda count: self.traffic.add(route.kind, 'upload', count))
+            writer = MeteredWriter(writer, lambda count: self.traffic.add(route.kind, 'download', count))
             self.stats["forwarding"] += 1
             self.last_error = ""
             if request.method == "CONNECT":
@@ -526,6 +532,14 @@ class ProxyServer:
             self.stats["errors"] += 1
             if not state["responded"]:
                 await self._error(writer, 504)
+        except (ConnectionResetError, BrokenPipeError):
+            self.stats["errors"] += 1
+            # A client can close a CONNECT stream after receiving its response
+            # (browser cancellation and TLS close commonly reset TCP on Windows).
+            # Retain the request failure count without poisoning listener health.
+            if not state["responded"]:
+                self.last_error = "Forwarding failed; check the proxy engine and connectivity"
+                await self._error(writer, 502)
         except (OSError, RuntimeError, ValueError):
             self.last_error = "Forwarding failed; check the proxy engine and connectivity"
             self.stats["errors"] += 1

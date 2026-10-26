@@ -5,18 +5,19 @@ from tkinter import ttk
 from . import windows_network
 
 LABELS={'game':'游戏共享','accelerator':'鲜牛加速','clash':'Clash 联动','subscription':'独立订阅'}
-NOTES={'game':'使用星渡自己的订阅，向选定网络中的游戏设备共享。',
+NOTES={'game':'选择导入订阅或跟随 Clash；设备共享与本机代理共用同一订阅和核心。',
  'clash':'复用电脑上已开启的 Clash 代理；星渡只管理自己的共享入口。',
- 'subscription':'使用自己的订阅，可供本机或设备使用。',
+ 'subscription':'内置 Clash 与游戏共享使用同一份订阅和核心，也可仅供本机使用。',
  'accelerator':'官方登录、游戏、区服、线路与免费规则在鲜牛游戏库中管理。'}
 
 
 class WorkspaceHub:
     def __init__(self,app,frame):
         self.app,self.frame=app,frame
-        self.selected=('accelerator' if app.product_mode()=='accelerator' else 'clash' if app.raw.get('existing_proxy_port') else 'game' if app.product_mode()=='game' else 'subscription')
+        self.selected=('accelerator' if app.product_mode()=='accelerator' else 'game' if app.product_mode()=='game' else 'clash' if app.raw.get('existing_proxy_port') else 'subscription')
         self.inventory={};self.events=queue.Queue();self.detecting=False;self.pending_start=None
         self.was_running=False
+        self.edit_source=False;self.shown_source=None
         self.buttons={}
         modes=ttk.Frame(frame,style='Portal.Page.TFrame');modes.pack(fill='x',pady=(0,16))
         for key,label in LABELS.items():
@@ -26,6 +27,16 @@ class WorkspaceHub:
         self.source_note=tk.StringVar()
         ttk.Label(card,textvariable=self.title,style='Portal.Section.TLabel').pack(anchor='w')
         ttk.Label(card,textvariable=self.note,style='Portal.CardNote.TLabel',wraplength=730).pack(anchor='w',pady=(8,20))
+        self.game_sources=ttk.Frame(card,style='Portal.Card.TFrame')
+        ttk.Label(self.game_sources,text='共享来源',style='Portal.Card.TLabel').pack(side='left',padx=(0,12))
+        self.game_source=tk.StringVar(value='跟随 Clash' if app.raw.get('existing_proxy_port') else '导入订阅 · 内置核心')
+        self.game_source_combo=ttk.Combobox(self.game_sources,textvariable=self.game_source,values=('导入订阅 · 内置核心','跟随 Clash'),state='readonly',width=24)
+        self.game_source_combo.pack(side='left')
+        self.game_source_combo.bind('<<ComboboxSelected>>',lambda _:self.change_game_source())
+        self.source_summary=ttk.Frame(card,style='Portal.Card.TFrame')
+        ttk.Label(self.source_summary,text='已导入订阅 · 游戏共享与本机代理共用',style='Portal.Card.TLabel').pack(side='left')
+        self.edit_source_button=ttk.Button(self.source_summary,text='更换订阅',command=self.open_source_editor)
+        self.edit_source_button.pack(side='right')
         self.source=ttk.Frame(card,style='Portal.Card.TFrame');self.source.pack(fill='x',pady=(0,20))
         ttk.Label(self.source,text='独立订阅',style='Portal.Card.TLabel').pack(anchor='w',pady=(0,8))
         row=ttk.Frame(self.source,style='Portal.Card.TFrame');row.pack(fill='x')
@@ -59,11 +70,26 @@ class WorkspaceHub:
         self.connection=tk.StringVar(value='启动后显示设备需要填写的代理地址。')
         self.connection_label=ttk.Label(card,textvariable=self.connection,style='Portal.Card.TLabel',wraplength=730)
         self.connection_label.pack(anchor='w',pady=(6,16))
+        self.data=ttk.Frame(card,style='Portal.Card.TFrame',padding=(0,8))
+        self.data.pack(fill='x',before=self.connection_label,pady=(0,12))
+        self.data.columnconfigure(0,weight=1);self.data.columnconfigure(1,weight=1)
+        left=ttk.Frame(self.data,style='Portal.Card.TFrame');left.grid(row=0,column=0,sticky='nw',padx=(0,18))
+        right=ttk.Frame(self.data,style='Portal.Card.TFrame');right.grid(row=0,column=1,sticky='nw')
+        ttk.Label(left,text='订阅用量',style='Portal.Section.TLabel').pack(anchor='w')
+        self.usage_text=tk.StringVar();self.traffic_text=tk.StringVar();self.usage_state=tk.StringVar()
+        ttk.Label(left,textvariable=self.usage_text,style='Portal.Card.TLabel',wraplength=350).pack(anchor='w',pady=8)
+        ttk.Label(left,textvariable=self.usage_state,style='Portal.CardNote.TLabel',wraplength=350).pack(anchor='w')
+        self.refresh_usage=ttk.Button(left,text='刷新用量',command=app.refresh_subscription_usage)
+        self.refresh_usage.pack(anchor='w',pady=(8,0))
+        ttk.Label(right,text='星渡通道流量',style='Portal.Section.TLabel').pack(anchor='w')
+        ttk.Label(right,textvariable=self.traffic_text,style='Portal.Card.TLabel',wraplength=350).pack(anchor='w',pady=8)
+        ttk.Label(right,text='按目标地址区分局域网与外网；只统计通过星渡的字节，不等于套餐已用流量。',style='Portal.CardNote.TLabel',wraplength=350).pack(anchor='w')
         actions=ttk.Frame(card,style='Portal.Card.TFrame');actions.pack(fill='x',pady=(12,8))
         self.action=ttk.Button(actions,text='启动共享',command=self.toggle,style='Portal.Accent.TButton');self.action.pack(side='left')
         self.details_button=ttk.Button(actions,text='设备与高级设置',command=lambda:app.view.show('LAN sharing'))
         self.details_button.pack(side='left',padx=12)
         ttk.Label(card,textvariable=self.state,style='Portal.CardNote.TLabel',wraplength=730).pack(anchor='w',pady=(10,8))
+        self.data.pack_forget();self.data.pack(fill='x',pady=(16,0))
         self.footnote=ttk.Label(card,text='热点会共享电脑原有网络，设备需填写代理；此入口不接管游戏 UDP。',style='Portal.CardNote.TLabel',wraplength=730)
         self.refresh();self.detect();frame.after(200,self.poll)
 
@@ -75,8 +101,11 @@ class WorkspaceHub:
     def sync_mode(self):
         previous=self.selected
         mode=self.app.product_mode()
+        if self.app.backend.process is not None and self.can_view_shared(self.selected):self.refresh();return
         if mode=='accelerator':self.selected='accelerator'
-        elif self.app.raw.get('existing_proxy_port'):self.selected='clash'
+        elif self.app.raw.get('existing_proxy_port'):
+            if self.selected!='game':self.selected='clash'
+            self.game_source.set('跟随 Clash')
         elif mode=='game':self.selected='game'
         elif mode=='clash' or self.selected not in ('subscription','clash'):self.selected='subscription'
         if mode=='clash':self.target.set('仅此电脑')
@@ -94,14 +123,18 @@ class WorkspaceHub:
 
     def select(self,key):
         if key not in LABELS:raise ValueError('无效工作区')
+        if self.app.backend.process is not None and self.can_view_shared(key):
+            if key=='game' and self.app.raw.get('existing_proxy_port'):self.game_source.set('跟随 Clash')
+            self.selected=key;self.refresh();return
         if self.active():self.state.set('请先停止当前通道，再切换用途。');return
         self.selected=key
+        if key=='game' and self.app.raw.get('existing_proxy_port'):self.game_source.set('跟随 Clash')
         self.connection.set('启动后显示代理地址。');self.state.set('选择接入方式，再启动。')
         if key=='accelerator':
             if self.app.raw.get('existing_proxy_port'):self.app.unlink_proxy()
             self.app.open_game_accelerator();return
         if self.app.product_mode()=='accelerator':self.app.set_product_mode('mixed')
-        if self.app.raw.get('existing_proxy_port') and key!='clash':
+        if self.app.raw.get('existing_proxy_port') and key not in ('clash','game'):
             self.app.unlink_proxy()
             saved=self.app.raw.get('workspace_target')
             if isinstance(saved,str) and saved in ('lan','hotspot','local'):
@@ -109,6 +142,22 @@ class WorkspaceHub:
         if key!='subscription' and self.target.get()=='仅此电脑':self.target.set('当前局域网')
         self.app.set_product_mode('game' if key=='game' else 'clash' if self.target.get()=='仅此电脑' and key=='subscription' else 'mixed')
         self.selected=key;self.refresh()
+
+    def can_view_shared(self,key):
+        if self.app.backend.stopping_since is not None:return False
+        if self.app.raw.get('existing_proxy_port') and self.app.raw.get('existing_proxy_provider')!='xianniu':
+            return key in ('game','clash')
+        return bool(self.app.raw.get('shared_core') and key in ('game','subscription'))
+
+    def change_game_source(self):
+        if self.active():return
+        if self.game_source.get()!='跟随 Clash' and self.app.raw.get('existing_proxy_port'):
+            self.app.unlink_proxy();self.app.set_product_mode('game')
+        self.refresh()
+
+    def open_source_editor(self):
+        if self.active():return
+        self.edit_source=True;self.refresh();self.url.focus_set()
 
     def detect(self):
         if self.detecting:return
@@ -139,13 +188,16 @@ class WorkspaceHub:
     def _start_checked(self,target):
         try:
             self.app._workspace_network=None if target=='local' else windows_network.selected_network(self.inventory,target)
-            if self.selected!='clash' and not self.app.subscription_ready():
+            linked=self.selected=='clash' or self.selected=='game' and self.game_source.get()=='跟随 Clash'
+            if not linked and not self.app.subscription_ready():
                 self.state.set('请先导入订阅或选择本地配置，再启动。');return
             self.app._workspace_network_allow_subnet=self.allow_subnet.get()
             self.app._workspace_target=target
             self.app.set_product_mode('game' if self.selected=='game' else 'clash' if target=='local' else 'mixed')
-            if self.selected=='clash':self.app.use_existing_proxy(mode='mixed')
-            else:self.app.quick_start()
+            if linked:self.app.use_existing_proxy(mode='game' if self.selected=='game' else 'mixed')
+            else:
+                self.app.raw['shared_core']=target!='local'
+                self.app.quick_start()
             if not self.active():self.state.set('未启动，请检查配置提示或重新检测 Clash。')
         except ValueError as error:
             self.app._workspace_network=None;self.app._workspace_target=None
@@ -153,8 +205,18 @@ class WorkspaceHub:
 
     def refresh(self):
         self.title.set(LABELS[self.selected]);self.note.set(NOTES[self.selected])
-        linked=self.selected=='clash'
+        linked=self.selected=='clash' or self.selected=='game' and self.game_source.get()=='跟随 Clash'
         accelerator=self.selected=='accelerator'
+        if accelerator:self.data.pack_forget()
+        elif not self.data.winfo_manager():self.data.pack(fill='x',pady=(16,0))
+        from .subscription_info import display as usage_display
+        from .traffic import display as traffic_display
+        self.usage_text.set(usage_display(self.app.view.subscription_info,'zh',compact=True))
+        monitor=self.app.subscription_monitor
+        self.usage_state.set(monitor.message)
+        self.refresh_usage.configure(state='disabled' if monitor.busy else 'normal')
+        self.traffic_text.set(traffic_display((self.app.view.runtime or {}).get('traffic')))
+        self.game_source_combo.configure(state='disabled' if self.active() else 'readonly')
         if not accelerator and not self.network.winfo_manager():self.network.pack(fill='x',before=self.connection_label,pady=(0,16))
         if linked:
             self.source.pack_forget()
@@ -164,6 +226,18 @@ class WorkspaceHub:
         else:
             self.linked.pack_forget()
             if not self.source.winfo_manager():self.source.pack(fill='x',before=self.network,pady=(0,20))
+        ready=self.app.subscription_ready()
+        source=tuple(self.app.vars[key].get() for key in ('profile_file','subscription_file'))
+        if ready and source!=self.shown_source:self.shown_source=source;self.edit_source=False
+        if not linked and not accelerator and ready and not self.edit_source:
+            self.source.pack_forget()
+            if not self.source_summary.winfo_manager():self.source_summary.pack(fill='x',before=self.network,pady=(0,20))
+        else:self.source_summary.pack_forget()
+        self.edit_source_button.configure(state='disabled' if self.active() else 'normal')
+        if self.selected=='game':
+            before=self.linked if linked and self.linked.winfo_manager() else self.source if self.source.winfo_manager() else self.source_summary if self.source_summary.winfo_manager() else self.network
+            self.game_sources.pack(fill='x',before=before,pady=(0,16))
+        else:self.game_sources.pack_forget()
         values=('当前局域网','Windows 热点','仅此电脑') if self.selected=='subscription' else ('当前局域网','Windows 热点')
         if self.target.get() not in values:self.target.set(values[0])
         self.network_combo.configure(values=values)
@@ -186,7 +260,8 @@ class WorkspaceHub:
                 for control in widget.winfo_children():control.configure(state='disabled' if self.active() else 'normal')
         self.network_combo.configure(state='disabled' if self.active() else 'readonly')
         core_pending=getattr(self.app,'_start_after_setup',False)=='workspace'
-        label='返回游戏库' if accelerator else ('停止本机代理' if local else '停止共享') if running else '取消准备' if self.pending_start or core_pending else '联动并共享' if linked else '启动本机代理' if local else '启动共享'
+        shared=running and self.app.raw.get('shared_core')
+        label='返回游戏库' if accelerator else ('停止共用通道' if shared else '停止本机代理' if local else '停止共享') if running else '取消准备' if self.pending_start or core_pending else '联动并共享' if linked else '启动本机代理' if local else '启动共享'
         stopping=running and self.app.backend.stopping_since is not None
         blocked=self.active() and not (running or self.pending_start or core_pending or accelerator)
         self.action.configure(text=label,state='disabled' if stopping or blocked else 'normal')
@@ -199,19 +274,23 @@ class WorkspaceHub:
             host='127.0.0.1' if self.app.product_mode()=='clash' else self.app.vars['listen_host'].get()
             hint='本机应用填写 HTTP 代理' if self.app.product_mode()=='clash' else '设备 Wi-Fi 中填写手动 HTTP 代理'
             self.connection.set('代理地址：'+host+':'+self.app.vars['listen_port'].get()+' · '+hint)
+            if shared:
+                runtime=self.app.view.runtime or {}
+                address=runtime.get('local_address') or '127.0.0.1:'+str(self.app.raw.get('local_proxy_port',10080))
+                self.connection.set('设备代理：'+host+':'+self.app.vars['listen_port'].get()+'\n本机代理：'+address+' · 两个入口共用订阅、节点和核心')
             self.state.set(self.app.status_var.get())
         elif self.was_running:
             self.connection.set('共享已停止，设备代理入口已关闭。')
             self.state.set('Clash 继续运行；可重新启动共享。' if linked else '可切换用途，或重新启动共享。')
         self.was_running=running
-        for key,button in self.buttons.items():button.configure(style='Portal.Accent.TButton' if key==self.selected else 'TButton',state='disabled' if self.active() else 'normal')
+        for key,button in self.buttons.items():button.configure(style='Portal.Accent.TButton' if key==self.selected else 'TButton',state='normal' if not self.active() or running and self.can_view_shared(key) else 'disabled')
 
     def poll(self):
         if not self.frame.winfo_exists():return
         try:
             self.inventory,proxy=self.events.get_nowait();self.app.existing_proxy=proxy;self.detecting=False
             lan=self.inventory.get('lan');hotspot=self.inventory.get('hotspot',{})
-            self.network_note.set(('局域网 '+lan['host'] if lan else '局域网未确认')+' · '+('热点 '+hotspot['network']['host'] if hotspot.get('network') else '热点未开启或未确认')+'\n电脑 IP 变化后请重新检测；设备代理地址应属于实际接入的网络。')
+            self.network_note.set(('局域网 '+lan['host'] if lan else '局域网未确认')+' · '+('热点 '+hotspot['network']['host'] if hotspot.get('network') else '热点未开启或未确认'))
             self.refresh()
             pending=self.pending_start;self.pending_start=None
             if pending:

@@ -189,6 +189,24 @@ def read_clash_accounting(path: Path | None = None) -> dict | None:
     return None
 
 
+def clash_subscription_source(path=None):
+    """Private descriptor for the current profile only; no controller mutations."""
+    from .subscription_monitor import descriptor
+    path = path or clash_accounting_path()
+    cached = read_clash_accounting(path) if path else None
+    try:
+        from .profiles import read_profile
+        data = read_profile(path)
+        current = data.get('current')
+        if isinstance(current, str):
+            for entry in data.get('items', []):
+                if isinstance(entry, dict) and entry.get('uid') == current:
+                    name = entry.get('name') if isinstance(entry.get('name'), str) else ''
+                    return descriptor(entry.get('url',''), cached, identity='clash:'+current, name=name, linked=True)
+    except (OSError, ValueError, TypeError): pass
+    return descriptor(cached=cached, identity='clash-unavailable', linked=True)
+
+
 class ExistingProxy:
     """Owns no core process and never calls another application's controller."""
     def __init__(self, config):

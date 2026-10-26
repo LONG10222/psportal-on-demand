@@ -393,6 +393,12 @@ class DesktopApp:
         self._workspace_network = None
         self._workspace_target = None
         self._workspace_network_allow_subnet = False
+        from .subscription_monitor import AccountingMonitor
+        self.subscription_monitor = AccountingMonitor()
+        self.clash_subscription = None
+        self._usage_source_path = None
+        self._usage_cached = None
+        self._shared_local_port = None
         from .existing_proxy import detect_system_proxy, read_clash_accounting
         self.existing_proxy = detect_system_proxy()
         self.clash_info = read_clash_accounting() if self.existing_proxy else None
@@ -676,7 +682,7 @@ class DesktopApp:
                 if key == 'product_mode' and value not in product_modes.MODES:
                     continue
                 self.vars[key].set(value)
-            for key in ('source_provenance', 'node_policies', 'host_profile_overlay', 'workspace_target'):
+            for key in ('source_provenance', 'node_policies', 'host_profile_overlay', 'workspace_target', 'shared_core', 'local_proxy_port'):
                 if key in previous:
                     self.raw[key] = copy.deepcopy(previous[key])
             self.raw['product_mode'] = self.product_mode()
@@ -917,7 +923,9 @@ class DesktopApp:
     def _poll_discovery(self):
         """Refresh cached Clash accounting off the Tk thread; never call its controller."""
         try:
-            proxy, info = self.discovery_events.get_nowait()
+            record = self.discovery_events.get_nowait()
+            proxy, info = record[:2]
+            if len(record)>2:self.clash_subscription=record[2]
         except queue.Empty:
             pass
         else:
@@ -930,14 +938,43 @@ class DesktopApp:
             self._discovery_pending = True
             self._next_discovery = time.monotonic() + 10
             def worker():
-                from .existing_proxy import detect_system_proxy, read_clash_accounting
+                from .existing_proxy import detect_system_proxy, read_clash_accounting, clash_subscription_source
                 try:
                     proxy = detect_system_proxy()
                     info = read_clash_accounting() if proxy else None
                 except Exception:
                     proxy, info = None, None
-                self.discovery_events.put((proxy, info))
+                source = clash_subscription_source() if proxy else None
+                self.discovery_events.put((proxy, info, source))
             threading.Thread(target=worker, daemon=True).start()
+
+    def refresh_subscription_usage(self):
+        self._poll_subscription_usage(force=True)
+
+    def _poll_subscription_usage(self, force=False):
+        from .subscription_monitor import descriptor
+        monitor=getattr(self,'subscription_monitor',None)
+        if monitor is None:return
+        home=getattr(self,'workspace_hub',None)
+        chosen_link=home and self.view.page=='Workspaces' and (home.selected=='clash' or home.selected=='game' and home.game_source.get()=='跟随 Clash')
+        linked=chosen_link or self.raw.get('existing_proxy_port') and self.raw.get('existing_proxy_provider')!='xianniu'
+        if linked:
+            source=self.clash_subscription or descriptor(cached=self.clash_info,identity='clash-unavailable',linked=True)
+        else:
+            path=next((self.vars[k].get().strip() for k in ('profile_file','subscription_file') if self.vars.get(k) and self.vars[k].get().strip()),'')
+            ready=self.subscription_ready()
+            if path!=self._usage_source_path:
+                self._usage_source_path=path;self._usage_cached=None
+                try:
+                    sidecar=Path(path).with_suffix(Path(path).suffix+'.info.json')
+                    if path and sidecar.is_file() and sidecar.stat().st_size<=8192:self._usage_cached=read_config(sidecar)
+                except (OSError,ValueError):pass
+            origin=self.raw.get('source_provenance',{})
+            url=origin.get('url','') if ready and isinstance(origin,dict) and origin.get('kind')=='subscription' else ''
+            source=descriptor(url,self._usage_cached if ready else None,identity=str(self.path)+':'+path)
+        visible=self.view.page!='Games' and self.product_mode()!='accelerator'
+        monitor.tick(source,visible=visible,force=force)
+        if visible:self.view.subscription_info=monitor.info
 
 
     def choose_config(self):
@@ -992,6 +1029,7 @@ class DesktopApp:
                 self.vars['profile_file'].set('')
                 self.vars['subscription_file'].set(str(path.absolute()))
             self.view.preview = info
+            self.raw['shared_core'] = True
             if str(path.absolute()) != (self.raw.get('profile_file') or self.raw.get('subscription_file')):
                 self.raw.pop('node_policies', None)
             self.raw.pop('existing_proxy_port', None)
@@ -1121,6 +1159,9 @@ class DesktopApp:
                 selected = available_port(host, preferred, excluded)
                 chosen.add(selected)
                 values[key] = str(selected)
+            if self.raw.get('shared_core') and mode in ('game','mixed') and not self.raw.get('existing_proxy_port'):
+                candidate=available_port('127.0.0.1',self.raw.get('local_proxy_port',10080),chosen)
+                self._shared_local_port=(self.path,candidate)
             if mode != 'clash':
                 values.update(listen_host=network['host'], allowed_clients=', '.join(network['clients']))
             plan = (values, network['subnet'])
@@ -1311,7 +1352,7 @@ class DesktopApp:
                         if key in ('profile_file', 'subscription_file', 'subscription_url', 'engine_mode')}
             previous['product_mode'] = previous_mode or 'game'
             previous.update({key: copy.deepcopy(self.raw[key]) for key in
-                             ('source_provenance', 'node_policies', 'host_profile_overlay', 'workspace_target') if key in self.raw})
+                             ('source_provenance', 'node_policies', 'host_profile_overlay', 'workspace_target', 'shared_core', 'local_proxy_port') if key in self.raw})
             self.raw['linked_previous_source'] = previous
         self.vars['engine_mode'].set('external')
         self.vars['profile_file'].set('')
@@ -1591,6 +1632,11 @@ class DesktopApp:
 
     def collect(self) -> dict:
         values = dict(self.raw)
+        if self.raw.get('shared_core'):
+            values['shared_core']=(self.product_mode() in ('game','mixed') and self.vars['engine_mode'].get()=='external'
+                and not (self.raw.get('existing_proxy_port') or self.raw.get('host_relay') or self.raw.get('accelerator_proxy')))
+            selected=getattr(self,'_shared_local_port',None)
+            if values['shared_core'] and selected and selected[0]==self.path:values['local_proxy_port']=selected[1]
         if getattr(self,'_workspace_target',None) in ('lan','hotspot','local'):
             values['workspace_target']=self._workspace_target
         for key, variable in self.vars.items():
@@ -1788,6 +1834,7 @@ class DesktopApp:
         self._poll_setup()
         self._poll_xianniu()
         self._poll_discovery()
+        self._poll_subscription_usage()
         self._poll_import()
         self._poll_updates()
         self._poll_runtime()

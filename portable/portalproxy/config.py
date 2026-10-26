@@ -40,6 +40,16 @@ def validate(raw, path):
     if not isinstance(raw, dict):
         raise ValueError('Configuration must be an object')
     cfg = dict(DEFAULTS, **raw)
+    if type(cfg.get('shared_core',False)) is not bool:
+        raise ValueError('shared_core must be a boolean')
+    if cfg.get('shared_core'):
+        port=cfg.get('local_proxy_port',10080)
+        if (type(port) is not int or not 1024<=port<=65535
+                or port in (cfg['listen_port'],cfg['backend_port'],cfg['api_port'])
+                or cfg['engine_mode']!='external' or cfg.get('product_mode') not in ('game','mixed')
+                or cfg.get('existing_proxy_port') or cfg.get('host_relay') or cfg.get('accelerator_proxy')):
+            raise ValueError('Shared core requires owned subscription, distinct loopback port and device sharing')
+        cfg['local_proxy_port']=port
     from .nodes import validate_policies
     cfg['node_policies'] = validate_policies(cfg.get('node_policies', {}))
     if type(cfg.get('live_node_controls', False)) is not bool:
