@@ -238,8 +238,19 @@ func sanitizeProfile(body []byte, cfg Config) (profile, error) {
 	if len(rules) > 20000 {
 		return out, errors.New("subscription exceeds 20000 rules")
 	}
-	if len(rules) == 0 {
+	for _, item := range rules {
+		if rule, ok := item.(string); !ok || len(rule) > 4096 {
+			return out, errors.New("invalid subscription rule")
+		}
+	}
+	// An explicit global mode never evaluates source rules. Keep the original
+	// inline nodes/groups, but do not parse inactive GEOIP/provider rules or
+	// trigger geodata acquisition for them. Rule mode still validates every rule.
+	if len(rules) == 0 || cfg.RoutingMode == "global" {
 		raw.Rule = []string{"MATCH," + defaultTarget}
+		if len(rules) > 0 && cfg.RoutingMode == "global" {
+			out.ignored = append(out.ignored, "rules (explicit global mode)")
+		}
 	} else {
 		for _, item := range rules {
 			rule, ok := item.(string)

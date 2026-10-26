@@ -35,6 +35,33 @@ func testBody() []byte {
 	return []byte(`{"proxies":[{"name":"A","type":"http","server":"8.8.8.8","port":8080}]}`)
 }
 
+func TestExplicitGlobalDoesNotLoadInactiveGeodata(t *testing.T) {
+	body := []byte(`{"proxies":[{"name":"A","type":"http","server":"8.8.8.8","port":8080}],"proxy-groups":[{"name":"Choice","type":"select","proxies":["A"]}],"rules":["GEOIP,CN,DIRECT","MATCH,Choice"]}`)
+	cfg := testConfig()
+	if _, err := sanitizeProfile(body, cfg); err == nil {
+		t.Fatal("rule mode accepted unavailable geodata")
+	}
+	cfg.RoutingMode = "global"
+	p, err := sanitizeProfile(body, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.raw.Mode != tunnel.Global || len(p.names) != 1 || p.names[0] != "A" || len(p.raw.Rule) != 1 || p.raw.Rule[0] != "MATCH,Choice" || !containsString(p.ignored, "rules (explicit global mode)") {
+		t.Fatal("explicit global lost nodes, groups, mode or disclosure")
+	}
+	parsed, err := MC.ParseRawConfig(p.raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.General.Mode != tunnel.Global || parsed.Proxies["Choice"] == nil {
+		t.Fatal("real core did not retain explicit global mode and source group")
+	}
+	invalid := []byte(`{"proxies":[{"name":"A","type":"http","server":"8.8.8.8","port":8080}],"rules":[123]}`)
+	if _, err := sanitizeProfile(invalid, cfg); err == nil {
+		t.Fatal("malformed rule list accepted")
+	}
+}
+
 // These tests run upstream config parsing, executor, rule matcher, selector and
 // HTTP adapters. Loopback endpoints are injected AFTER production sanitization
 // solely into the private fixture; no production endpoint allowlist is relaxed.

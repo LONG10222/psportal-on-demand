@@ -67,3 +67,9 @@ The existing Apple app and iOS binding remain unchanged. Android implementation 
 - [Android VPN lifecycle, consent, socket protection and routes](https://developer.android.com/develop/connectivity/vpn)
 - [Android foreground service types and prerequisites](https://developer.android.com/develop/background-work/services/fgs/service-types)
 - [Android Doze and App Standby limits](https://developer.android.com/training/monitoring-device-state/doze-standby)
+# 0.6.0 预览补充：共用订阅与流量
+
+安卓独立 App 的各用途共用一个内置 Mihomo 会话与当前导入的订阅。订阅用量来自该链接的服务端响应头，每 60 秒刷新，也可手动刷新；失败保留上次值与更新时间。实时流量仅统计本会话，按目标地址区分局域网与外网，不等于套餐扣费流量。
+
+对于内联节点中带有 GEOIP 规则的订阅，可以停止后明确选择“全局”分流。此时保留原节点、策略组和全局选择，只跳过全局模式不会使用的规则；规则模式仍会拒绝尚未支持的地理数据库规则。不会自动改变用户选择的分流模式。
+
