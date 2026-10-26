@@ -72,6 +72,14 @@ class Updates(unittest.TestCase):
         for key,value in [('digest',''),('browser_download_url','https://evil.example/p.ipk'),('state','new'),('size',999999999)]:
             r=self.release();r['assets'][0][key]=value;self.assertIsNone(updater.choose([r],'0.3.9'))
         r=self.release();r['assets'].pop();self.assertIsNone(updater.choose([r],'0.3.9'))
+    def test_official_asset_api_download_falls_back_without_using_a_mirror(self):
+        asset={'api_url':'https://api.github.com/repos/'+updater.REPO+'/releases/assets/123','url':'https://github.com/'+updater.REPO+'/releases/download/tag/package.ipk','size':2,'sha256':hashlib.sha256(b'OK').hexdigest()}
+        with patch('updater.request',return_value=({},b'OK')) as request:
+            self.assertEqual(updater.download_asset(asset),b'OK')
+            self.assertEqual(request.call_args.args[0],asset['api_url']);self.assertEqual(request.call_args.kwargs['headers'],{'Accept':'application/octet-stream'})
+        with patch('updater.request',side_effect=[TimeoutError(),({},b'OK')]) as request:
+            self.assertEqual(updater.download_asset(asset),b'OK')
+            self.assertEqual(request.call_args.args[0],asset['url'])
     def test_package_identity_and_unsafe_paths_are_rejected(self):
         sys.path.insert(0,str(ROOT/'scripts'))
         import importlib.util
@@ -85,7 +93,7 @@ class Updates(unittest.TestCase):
     def test_corrupt_download_does_not_pause_or_install(self):
         candidate=updater.choose([self.release()],'0.3.9');candidate['available']=True
         with tempfile.TemporaryDirectory() as d,patch('updater.ROOT',Path(d)),patch('updater.read',return_value={'available':True,'checked_at':updater.time.time()}),patch('updater.check',return_value=candidate),patch('updater.installed',return_value='0.3.9'),patch('updater.request',return_value=({},b'CORRUPT')),patch('updater.write'),patch('updater.subprocess.run') as run:
-            with self.assertRaises(ValueError):updater.install()
+            with self.assertRaises((ValueError,RuntimeError)):updater.install()
             run.assert_not_called()
     def test_install_runs_verified_paired_packages_preserves_configs(self):
         candidate=updater.choose([self.release()],'0.3.9');candidate['available']=True

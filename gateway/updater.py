@@ -50,7 +50,9 @@ def choose(releases,current):
             if not re.fullmatch(r'sha256:[a-f0-9]{64}',a.get('digest','')) or a.get('browser_download_url')!=prefix+a['name']:break
             v=a['name'][len(package)+1:-8]
             if not version(v) or (package=='luci-app-starpass' and v!=m[1]):break
-            packages[package]={'name':a['name'],'version':v,'url':a['browser_download_url'],'size':a['size'],'sha256':a['digest'][7:]}
+            asset_id=a.get('id')
+            api_url='https://api.github.com/repos/'+REPO+'/releases/assets/'+str(asset_id) if type(asset_id)==int and asset_id>0 else ''
+            packages[package]={'name':a['name'],'version':v,'url':a['browser_download_url'],'api_url':api_url,'size':a['size'],'sha256':a['digest'][7:]}
         if len(packages)==2:choices.append({'target':m[1],'packages':packages})
     return max(choices,key=lambda r:version(r['target'])) if choices else None
 
@@ -102,6 +104,21 @@ def backup():
     os.chmod(root/'private-before.tar.gz',0o600)
     return str(root)
 
+def download_asset(asset):
+    # GitHub's web download domain can time out on otherwise working networks.
+    # The official asset API redirects to the same GitHub CDN, without mirrors.
+    endpoints=([(asset['api_url'],{'Accept':'application/octet-stream'})] if asset.get('api_url') else [])+[(asset['url'],{})]
+    for attempt in range(2):
+        for url,headers in endpoints:
+            try:
+                _,data=request(url,headers=headers,limit=8*1024*1024,redirects=4,allowed=HOSTS)
+                if len(data)!=asset['size'] or hashlib.sha256(data).hexdigest()!=asset['sha256']:raise ValueError('Package integrity failed')
+                return data
+            except (OSError,ValueError):
+                pass
+        if attempt==0:time.sleep(1)
+    raise RuntimeError('Official package download failed')
+
 def install():
     old=read()
     if not old.get('available') or time.time()-old.get('checked_at',0)>3600:raise ValueError('Check for updates first')
@@ -116,8 +133,7 @@ def install():
         write(phase='downloading',message='正在下载并校验安装包')
         for package in PACKAGES:
             asset=candidate['packages'][package]
-            _,data=request(asset['url'],limit=8*1024*1024,redirects=4,allowed=HOSTS)
-            if len(data)!=asset['size'] or hashlib.sha256(data).hexdigest()!=asset['sha256']:raise ValueError('Package integrity failed')
+            data=download_asset(asset)
             validate_package(data,package,asset['version'])
             path=stage/asset['name'];path.write_bytes(data);os.chmod(path,0o600);paths.append(str(path))
         if shutil.disk_usage('/overlay').free<16*1024*1024:raise ValueError('Not enough persistent storage')
@@ -143,7 +159,11 @@ def worker(command):
             elif command=='install':install()
             else:raise ValueError('Invalid action')
         except Exception:
-            write(phase='error',message='更新未完成，请重试检查；若已开始安装，请保留备份并检查软件包状态',available=False)
+            phase=read().get('phase')
+            message={'checking':'检查更新失败，请检查到 GitHub API 的网络后重试',
+                     'downloading':'下载或校验未完成，尚未安装；请检查网络或依赖后重试',
+                     'installing':'安装未完成，请保留备份并检查软件包状态'}.get(phase,'更新未完成，请重新检查')
+            write(phase='error',message=message,available=False)
 
 def start(command):
     if command not in ('check','install'):raise ValueError('Invalid action')
