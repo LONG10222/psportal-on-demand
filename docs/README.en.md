@@ -34,3 +34,5 @@ Router and desktop wrapper: [MIT](../LICENSE). Mihomo-linked native engine and A
 Router: [game and accelerator workspaces](router-workspaces.en.md), one-button game sharing and read-only OpenClash subscription import.
 
 Router: [fixed entries and three modes](router-fixed-entry.en.md), direct forwarding when disabled and linked OpenClash controls.
+
+Router: [traffic, subscription usage and in-page upgrades](router-monitoring-updates.en.md).

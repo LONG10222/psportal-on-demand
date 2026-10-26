@@ -63,6 +63,7 @@ def build(destination, version):
                    'view/portalproxy/onboarding.htm', 'view/portalproxy/dashboard.htm'):
         add('luci/' + source, 'usr/lib/lua/luci/' + source, 0o644)
     add('luci/static/accelerator.js', 'www/luci-static/resources/starpass/accelerator_v2.js', 0o644)
+    add('luci/static/dashboard.js', 'www/luci-static/resources/starpass/dashboard_v4.js', 0o644)
     add('LICENSE', 'usr/share/licenses/starpass/LICENSE', 0o644)
     payload = tar_gz(entries)
     installed_size = len(gzip.decompress(payload))
@@ -82,7 +83,7 @@ Description: StarPass on-demand HTTP/TCP device sharing with optional OpenClash 
 [ -n "$IPKG_INSTROOT" ] && exit 0
 set -eu
 set --
-for path in etc/config/portalproxy etc/portalproxy usr/libexec/portalproxy etc/init.d/portalproxy etc/init.d/portalproxy-core etc/init.d/portalproxy-gateway etc/init.d/portalproxy-starpass usr/sbin/portalproxy usr/lib/lua/luci/controller/portalproxy.lua usr/lib/lua/luci/model/cbi/portalproxy.lua usr/lib/lua/luci/view/portalproxy www/luci-static/resources/starpass/accelerator_v2.js; do
+for path in etc/config/portalproxy etc/portalproxy usr/libexec/portalproxy etc/init.d/portalproxy etc/init.d/portalproxy-core etc/init.d/portalproxy-gateway etc/init.d/portalproxy-starpass usr/sbin/portalproxy usr/lib/lua/luci/controller/portalproxy.lua usr/lib/lua/luci/model/cbi/portalproxy.lua usr/lib/lua/luci/view/portalproxy www/luci-static/resources/starpass/accelerator_v2.js www/luci-static/resources/starpass/dashboard_v4.js; do
  [ ! -e "/$path" ] || set -- "$@" "$path"
 done
 if [ "$#" -gt 0 ]; then
@@ -103,7 +104,7 @@ set -eu
 chmod 600 /etc/config/portalproxy
 mkdir -p /etc/portalproxy/providers
 chmod 700 /etc/portalproxy /etc/portalproxy/providers /usr/libexec/portalproxy
-rm -f /tmp/luci-indexcache /tmp/luci-indexcache.*.json
+rm -f /tmp/luci-indexcache /tmp/luci-indexcache.*.json /tmp/luci-indexcache.*.lua /tmp/luci-modulecache/6C7563692E636F6E74726F6C6C65722E706F7274616C70726F7879
 if [ "$(uci -q get portalproxy.main.gateway_enabled)" = 1 ] && [ -n "$(uci -q get portalproxy.main.listen_ip)" ]; then
  /etc/init.d/portalproxy-gateway start >/dev/null 2>&1 || true
  /usr/sbin/portalproxy start >/dev/null 2>&1 || true
@@ -132,7 +133,7 @@ exit 0
 ''',
         'postrm': '''#!/bin/sh
 [ -n "$IPKG_INSTROOT" ] && exit 0
-rm -f /tmp/luci-indexcache /tmp/luci-indexcache.*.json
+rm -f /tmp/luci-indexcache /tmp/luci-indexcache.*.json /tmp/luci-indexcache.*.lua /tmp/luci-modulecache/6C7563692E636F6E74726F6C6C65722E706F7274616C70726F7879
 if [ "$PKG_UPGRADE" != 1 ]; then
  if [ ! -e /etc/config/portalproxy ] && [ -f /etc/portalproxy/config.preserved ]; then
   cp -p /etc/portalproxy/config.preserved /etc/config/portalproxy

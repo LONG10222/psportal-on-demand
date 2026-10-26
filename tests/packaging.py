@@ -72,17 +72,15 @@ class PackagingTests(unittest.TestCase):
                 self.assertEqual(archive.getmember('./etc/config/portalproxy').mode, 0o600)
                 self.assertIn(b"option enabled '0'", archive.extractfile('./etc/config/portalproxy').read())
 
-    def test_router_update_guidance_is_read_only_and_preserves_config(self):
+    def test_router_update_guidance_matches_one_click_package_flow(self):
         template = (ROOT / 'luci/view/portalproxy/onboarding.htm').read_text()
         section = template.split('<details class="starpass-updates">', 1)[1].split('</details>', 1)[0]
-        for expected in ['https://github.com/LONG10222/psportal-on-demand/releases',
-                         'referrerpolicy="no-referrer"', 'rel="noopener noreferrer"',
-                         '不执行在线更新检查', '固件和 CPU 架构',
-                         '核心由 OpenClash 更新', '可能含凭据',
-                         '不保证断电恢复', '不要清除配置']:
+        for expected in ['检查更新','一键安装更新','opkg','备份','暂停计时','核心由 OpenClash 更新']:
             self.assertIn(expected, section)
-        for forbidden in ['<script', '<form', 'onclick=', 'fetch(', 'XMLHttpRequest', '<%=', 'os.execute']:
-            self.assertNotIn(forbidden, section)
+        dashboard = (ROOT / 'luci/view/portalproxy/dashboard.htm').read_text()
+        self.assertIn('data-sp="check-update"', dashboard)
+        self.assertIn('data-sp="install-update"', dashboard)
+        self.assertNotIn('本页不执行在线更新检查', section)
 
     def test_shell_syntax(self):
         files = [ROOT / 'install.sh', ROOT / 'uninstall.sh', ROOT / 'files/portalproxy']

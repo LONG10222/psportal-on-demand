@@ -33,6 +33,7 @@ jobs:
           lua5.1 tests/status.lua
           lua5.1 tests/configure.lua
           lua5.1 tests/service_status.lua
+          lua5.1 tests/dashboard_api.lua
       - name: Xianniu router tests
         run: |
           cd integrations/xianniu-router
@@ -44,6 +45,7 @@ jobs:
           python3 tests/packaging.py
           python3 tests/coexistence.py
           python3 tests/gateway.py
+          python3 tests/monitoring.py
       - name: Verify StarPass icons and platform branding
         run: |
           python3 native/scripts/generate_brand_assets.py --verify
@@ -53,7 +55,7 @@ jobs:
           python3 scripts/build-router-source.py "$RUNNER_TEMP/starpass-router-source.tar.gz" > "$RUNNER_TEMP/starpass-router-source.sha256"
           python3 scripts/build-router-source.py "$RUNNER_TEMP/starpass-router-source-second.tar.gz"
           cmp "$RUNNER_TEMP/starpass-router-source.tar.gz" "$RUNNER_TEMP/starpass-router-source-second.tar.gz"
-          python3 scripts/build-router-ipk.py "$RUNNER_TEMP/luci-app-starpass.ipk" --version "0.3.5+git${PSPORTAL_SOURCE_COMMIT:0:12}-1" > "$RUNNER_TEMP/luci-app-starpass.sha256"
+          python3 scripts/build-router-ipk.py "$RUNNER_TEMP/luci-app-starpass.ipk" --version "0.4.0+git${PSPORTAL_SOURCE_COMMIT:0:12}-1" > "$RUNNER_TEMP/luci-app-starpass.sha256"
       - name: Upload reviewed router source installer
         uses: actions/upload-artifact@v4
         with:

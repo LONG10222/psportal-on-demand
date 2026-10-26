@@ -8,9 +8,8 @@
 <p>监听就绪或有连接不代表外网成功。请先验证网页，再测试目标游戏功能。HTTP/TCP 共享不提供游戏 UDP 或全设备路由。</p>
 <p>手动代理不是断网保护：部分安卓 HTTP 客户端在代理不可达时会回退直连，其他应用也可能忽略系统代理。</p>
 <p>流量包含协议头；时长属于本次监听会话。节点延迟来自历史检查，不是游戏延迟。应用、停止和运行中更新订阅可能中断连接。</p>
-<details class="starpass-updates"><summary>应用更新与配置保留</summary>
- <p>路由器使用手动更新。请从<a href="https://github.com/LONG10222/psportal-on-demand/releases" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">官方发布页</a>取得匹配固件和 CPU 架构的可核验路由器包；Android APK、桌面 ZIP 和 iOS 产物不能安装到路由器。</p>
- <p>更新前保存配置并停止共享，保留旧包用于回滚。已有 opkg 安装须用 opkg 升级，不用源码安装器覆盖。订阅缓存与配置保留；私有升级备份在 /etc/portalproxy-backups，可能含凭据，不要公开上传。</p>
- <p>源码安装器在可捕获写入失败时尝试恢复旧文件；备份不是系统快照，也不保证断电恢复。失败后保持共享停止，核对配置和恢复结果，再手动启动；不要清除配置或盲目重试。</p>
- <p>联动模式的核心由 OpenClash 更新。独立核心需单独核验架构和摘要。本页不执行在线更新检查，也不把网络失败显示成“最新版”。</p>
+<details class="starpass-updates"><summary>应用更新</summary>
+ <p>右上角点击“检查更新”，发现新正式版后点击“一键安装更新”。软路由会下载并校验配套安装包、备份配置，再通过 opkg 覆盖升级。</p>
+ <p>现有代理地址、订阅、设备备注和模式选择均保留。安装时连接可能短暂中断；鲜牛先停止并暂停计时，更新后由你重新开启。配置备份保存在 /etc/portalproxy-backups。</p>
+ <p>此入口更新星渡插件与配套鲜牛模块。核心由 OpenClash 更新。源码安装及非 opkg 固件请使用<a href="https://github.com/LONG10222/psportal-on-demand/releases" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">发布页</a>的对应安装方式。</p>
 </details>

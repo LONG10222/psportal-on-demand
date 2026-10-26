@@ -58,6 +58,13 @@
 .starpass-app .starpass-help-brand p { margin:4px 0 0; }
 .starpass-app .starpass-steps { padding-left:24px; }
 .starpass-app .starpass-steps li { margin:14px 0; }
+.starpass-app .sp-update { text-align:right; max-width:50%; }
+.starpass-app .sp-update small { display:block; margin-top:8px; overflow-wrap:anywhere; }
+.starpass-app .sp-traffic-grid,.starpass-app .sp-sub-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.starpass-app .sp-traffic-grid>div { background:var(--sp-soft); border-radius:9px; padding:14px; }
+.starpass-app .sp-traffic-grid h4 { margin:0 0 8px; }
+.starpass-app .sp-subscription { margin:10px 0 16px; border-bottom:1px solid var(--sp-edge); padding-bottom:12px; }
+.starpass-app small { color:var(--sp-note); }
 .starpass-app details details > summary { cursor:pointer; }
 @media(max-width:700px) {
  .starpass-app .starpass-card { padding:16px; }
@@ -66,6 +73,8 @@
  .starpass-app .cbi-value-field { margin:6px 0 0; }
  .starpass-app .starpass-brand { align-items:flex-start; }
  .starpass-app .starpass-tag { font-size:.8em; }
+ .starpass-app .sp-traffic-grid,.starpass-app .sp-sub-grid { grid-template-columns:1fr; }
+ .starpass-app .sp-update { max-width:55%; }
 }
 @media(prefers-color-scheme:dark) {
  .starpass-app { --sp-text:#eee9fc; --sp-note:#c1b8d8; --sp-card:#20213c; --sp-edge:#484274; --sp-soft:#292843; }
@@ -78,8 +87,8 @@
  <input type="hidden" name="cbi.submit" value="1" />
  <!-- Enter in a field saves; it must never implicitly start sharing. -->
  <button type="submit" name="cbid.portalproxy_ui.1._save" value="1" hidden tabindex="-1" aria-hidden="true">保存配置</button>
- <div class="cbi-map starpass-app" id="cbi-portalproxy_ui">
-  <div class="starpass-brand"><div><h2>星渡 StarPass</h2><p>游戏设备，按需联网。</p></div></div>
+ <div class="cbi-map starpass-app" id="cbi-portalproxy_ui" data-mode="<%=pcdata(self.portal_workspace)%>">
+  <div class="starpass-brand"><div><h2>星渡 StarPass</h2><p>游戏设备，按需联网。</p></div><div class="sp-update"><span>v<span data-sp="version">…</span></span> <button type="button" class="starpass-action" data-sp="check-update">检查更新</button><button type="button" class="starpass-action starpass-primary" data-sp="install-update" hidden>一键安装更新</button><small data-sp="update-status" role="status"></small></div></div>
   <% if self.message then %><div class="alert-message notice" role="status"><%=pcdata(self.message)%></div><% end %>
   <% if self.errmessage then %><div class="alert-message warning" role="alert"><%=pcdata(self.errmessage)%></div><% end %>
   <nav class="starpass-mode-tabs" aria-label="用途模式">
@@ -99,6 +108,17 @@
      <iframe title="OpenClash 原管理界面" loading="lazy" src="<%=url('admin','services','openclash')%>" style="width:100%;height:780px;border:0"></iframe>
     </details>
    </section>
+  <% end %>
+  <% if self.portal_workspace ~= 'accelerator' then %>
+  <section class="starpass-card"><h3>实时流量</h3>
+   <div class="sp-traffic-grid">
+    <div><h4>公网</h4><p>↑ 上传 <strong data-sp="external-upload">—</strong>　↓ 下载 <strong data-sp="external-download">—</strong></p><small>累计 ↑ <span data-sp="external-upload-total">—</span> / ↓ <span data-sp="external-download-total">—</span></small></div>
+    <div><h4>局域网</h4><p>↑ 上传 <strong data-sp="local-upload">—</strong>　↓ 下载 <strong data-sp="local-download">—</strong></p><small>累计 ↑ <span data-sp="local-upload-total">—</span> / ↓ <span data-sp="local-download-total">—</span></small></div>
+   </div><p data-sp="traffic-status" role="status">正在读取入口统计…</p>
+  </section>
+  <section class="starpass-card"><div class="starpass-brand"><h3>订阅用量</h3><button type="button" class="starpass-action" data-sp="subscriptions-refresh">刷新订阅信息</button></div>
+   <div data-sp="subscriptions">正在读取订阅…</div><p data-sp="subscription-status" role="status"></p><small>服务商账户用量与本机入口统计分别计算；页面轮询不会发起订阅请求。</small>
+  </section>
   <% end %>
   <div<% if self.portal_workspace ~= 'game' then %> hidden<% end %>>
    <section class="starpass-card starpass-game-home" aria-labelledby="starpass-overview-title">
@@ -140,6 +160,9 @@
 cbi_init();
 (function () {
  'use strict';
+ L.require('starpass.dashboard_v4').then(function(dashboard) {
+  dashboard.mount(document.getElementById('cbi-portalproxy_ui'), <%=require('luci.jsonc').stringify(url('admin','services','portalproxy','dashboard_api'))%>, <%=require('luci.jsonc').stringify(token)%>);
+ });
  var form = document.getElementById('starpass-form');
  var settings = document.getElementById('starpass-settings');
  var accelerator = document.getElementById('starpass-accelerator');

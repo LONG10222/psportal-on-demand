@@ -4,6 +4,7 @@ import argparse,asyncio,contextvars,ipaddress,json,os,signal,socket,struct,subpr
 from pathlib import Path
 sys.path.insert(0,'/usr/lib/xianniu-router')
 from starpass_http.proxy import ProxyServer,MAX_HEADER_BYTES
+from metrics import MeteredProxy
 from starpass_http.policy import Route,destination,DestinationDenied,ResolutionFailed
 from xianniu_router.dns import resolve_real
 
@@ -127,8 +128,12 @@ async def run(kind):
     if not net.is_private:raise ValueError('LAN subnet is required')
     port=int(option('portalproxy','main.listen_port','10081')) if kind=='shared' else int(option('xianniu-router','main.http_port','10082'))
     state=RouterState(kind);core=SwitchingCore(state)
-    server=ProxyServer({'listen_host':bind,'listen_port':port,'allowed_clients':['127.0.0.1'],
-        'allowed_networks':[str(net)],'destination_resolver':resolve,'request_timeout':120,'max_connections':128},core)
+    async def metered_resolve(host,port):
+        route=await resolve(host,port)
+        server.set_destination(route.kind)
+        return route
+    server=MeteredProxy({'listen_host':bind,'listen_port':port,'allowed_clients':['127.0.0.1'],
+        'allowed_networks':[str(net)],'destination_resolver':metered_resolve,'request_timeout':120,'max_connections':128},core)
     await server.start();event=asyncio.Event();loop=asyncio.get_running_loop()
     for sig in (signal.SIGTERM,signal.SIGINT):loop.add_signal_handler(sig,event.set)
     path=Path('/tmp/portalproxy/entry-'+kind+'.json');path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
@@ -143,7 +148,7 @@ async def run(kind):
                 for task in list(server._tasks):task.cancel()
                 await asyncio.gather(*list(server._tasks),return_exceptions=True)
             previous=current
-            value={'running':True,'route':state.route,'port':port,'updated_at':int(time.time()),'stats':server.snapshot()}
+            value={'running':True,'route':state.route,'port':port,'updated_at':int(time.time()),'stats':server.snapshot(),'traffic':server.meter.sample()}
             temp=path.with_suffix('.tmp');temp.write_text(json.dumps(value));os.chmod(temp,0o600);temp.replace(path)
             try:await asyncio.wait_for(event.wait(),.5)
             except asyncio.TimeoutError:pass

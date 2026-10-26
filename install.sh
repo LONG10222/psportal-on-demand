@@ -122,6 +122,7 @@ if [ -d "$ROOT/usr/lib/lua/luci" ]; then
     stage "$BASE/luci/model/cbi/portalproxy.lua" usr/lib/lua/luci/model/cbi/portalproxy.lua 644
     stage "$BASE/luci/view/portalproxy/onboarding.htm" usr/lib/lua/luci/view/portalproxy/onboarding.htm 644
     stage "$BASE/luci/view/portalproxy/dashboard.htm" usr/lib/lua/luci/view/portalproxy/dashboard.htm 644
+    stage "$BASE/luci/static/dashboard.js" www/luci-static/resources/starpass/dashboard_v4.js 644
     stage "$BASE/luci/static/accelerator.js" www/luci-static/resources/starpass/accelerator_v2.js 644
 fi
 # Preserve all installed project files, including old launchers and LuCI, not
@@ -130,7 +131,7 @@ set --
 for path in etc/config/portalproxy etc/portalproxy usr/libexec/portalproxy \
     etc/init.d/portalproxy etc/init.d/portalproxy-core etc/init.d/portalproxy-gateway etc/init.d/portalproxy-starpass usr/sbin/portalproxy \
     usr/lib/lua/luci/controller/portalproxy.lua usr/lib/lua/luci/model/cbi/portalproxy.lua \
-    usr/lib/lua/luci/view/portalproxy www/luci-static/resources/starpass/accelerator_v2.js; do
+    usr/lib/lua/luci/view/portalproxy www/luci-static/resources/starpass/accelerator_v2.js www/luci-static/resources/starpass/dashboard_v4.js; do
     [ ! -e "$ROOT/$path" ] || set -- "$@" "$path"
 done
 if [ "$#" -gt 0 ]; then
@@ -155,7 +156,7 @@ chmod 600 "$ROOT/etc/config/portalproxy"
 
 if [ -z "$ROOT" ]; then
     /etc/init.d/portalproxy-core disable
-    rm -f /tmp/luci-indexcache /tmp/luci-indexcache.*.json
+    rm -f /tmp/luci-indexcache /tmp/luci-indexcache.*.json /tmp/luci-indexcache.*.lua /tmp/luci-modulecache/6C7563692E636F6E74726F6C6C65722E706F7274616C70726F7879
     echo 'Installed. Run: portalproxy setup (choose standalone or openclash explicitly)'
     [ "$LINKED" = 0 ] || echo 'No core copied. Existing configuration was preserved; choose openclash in setup.'
 else

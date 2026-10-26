@@ -13,6 +13,8 @@
 
 ## 功能
 
+- **路由器面板**：内外网速度、订阅用量与到期时间，右上角一键更新。[使用说明](docs/router-monitoring-updates.zh-CN.md)。
+
 - **软路由固定入口**：游戏／星渡共用端口，加速器独立；关闭功能后继续直连。[三种模式与配置](docs/router-fixed-entry.zh-CN.md)。
 
 
