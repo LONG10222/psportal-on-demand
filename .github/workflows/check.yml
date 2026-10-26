@@ -55,7 +55,7 @@ jobs:
           python3 scripts/build-router-source.py "$RUNNER_TEMP/starpass-router-source.tar.gz" > "$RUNNER_TEMP/starpass-router-source.sha256"
           python3 scripts/build-router-source.py "$RUNNER_TEMP/starpass-router-source-second.tar.gz"
           cmp "$RUNNER_TEMP/starpass-router-source.tar.gz" "$RUNNER_TEMP/starpass-router-source-second.tar.gz"
-          python3 scripts/build-router-ipk.py "$RUNNER_TEMP/luci-app-starpass.ipk" --version "0.4.1+git${PSPORTAL_SOURCE_COMMIT:0:12}-1" > "$RUNNER_TEMP/luci-app-starpass.sha256"
+          python3 scripts/build-router-ipk.py "$RUNNER_TEMP/luci-app-starpass.ipk" --version "0.4.2+git${PSPORTAL_SOURCE_COMMIT:0:12}-1" > "$RUNNER_TEMP/luci-app-starpass.sha256"
       - name: Upload reviewed router source installer
         uses: actions/upload-artifact@v4
         with:

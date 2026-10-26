@@ -95,6 +95,12 @@ class Updates(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d,patch('updater.ROOT',Path(d)),patch('updater.read',return_value={'available':True,'checked_at':updater.time.time()}),patch('updater.check',return_value=candidate),patch('updater.installed',return_value='0.3.9'),patch('updater.request',return_value=({},b'CORRUPT')),patch('updater.write'),patch('updater.subprocess.run') as run:
             with self.assertRaises((ValueError,RuntimeError)):updater.install()
             run.assert_not_called()
+    def test_idle_accelerator_does_not_require_account_refresh(self):
+        with patch('xianniu_router.manager.Manager') as manager:
+            manager.return_value.finish.return_value={'stopped':True,'billing':'paid','time_paused':False}
+            self.assertTrue(updater.quiesce_accelerator()['stopped'])
+            manager.return_value.member.assert_not_called();manager.return_value.member_pause.assert_not_called()
+            manager.return_value.finish.assert_called_once()
     def test_install_runs_verified_paired_packages_preserves_configs(self):
         candidate=updater.choose([self.release()],'0.3.9');candidate['available']=True
         for asset in candidate['packages'].values():asset['size']=2;asset['sha256']=hashlib.sha256(b'OK').hexdigest()
@@ -103,7 +109,7 @@ class Updates(unittest.TestCase):
             events.append(args)
             if args[:2]==['opkg','install']:versions['luci-app-starpass']='0.4.0'
             return Mock(returncode=0)
-        with tempfile.TemporaryDirectory() as d,patch('updater.ROOT',Path(d)),patch('updater.read',return_value={'available':True,'checked_at':updater.time.time()}),patch('updater.check',return_value=candidate),patch('updater.installed',side_effect=lambda p:versions[p]),patch('updater.request',return_value=({},b'OK')),patch('updater.validate_package'),patch('updater.write') as write,patch('updater.backup',return_value='/private/backup'),patch('updater.shutil.disk_usage',return_value=Mock(free=100000000)),patch('control.pause_accelerator') as pause,patch('updater.subprocess.run',side_effect=run):
+        with tempfile.TemporaryDirectory() as d,patch('updater.ROOT',Path(d)),patch('updater.read',return_value={'available':True,'checked_at':updater.time.time()}),patch('updater.check',return_value=candidate),patch('updater.installed',side_effect=lambda p:versions[p]),patch('updater.request',return_value=({},b'OK')),patch('updater.validate_package'),patch('updater.write') as write,patch('updater.backup',return_value='/private/backup'),patch('updater.shutil.disk_usage',return_value=Mock(free=100000000)),patch('updater.quiesce_accelerator') as pause,patch('updater.subprocess.run',side_effect=run):
             updater.install();pause.assert_called_once();self.assertEqual(write.call_args.kwargs['phase'],'done')
             self.assertEqual(events[0][:3],['opkg','--noaction','install']);self.assertEqual(events[1][:2],['opkg','install'])
             self.assertEqual(len(events[1]),4)

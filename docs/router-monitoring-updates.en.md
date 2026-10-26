@@ -26,7 +26,7 @@ Missing fields remain unavailable. A reported `total=0` means unlimited allowanc
 
 The task runs on the router and survives a browser reload. It updates only `luci-app-starpass` and its paired `xianniu-router` package through opkg. It does not update the firmware, unrelated plugins or the OpenClash core.
 
-Proxy endpoints, subscriptions, MAC-based notes and saved modes are preserved. Enabled Game/StarPass services resume their saved state. Xianniu is stopped and its paid clock must be confirmed paused before replacement; paid acceleration stays paused afterward. Existing connections briefly disconnect.
+Proxy endpoints, subscriptions, MAC-based notes and saved modes are preserved. Enabled Game/StarPass services resume their saved state. An active local Xianniu session is stopped, and paid-session suspension must be confirmed before replacement. With no active session, a valid account is not required and other clients’ account clocks are untouched. Paid acceleration is not resumed afterward. Existing connections briefly disconnect.
 
 A failed update reports an error and retains a private backup at `/etc/portalproxy-backups/update-*`. Source installations and apk-based firmware continue to use their original installation procedure.
 

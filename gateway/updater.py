@@ -119,6 +119,12 @@ def download_asset(asset):
         if attempt==0:time.sleep(1)
     raise RuntimeError('Official package download failed')
 
+def quiesce_accelerator():
+    # Only stop and pause this router's owned session. An idle/unconfigured
+    # accelerator must not require a valid account to update the plugin.
+    from xianniu_router.manager import Manager
+    return Manager().finish()
+
 def install():
     old=read()
     if not old.get('available') or time.time()-old.get('checked_at',0)>3600:raise ValueError('Check for updates first')
@@ -139,8 +145,7 @@ def install():
         if shutil.disk_usage('/overlay').free<16*1024*1024:raise ValueError('Not enough persistent storage')
         # Dependency failures are caught before touching running services.
         subprocess.run(['opkg','--noaction','install']+paths,check=True,capture_output=True,timeout=60)
-        from control import pause_accelerator
-        pause_accelerator()  # Paid clock must be confirmed paused before replacement.
+        quiesce_accelerator()  # Active paid sessions confirm stop and account pause.
         location=backup()
         write(phase='installing',message='备份完成，正在安装；代理连接可能短暂中断',backup=location)
         subprocess.run(['opkg','install']+paths,check=True,capture_output=True,timeout=180)
