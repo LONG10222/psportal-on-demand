@@ -695,8 +695,10 @@ class DesktopView:
             raise ValueError('invalid page')
         application=getattr(self,'app',None)
         if application is not None and page!='Workspaces':
+            if getattr(application,'workspace_hub',None):application.workspace_hub.cancel_preparation()
             application._workspace_network=None
             application._workspace_network_allow_subnet=False
+            application._workspace_target=None
         if page=='Games' and application is not None and application.product_mode()!='accelerator':
             page='Overview'
         if self.page != page:
@@ -704,7 +706,8 @@ class DesktopView:
         self.page = page
         if page=='Workspaces' and application is not None and getattr(application,'workspace_hub',None) is None:
             from .workspace_hub import WorkspaceHub
-            application.workspace_hub=WorkspaceHub(application,self.frames['Workspaces'])
+            application.workspace_hub=WorkspaceHub(application,self.scroll_page(self.frames['Workspaces'],'Workspaces'))
+        if page=='Workspaces' and application is not None:application.workspace_hub.sync_mode()
         if page=='Games' and application is not None and getattr(application,'games_hub',None) is None:
             if sys.platform=='win32':
                 from .games_hub import GamesHub
@@ -948,9 +951,9 @@ class DesktopView:
                 widget.pack(side='left', padx=(0, 8)) if selected != 'host' else widget.pack_forget()
         for mode, button in self.product_mode_buttons.items():
             button.configure(text=self.tr(product_modes.LABELS[mode]),
-                state='normal' if idle and (accelerator_mode or mode == 'accelerator' or not linked or mode == 'game') else 'disabled')
+                state='normal' if idle and (accelerator_mode or mode == 'accelerator' or not linked or mode in ('game','mixed')) else 'disabled')
         self.product_mode_note.set(self.tr(product_modes.NOTES['accelerator']
-            if accelerator_mode else 'Linked proxy supports game mode only. Other modes remain in the existing Clash client.'
+            if accelerator_mode else 'Linked proxy supports Game and Mixed modes. Nodes remain managed in the existing client.'
             if linked else product_modes.NOTES.get(product_mode, product_modes.NOTES['game'])))
         self.start_var.set(self.tr('Start listener' if self.advanced else 'Start sharing'))
         if accelerator_mode:

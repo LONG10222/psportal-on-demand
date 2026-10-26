@@ -19,7 +19,7 @@ class ExistingProxyConfigTests(unittest.TestCase):
             config.validate(dict(raw,product_mode='mixed'),'/unused.json')
         mixed=dict(raw,product_mode='mixed',allowed_clients=['192.168.50.3','192.168.50.2'])
         self.assertEqual(config.validate(mixed,'/unused.json')['allowed_clients'],mixed['allowed_clients'])
-        with self.assertRaisesRegex(ValueError,'game mode only'):
+        with self.assertRaisesRegex(ValueError,'Game and Mixed'):
             config.validate(dict(raw,product_mode='clash'),'/unused.json')
     def test_clash_cache_reader_returns_only_active_accounting_without_writing(self):
         with tempfile.TemporaryDirectory() as tmp:

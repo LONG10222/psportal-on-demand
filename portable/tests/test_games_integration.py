@@ -203,9 +203,10 @@ class IntegratedGamesTests(unittest.TestCase):
 
     def home(self):
         network={'host':'192.168.50.5','interface':'fixture','subnet':'192.168.50.0/24','clients':['192.168.50.8']}
-        with patch('portalproxy.windows_network.inspect',return_value={'lan':network,'hotspot':{'state':'Off','network':None}}):
-            self.app.view.show('Workspaces')
-            self.pump_until(lambda:not self.app.workspace_hub.detecting)
+        p=patch('portalproxy.windows_network.inspect',return_value={'lan':network,'hotspot':{'state':'Off','network':None}})
+        p.start();self.patches.append(p)
+        self.app.view.show('Workspaces')
+        self.pump_until(lambda:not self.app.workspace_hub.detecting)
         return self.app.workspace_hub
 
     def test_windows_home_prepares_clash_mixed_sharing_without_replacing_saved_subscription(self):
@@ -215,7 +216,8 @@ class IntegratedGamesTests(unittest.TestCase):
         self.assertFalse(home.source.winfo_manager())
         self.assertTrue(home.linked.winfo_manager())
         with patch.object(self.app,'use_existing_proxy') as linked:
-            home.toggle();linked.assert_called_once_with(mode='mixed')
+            home.toggle();self.pump_until(lambda:linked.called)
+            linked.assert_called_once_with(mode='mixed')
         self.assertEqual(self.app._workspace_network['host'],'192.168.50.5')
         self.assertEqual(self.path.read_bytes(),self.original)
 
@@ -223,7 +225,8 @@ class IntegratedGamesTests(unittest.TestCase):
         home=self.home();home.target.set('Windows 热点')
         values={k:v.get() for k,v in self.app.vars.items()}
         with patch.object(self.app,'quick_start') as start:
-            home.toggle();start.assert_not_called()
+            home.toggle();self.pump_until(lambda:not home.pending_start)
+            start.assert_not_called()
         self.assertIn('开启 Windows 热点',home.state.get())
         self.assertEqual({k:v.get() for k,v in self.app.vars.items()},values)
 
@@ -251,6 +254,99 @@ class IntegratedGamesTests(unittest.TestCase):
             self.assertFalse(self.app._configure_lan(commit=False))
         error.assert_called_once()
         self.assertEqual(self.app.vars['allowed_clients'].get(),original)
+
+    def test_start_rechecks_current_network_instead_of_using_cached_address(self):
+        home=self.home();home.select('clash')
+        current={'host':'192.168.60.5','interface':'new','subnet':'192.168.60.0/24','clients':['192.168.60.8']}
+        with patch('portalproxy.windows_network.inspect',return_value={'lan':current}),patch.object(self.app,'use_existing_proxy') as linked:
+            home.toggle();self.pump_until(lambda:linked.called)
+        self.assertEqual(self.app._workspace_network['host'],'192.168.60.5')
+
+    def test_cancel_or_leave_during_detection_never_starts_from_late_result(self):
+        home=self.home();home.select('clash')
+        for navigate in (False,True):
+            self.app.view.show('Workspaces');gate=threading.Event()
+            def delayed():gate.wait(2);return home.inventory
+            with patch('portalproxy.windows_network.inspect',side_effect=delayed),patch.object(self.app,'use_existing_proxy') as linked:
+                home.toggle();self.assertIsNotNone(home.pending_start)
+                if navigate:self.app.view.show('Overview')
+                else:home.toggle()
+                gate.set();self.pump_until(lambda:not home.detecting)
+                linked.assert_not_called()
+            self.assertIsNone(self.app.backend.process)
+            self.assertEqual(self.path.read_bytes(),self.original)
+
+    def test_accelerator_home_hides_unrelated_source_and_network_controls(self):
+        home=self.home();home.select('accelerator')
+        self.app.view.show('Workspaces');self.root.update()
+        self.assertEqual(home.selected,'accelerator')
+        self.assertFalse(home.source.winfo_manager());self.assertFalse(home.network.winfo_manager())
+        self.assertEqual(home.action.cget('text'),'返回游戏库')
+        with patch.object(self.app,'open_game_accelerator') as open_game:home.toggle();open_game.assert_called_once()
+
+    def test_saved_hotspot_does_not_fall_back_to_lan_when_hotspot_is_off(self):
+        self.app.raw['workspace_target']='hotspot';home=self.home()
+        self.assertEqual(home.target.get(),'Windows 热点')
+        home.select('clash')
+        with patch.object(self.app,'use_existing_proxy') as linked:
+            home.toggle();self.pump_until(lambda:not home.pending_start);linked.assert_not_called()
+        self.assertIn('开启 Windows 热点',home.state.get())
+
+    def test_local_only_configuration_stays_local_and_has_local_instructions(self):
+        self.app.set_product_mode('clash');home=self.home();self.root.update()
+        self.assertEqual(home.target.get(),'仅此电脑')
+        self.assertFalse(home.allow_check.winfo_manager());self.assertFalse(home.network_label.winfo_manager())
+        self.assertEqual(home.action.cget('text'),'启动本机代理')
+
+    def test_empty_independent_source_does_not_silently_link_clash(self):
+        home=self.home();home.select('game')
+        with patch.object(self.app,'quick_start') as start,patch.object(self.app,'use_existing_proxy') as linked:
+            home.toggle();self.pump_until(lambda:not home.pending_start)
+            start.assert_not_called();linked.assert_not_called()
+        self.assertIn('导入订阅',home.state.get())
+
+    def test_return_from_advanced_mode_change_updates_home_selection(self):
+        home=self.home();self.app.view.show('Overview');self.app.set_product_mode('game')
+        self.app.view.show('Workspaces');self.assertEqual(home.selected,'game')
+        self.app.view.show('Overview');self.app.set_product_mode('clash')
+        self.app.view.show('Workspaces');self.assertEqual(home.target.get(),'仅此电脑')
+
+    def test_core_preparation_rechecks_hotspot_and_navigation_cancels_start(self):
+        home=self.home();home.target.set('Windows 热点')
+        self.app._start_after_setup='workspace'
+        with patch.object(self.app,'quick_start') as start:
+            self.app._resume_after_core_setup();self.pump_until(lambda:not home.pending_start)
+            start.assert_not_called()
+            self.assertIn('开启 Windows 热点',home.state.get())
+            self.app._start_after_setup='workspace'
+            self.app.view.show('Overview');self.app._resume_after_core_setup()
+            start.assert_not_called()
+        self.assertFalse(self.app._start_after_setup)
+
+    def test_unlink_recovers_subscription_and_local_target(self):
+        self.app.raw['workspace_target']='local';self.app.set_product_mode('clash')
+        home=self.home();original=self.app.vars['subscription_url'].get()
+        home.select('clash')
+        plan=({'listen_host':'192.168.50.5','allowed_clients':'192.168.50.8','listen_port':'10081','backend_port':'10082','api_port':'10090'},'192.168.50.0/24',False)
+        with patch.object(self.app,'_configure_lan',return_value=plan),patch.object(self.app,'start',return_value=True),patch('portalproxy.existing_proxy.read_clash_accounting',return_value=None):
+            self.app._link_existing_proxy({'host':'127.0.0.1','port':17897},mode='mixed')
+        home.select('subscription')
+        self.assertEqual(home.target.get(),'仅此电脑')
+        self.assertEqual(self.app.product_mode(),'clash')
+        self.assertEqual(self.app.vars['subscription_url'].get(),original)
+        self.assertNotIn('existing_proxy_port',self.app.raw)
+
+
+class InitialPageTests(unittest.TestCase):
+    def test_windows_default_is_home_and_explicit_overview_is_honored(self):
+        from portalproxy.desktop import main
+        with patch('tkinter.Tk'),patch('portalproxy.desktop.DesktopApp') as cls,patch('portalproxy.desktop.sys.platform','win32'):
+            cls.return_value.product_mode.return_value='accelerator'
+            main([]);cls.return_value.view.show.assert_called_once_with('Workspaces')
+            cls.return_value.reset_mock()
+            main(['--page','overview']);cls.return_value.view.show.assert_not_called()
+            cls.return_value.reset_mock()
+            main(['--page','games']);cls.return_value.open_game_accelerator.assert_called_once()
 
 
 if __name__=='__main__':unittest.main()

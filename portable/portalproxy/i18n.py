@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 
 ZH = {
+    'Linked proxy supports Game and Mixed modes. Nodes remain managed in the existing client.':'联动支持设备专用或设备与本机共享；节点仍在原客户端管理。',
     'Workspaces':'工作台',
     'Choose a purpose, connect a device, then start sharing.':'选择用途，确认接入网络，再启动共享。',
     'Games':'游戏',

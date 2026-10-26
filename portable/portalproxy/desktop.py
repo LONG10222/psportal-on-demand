@@ -391,6 +391,7 @@ class DesktopApp:
         self.games_hub = None
         self.workspace_hub = None
         self._workspace_network = None
+        self._workspace_target = None
         self._workspace_network_allow_subnet = False
         from .existing_proxy import detect_system_proxy, read_clash_accounting
         self.existing_proxy = detect_system_proxy()
@@ -675,7 +676,7 @@ class DesktopApp:
                 if key == 'product_mode' and value not in product_modes.MODES:
                     continue
                 self.vars[key].set(value)
-            for key in ('source_provenance', 'node_policies', 'host_profile_overlay'):
+            for key in ('source_provenance', 'node_policies', 'host_profile_overlay', 'workspace_target'):
                 if key in previous:
                     self.raw[key] = copy.deepcopy(previous[key])
             self.raw['product_mode'] = self.product_mode()
@@ -876,7 +877,9 @@ class DesktopApp:
         action = getattr(self, '_start_after_setup', False)
         self._start_after_setup = False
         if action and not self.closing:
-            self.start() if action == 'manual' else self.quick_start()
+            if action=='workspace':
+                if self.view.page=='Workspaces' and self.workspace_hub:self.workspace_hub.toggle()
+            else:self.start() if action == 'manual' else self.quick_start()
 
 
     def open_clash(self):
@@ -1047,7 +1050,7 @@ class DesktopApp:
             self.view.refresh()
             return
         if self.vars['engine_mode'].get() == 'external' and not Path(self.vars['core_path'].get()).is_file():
-            self.setup_core(start_after='quick')
+            self.setup_core(start_after='workspace' if getattr(self,'_workspace_target',None) else 'quick')
             return
         plan = self._configure_lan(commit=False)
         if not plan:
@@ -1308,7 +1311,7 @@ class DesktopApp:
                         if key in ('profile_file', 'subscription_file', 'subscription_url', 'engine_mode')}
             previous['product_mode'] = previous_mode or 'game'
             previous.update({key: copy.deepcopy(self.raw[key]) for key in
-                             ('source_provenance', 'node_policies', 'host_profile_overlay') if key in self.raw})
+                             ('source_provenance', 'node_policies', 'host_profile_overlay', 'workspace_target') if key in self.raw})
             self.raw['linked_previous_source'] = previous
         self.vars['engine_mode'].set('external')
         self.vars['profile_file'].set('')
@@ -1588,6 +1591,8 @@ class DesktopApp:
 
     def collect(self) -> dict:
         values = dict(self.raw)
+        if getattr(self,'_workspace_target',None) in ('lan','hotspot','local'):
+            values['workspace_target']=self._workspace_target
         for key, variable in self.vars.items():
             value = variable.get().strip()
             if key in INTEGER_FIELDS:
@@ -1629,7 +1634,7 @@ class DesktopApp:
             allowed_modes = ('game', 'accelerator') if (values.get('host_relay') == 'steam'
                 or values.get('existing_proxy_provider') == 'xianniu') else ('game','mixed')
             if (values.get('existing_proxy_port') or values.get('host_relay') == 'steam') and values.get('product_mode') not in allowed_modes:
-                raise ValueError('Linked proxy supports game mode only. Other modes remain in the existing Clash client.')
+                raise ValueError('Linked proxy supports Game and Mixed modes. Nodes remain managed in the existing client.')
             values['product_lan_automatic'] = getattr(self, '_lan_automatic', product_modes.infer_automatic(self.raw))
             values = product_modes.effective_config(values)
         return values
@@ -1874,8 +1879,8 @@ def main(argv=None) -> int:
         return 2
     application=DesktopApp(root, args.config)
     if args.page=='games':application.open_game_accelerator()
-    elif application.product_mode()=='accelerator':application.view.show('Games')
     elif args.page=='home' and sys.platform=='win32':application.view.show('Workspaces')
+    elif args.page=='home' and application.product_mode()=='accelerator':application.view.show('Games')
     root.mainloop()
     return 0
 

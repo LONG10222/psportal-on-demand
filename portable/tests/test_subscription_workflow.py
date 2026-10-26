@@ -317,7 +317,10 @@ class SubscriptionWorkflowTests(unittest.TestCase):
         self.app.raw['existing_proxy_port'] = 17897
         self.app.vars['product_mode'].set('game')
         self.app.view.refresh(); self.root.update()
-        for mode in ('mixed', 'clash'):
+        self.app.set_product_mode('mixed')
+        self.assertEqual(self.app.product_mode(),'mixed')
+        self.app.set_product_mode('game')
+        for mode in ('clash',):
             button = self.app.view.product_mode_buttons[mode]
             self.assertTrue(button.instate(['disabled']))
             button.invoke()
@@ -325,7 +328,7 @@ class SubscriptionWorkflowTests(unittest.TestCase):
             self.app.set_product_mode(mode)
             self.assertEqual(self.app.product_mode(), 'game')
         self.app.vars['product_mode'].set('clash')
-        with self.assertRaisesRegex(ValueError, 'game mode only'):
+        with self.assertRaisesRegex(ValueError, 'Game and Mixed'):
             self.app.collect()
         self.app.vars['product_mode'].set('game')
         self.app.unlink_proxy()

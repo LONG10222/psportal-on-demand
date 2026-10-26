@@ -91,7 +91,7 @@ def validate(raw, path):
             if cfg.get('product_mode', 'game') not in ('accelerator', 'game'):
                 raise ValueError('Xianniu proxy sharing supports accelerator mode or legacy game mode only')
         elif cfg.get('product_mode', 'game') not in ('game','mixed'):
-            raise ValueError('Linked proxy supports game mode only. Other modes remain in the existing Clash client.')
+            raise ValueError('Linked proxy supports Game and Mixed modes. Nodes remain managed in the existing client.')
     if cfg['engine_mode'] not in ('external', 'embedded'):
         raise ValueError('engine_mode must be external or embedded')
     profile = cfg.get('profile_file')
