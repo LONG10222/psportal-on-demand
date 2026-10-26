@@ -28,6 +28,11 @@ class SubscriptionWorkflowTests(unittest.TestCase):
         self.app.set_language('zh')
         self.addCleanup(self.close_window)
         self.url = 'https://fixture.example/subscription?token=never-log-this'
+        # These checks count full configuration downloads. Accounting HEAD
+        # refresh has its own fixtures and must not enter the import mock.
+        self.app.subscription_monitor.loader = lambda url: {
+            'upload': 1, 'download': 2, 'total': 100, 'expire': 2000000000,
+            'updated_at': int(time.time())}
         self.download = Mock(side_effect=self.seed)
         self.patch_fetch = patch('portalproxy.core.download_subscription', self.download)
         self.patch_fetch.start(); self.addCleanup(self.patch_fetch.stop)
