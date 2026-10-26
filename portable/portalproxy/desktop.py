@@ -389,6 +389,9 @@ class DesktopApp:
         self.engine_inputs = {}
         self.profile_selection_inputs = []
         self.games_hub = None
+        self.workspace_hub = None
+        self._workspace_network = None
+        self._workspace_network_allow_subnet = False
         from .existing_proxy import detect_system_proxy, read_clash_accounting
         self.existing_proxy = detect_system_proxy()
         self.clash_info = read_clash_accounting() if self.existing_proxy else None
@@ -535,6 +538,17 @@ class DesktopApp:
         if self.product_mode()!='accelerator':self.set_product_mode('accelerator')
         if self.product_mode()=='accelerator':self.view.show('Games')
 
+    def open_workspace(self,key):
+        hub=self.games_hub
+        if self.backend.process is not None or (hub and hub.running):
+            if self.workspace_hub:self.workspace_hub.state.set('请先停止当前通道，再切换用途。')
+            return
+        self.view.show('Workspaces')
+        self.workspace_hub.select(key)
+
+    def show_connection_result(self):
+        self.view.show('Workspaces' if getattr(self,'workspace_hub',None) and getattr(self.view,'page',None)=='Workspaces' else 'Overview' if self.product_mode()=='clash' else 'LAN sharing')
+
     def set_product_mode(self, mode):
         previous = getattr(self, '_selected_product_mode', self.raw.get('product_mode', 'game'))
         hub=getattr(self,'games_hub',None)
@@ -555,7 +569,7 @@ class DesktopApp:
             self._enter_accelerator(previous)
         elif previous == 'accelerator' and mode != 'accelerator':
             self._leave_accelerator()
-        if mode != 'accelerator' and self.raw.get('existing_proxy_port') and mode != 'game':
+        if mode != 'accelerator' and self.raw.get('existing_proxy_port') and mode not in ('game','mixed'):
             mode = 'game'
         self.vars['product_mode'].set(mode)
         self._selected_product_mode = mode
@@ -1064,7 +1078,7 @@ class DesktopApp:
             if self.start() is False:
                 self._rollback_quick_start()
                 return
-            self.view.show('Overview' if self.product_mode() == 'clash' else 'LAN sharing')
+            self.show_connection_result()
             return
 
     def _configure_lan(self, reserved=(), *, commit=True):
@@ -1077,11 +1091,16 @@ class DesktopApp:
             else:
                 # Quick setup follows the currently active physical network.
                 # Advanced Start still uses the manually configured bind host.
-                network = discover_lan()
+                network = getattr(self,'_workspace_network',None) or discover_lan()
                 if mode:
                     clients = [part.strip() for part in self.vars['allowed_clients'].get().split(',') if part.strip()]
                     automatic = (not clients or getattr(self, '_lan_automatic', product_modes.infer_automatic(self.raw)))
+                    if getattr(self,'_workspace_network',None) and getattr(self,'_workspace_network_allow_subnet',False):automatic=True
                     if clients and not automatic:
+                        if getattr(self,'_workspace_network',None):
+                            import ipaddress
+                            if any(ipaddress.ip_address(c) not in ipaddress.ip_network(network['subnet']) for c in clients):
+                                raise ValueError('原设备名单不属于这个网络；请更新设备名单，或明确勾选允许所选网络中的设备。')
                         network = dict(network, clients=clients)
             if mode:
                 product_modes.listener_policy(mode, network['host'], network['clients'])
@@ -1127,7 +1146,7 @@ class DesktopApp:
         self.view.setup_network = subnet
         self.view.refresh()
 
-    def use_existing_proxy(self):
+    def use_existing_proxy(self, mode=None):
         if self.importing or getattr(self, 'setting_up', False) or self.backend.process is not None: return
         if getattr(self, 'xianniu_checking', False): return
         from .existing_proxy import detect_system_proxy
@@ -1136,7 +1155,8 @@ class DesktopApp:
             from tkinter import messagebox
             messagebox.showinfo(self._t('Existing proxy'), self._t('No active loopback HTTP system proxy was detected.'), parent=self.root)
             return
-        self._link_existing_proxy(self.existing_proxy)
+        if mode is None:self._link_existing_proxy(self.existing_proxy)
+        else:self._link_existing_proxy(self.existing_proxy,mode=mode)
 
     def use_steam_host(self):
         if hasattr(self.view, 'accelerator_source_var'):
@@ -1260,7 +1280,7 @@ class DesktopApp:
         finally:
             self._xianniu_starting = False
 
-    def _link_existing_proxy(self, endpoint, provider='system'):
+    def _link_existing_proxy(self, endpoint, provider='system', mode=None):
         from .existing_proxy import read_clash_accounting
         port = endpoint['port']
         try:
@@ -1272,7 +1292,7 @@ class DesktopApp:
         self._quick_rollback = snapshot
         previous_mode = self.vars['product_mode'].get() if 'product_mode' in self.vars else None
         if previous_mode is not None:
-            target_mode = 'accelerator' if provider == 'xianniu' else 'game'
+            target_mode = 'accelerator' if provider == 'xianniu' else 'mixed' if mode=='mixed' else 'game'
             if self.product_mode() != target_mode and hasattr(self, '_selected_product_mode'):
                 self.set_product_mode(target_mode)
             else:
@@ -1309,7 +1329,7 @@ class DesktopApp:
         if self.start() is False:
             self._rollback_quick_start()
             return
-        self.view.show('Overview' if self.product_mode() == 'clash' else 'LAN sharing')
+        self.show_connection_result()
 
     def inspect_provider(self):
         from tkinter import messagebox
@@ -1607,7 +1627,7 @@ class DesktopApp:
             values['live_node_controls'] = True
         if 'product_mode' in self.vars:
             allowed_modes = ('game', 'accelerator') if (values.get('host_relay') == 'steam'
-                or values.get('existing_proxy_provider') == 'xianniu') else ('game',)
+                or values.get('existing_proxy_provider') == 'xianniu') else ('game','mixed')
             if (values.get('existing_proxy_port') or values.get('host_relay') == 'steam') and values.get('product_mode') not in allowed_modes:
                 raise ValueError('Linked proxy supports game mode only. Other modes remain in the existing Clash client.')
             values['product_lan_automatic'] = getattr(self, '_lan_automatic', product_modes.infer_automatic(self.raw))
@@ -1838,7 +1858,7 @@ class DesktopApp:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description='StarPass desktop application')
     parser.add_argument('--config', type=Path, default=default_config_path())
-    parser.add_argument('--page',choices=('overview','games'),default='overview')
+    parser.add_argument('--page',choices=('home','overview','games'),default='home')
     args = parser.parse_args(argv)
     try:
         import tkinter as tk
@@ -1855,6 +1875,7 @@ def main(argv=None) -> int:
     application=DesktopApp(root, args.config)
     if args.page=='games':application.open_game_accelerator()
     elif application.product_mode()=='accelerator':application.view.show('Games')
+    elif args.page=='home' and sys.platform=='win32':application.view.show('Workspaces')
     root.mainloop()
     return 0
 

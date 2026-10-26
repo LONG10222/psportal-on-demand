@@ -90,7 +90,7 @@ def validate(raw, path):
         if cfg.get('existing_proxy_provider') == 'xianniu':
             if cfg.get('product_mode', 'game') not in ('accelerator', 'game'):
                 raise ValueError('Xianniu proxy sharing supports accelerator mode or legacy game mode only')
-        elif cfg.get('product_mode', 'game') != 'game':
+        elif cfg.get('product_mode', 'game') not in ('game','mixed'):
             raise ValueError('Linked proxy supports game mode only. Other modes remain in the existing Clash client.')
     if cfg['engine_mode'] not in ('external', 'embedded'):
         raise ValueError('engine_mode must be external or embedded')

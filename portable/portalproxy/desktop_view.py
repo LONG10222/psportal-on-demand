@@ -19,7 +19,8 @@ SUBTITLES = dict(zip(PAGES, (
     'Original diagnostics, with sensitive values redacted.',
     'Devices using this proxy, grouped by source IP.',
 )))
-PAGES = ('Overview','Games') + PAGES[1:]
+PAGES = ('Workspaces','Overview','Games') + PAGES[1:]
+SUBTITLES['Workspaces']='Choose a purpose, connect a device, then start sharing.'
 SUBTITLES['Games']='Choose a game accelerator without changing other StarPass modes.'
 
 
@@ -678,14 +679,14 @@ class DesktopView:
         for name, button in self.nav.items():
             button.pack_forget()
             if name=='Games' and self.app.product_mode()!='accelerator':continue
-            if self.advanced or name in ('Overview', 'Games', 'Proxies', 'Devices', 'LAN sharing'):
+            if self.advanced or name in ('Workspaces','Overview', 'Games', 'Proxies', 'Devices', 'LAN sharing'):
                 button.pack(fill='x', pady=3, ipady=2, before=self.advanced_button)
         for section in self.advanced_sections:
             section.grid() if self.advanced else section.grid_remove()
         self.app.save_button.pack_forget()
         if self.advanced:
             self.app.save_button.pack(side='left', padx=(0, 10), before=self.app.start_button)
-        if not self.advanced and self.page not in ('Overview', 'Games', 'Proxies', 'Devices', 'LAN sharing'):
+        if not self.advanced and self.page not in ('Workspaces','Overview', 'Games', 'Proxies', 'Devices', 'LAN sharing'):
             self.show('Overview')
         self.refresh()
 
@@ -693,11 +694,17 @@ class DesktopView:
         if page not in self.frames:
             raise ValueError('invalid page')
         application=getattr(self,'app',None)
+        if application is not None and page!='Workspaces':
+            application._workspace_network=None
+            application._workspace_network_allow_subnet=False
         if page=='Games' and application is not None and application.product_mode()!='accelerator':
             page='Overview'
         if self.page != page:
             self.navigation_generation += 1
         self.page = page
+        if page=='Workspaces' and application is not None and getattr(application,'workspace_hub',None) is None:
+            from .workspace_hub import WorkspaceHub
+            application.workspace_hub=WorkspaceHub(application,self.frames['Workspaces'])
         if page=='Games' and application is not None and getattr(application,'games_hub',None) is None:
             if sys.platform=='win32':
                 from .games_hub import GamesHub
@@ -708,7 +715,7 @@ class DesktopView:
         hub=getattr(application,'games_hub',None)
         if hub and hub.xianniu:hub.xianniu.active=page=='Games' and hub.selected=='xianniu'
         if hasattr(self,'main_header'):
-            if page=='Games':
+            if page in ('Games','Workspaces'):
                 self.main_header.grid_remove();self.main_config_bar.grid_remove()
                 self.main_footer.grid_remove()
             else:
@@ -909,6 +916,8 @@ class DesktopView:
                     self.rule_table.insert('', 'end', values=(rule,))
             self._preview_rendered = self.preview
         product_mode = self.app.product_mode()
+        workspace=getattr(self.app,'workspace_hub',None)
+        if workspace:workspace.refresh()
         accelerator_mode = product_mode == 'accelerator'
         if not accelerator_mode and self.page=='Games':
             self.show('Overview');return

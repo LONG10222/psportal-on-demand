@@ -11,13 +11,16 @@ from portalproxy.proxy import ProxyServer
 
 
 class ExistingProxyConfigTests(unittest.TestCase):
-    def test_product_modes_cannot_bypass_linked_game_only_policy(self):
+    def test_linked_mixed_mode_requires_explicit_host_acl_and_local_only_remains_separate(self):
         raw = dict(existing_proxy_port=7897, product_mode='game',
             listen_host='192.168.50.2', allowed_clients=['192.168.50.3'])
         self.assertEqual(config.validate(raw, '/unused.json')['product_mode'], 'game')
-        for mode in ('mixed', 'clash'):
-            with self.subTest(mode=mode), self.assertRaisesRegex(ValueError, 'game mode only'):
-                config.validate(dict(raw, product_mode=mode), '/unused.json')
+        with self.assertRaisesRegex(ValueError,'allowed devices'):
+            config.validate(dict(raw,product_mode='mixed'),'/unused.json')
+        mixed=dict(raw,product_mode='mixed',allowed_clients=['192.168.50.3','192.168.50.2'])
+        self.assertEqual(config.validate(mixed,'/unused.json')['allowed_clients'],mixed['allowed_clients'])
+        with self.assertRaisesRegex(ValueError,'game mode only'):
+            config.validate(dict(raw,product_mode='clash'),'/unused.json')
     def test_clash_cache_reader_returns_only_active_accounting_without_writing(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'profiles.yaml'

@@ -1,2 +1,2 @@
 """Visible build identity for the Windows integration preview."""
-PREVIEW_VERSION = '0.4.2'
+PREVIEW_VERSION = '0.5.0'

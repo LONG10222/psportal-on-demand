@@ -201,5 +201,56 @@ class IntegratedGamesTests(unittest.TestCase):
             self.assertNotIn('开启加速会恢复官方计时',message)
             start.assert_not_called()
 
+    def home(self):
+        network={'host':'192.168.50.5','interface':'fixture','subnet':'192.168.50.0/24','clients':['192.168.50.8']}
+        with patch('portalproxy.windows_network.inspect',return_value={'lan':network,'hotspot':{'state':'Off','network':None}}):
+            self.app.view.show('Workspaces')
+            self.pump_until(lambda:not self.app.workspace_hub.detecting)
+        return self.app.workspace_hub
+
+    def test_windows_home_prepares_clash_mixed_sharing_without_replacing_saved_subscription(self):
+        home=self.home();original=self.app.vars['subscription_url'].get()
+        home.select('clash')
+        self.assertEqual(self.app.vars['subscription_url'].get(),original)
+        self.assertFalse(home.source.winfo_manager())
+        self.assertTrue(home.linked.winfo_manager())
+        with patch.object(self.app,'use_existing_proxy') as linked:
+            home.toggle();linked.assert_called_once_with(mode='mixed')
+        self.assertEqual(self.app._workspace_network['host'],'192.168.50.5')
+        self.assertEqual(self.path.read_bytes(),self.original)
+
+    def test_hotspot_off_does_not_apply_guessed_address_or_start(self):
+        home=self.home();home.target.set('Windows 热点')
+        values={k:v.get() for k,v in self.app.vars.items()}
+        with patch.object(self.app,'quick_start') as start:
+            home.toggle();start.assert_not_called()
+        self.assertIn('开启 Windows 热点',home.state.get())
+        self.assertEqual({k:v.get() for k,v in self.app.vars.items()},values)
+
+    def test_home_clears_transient_network_on_advanced_navigation_and_reports_stopped(self):
+        home=self.home();self.app._workspace_network=home.inventory['lan']
+        self.app.view.show('Overview')
+        self.assertIsNone(self.app._workspace_network)
+        home.was_running=True;home.refresh()
+        self.assertIn('已停止',home.connection.get())
+
+    def test_home_leaves_accelerator_and_recovers_independent_source(self):
+        home=self.home();original=self.app.vars['subscription_url'].get()
+        home.select('accelerator');self.root.update()
+        self.assertEqual(self.app.product_mode(),'accelerator')
+        home.select('subscription');self.root.update()
+        self.assertEqual(self.app.product_mode(),'mixed')
+        self.assertEqual(self.app.vars['subscription_url'].get(),original)
+        self.assertFalse(self.app.raw.get('existing_proxy_port'))
+
+    def test_changed_network_does_not_silently_widen_manual_device_allowlist(self):
+        self.app._workspace_network={'host':'192.168.137.1','interface':'hotspot','subnet':'192.168.137.0/24','clients':['192.168.137.2']}
+        self.app._workspace_network_allow_subnet=False
+        original=self.app.vars['allowed_clients'].get()
+        with patch('tkinter.messagebox.showerror') as error:
+            self.assertFalse(self.app._configure_lan(commit=False))
+        error.assert_called_once()
+        self.assertEqual(self.app.vars['allowed_clients'].get(),original)
+
 
 if __name__=='__main__':unittest.main()

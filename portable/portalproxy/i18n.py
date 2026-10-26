@@ -6,6 +6,8 @@ from pathlib import Path
 import tempfile
 
 ZH = {
+    'Workspaces':'工作台',
+    'Choose a purpose, connect a device, then start sharing.':'选择用途，确认接入网络，再启动共享。',
     'Games':'游戏',
     'Choose a game accelerator without changing other StarPass modes.':'选择加速器、游戏和设备。其他星渡模式及订阅保持独立。',
     'Stop sharing and game acceleration, then close?':'停止本程序的共享和游戏加速后退出？',

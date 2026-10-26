@@ -171,14 +171,18 @@ class LibraryUITests(unittest.TestCase):
         before=self.app.selected_game['id']
         rows=fixtures(76);write_xml(self.xml,rows)
         with patch.object(self.app,'start') as start:
-            self.app.sync_catalog(automatic=True);self.pump(.3)
+            self.app.sync_catalog(automatic=True)
+            deadline=time.monotonic()+3
+            while self.app.catalog_syncing and time.monotonic()<deadline:self.pump(.02)
             self.assertFalse(self.app.catalog_syncing)
             self.assertIn(76,self.app.library.by_id)
             self.assertEqual(self.app.selected_game['id'],before)
             self.assertEqual(self.app.config['favorite_games'],[1,72])
             good=self.app.repository.cache.read_bytes()
             self.xml.write_text('<broken')
-            self.app.sync_catalog(automatic=True);self.pump(.3)
+            self.app.sync_catalog(automatic=True)
+            deadline=time.monotonic()+3
+            while self.app.catalog_syncing and time.monotonic()<deadline:self.pump(.02)
             self.assertIn('缓存',self.app.catalog_status_var.get())
             self.assertEqual(self.app.repository.cache.read_bytes(),good)
             self.assertIn(76,self.app.library.by_id)
