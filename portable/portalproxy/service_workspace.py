@@ -132,6 +132,7 @@ class ServiceWorkspace:
             if status.get('running'):return status.get('http_port')
         return None
     def refresh_route(self):
+        if self.selected=='game':self.state.set('就绪')
         self.game.upstream(self.route_port());self.refresh()
 
     def start_route(self):
@@ -260,7 +261,7 @@ class ServiceWorkspace:
         else:
             if not self.usage_progress.winfo_manager():self.usage_progress.pack(fill='x',before=self.usage_state_label,pady=5);self.usage_percent_label.pack(anchor='w',before=self.usage_state_label,pady=(0,5))
             self.usage_progress['value']=percent;self.usage_percent.set(f'已用 {percent:.1f}%')
-        self.traffic_text.set(traffic_display(game.get('traffic') if self.selected=='game' else (self.app.view.runtime or {}).get('traffic') if self.selected=='subscription' else None))
+        self.traffic_text.set('设备流量见游戏共享' if self.selected=='clash' else '加速流量见游戏库' if self.selected=='accelerator' else traffic_display(game.get('traffic') if self.selected=='game' else (self.app.view.runtime or {}).get('traffic')))
         for key,button in self.buttons.items():button.configure(style='Portal.ModeSelected.TButton' if key==self.selected else 'Portal.ModeIdle.TButton',state='disabled' if self.app.closing else 'normal')
 
     def poll(self):

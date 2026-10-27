@@ -105,3 +105,12 @@ class ServiceWorkspaceTests(unittest.TestCase):
         self.home.select('clash');self.assertTrue(self.home.source_pending)
         self.home.select('subscription');self.home.toggle()
         self.assertFalse(self.home.source_pending)
+
+    def test_switch_source_clears_unrelated_error_but_preserves_real_owned_failure(self):
+        self.running_owned();self.app.view.runtime={'core_state':'failed'}
+        self.home.select('game');self.home.game_source.set('独立订阅');self.home.refresh_route()
+        self.assertIn('核心启动失败',self.home.state.get())
+        self.home.game_source.set('Clash 联动');self.home.refresh_route()
+        self.assertNotIn('核心启动失败',self.home.state.get())
+        self.home.select('subscription');self.assertIn('核心启动失败',self.home.state.get())
+        self.home.select('clash');self.assertEqual(self.home.traffic_text.get(),'设备流量见游戏共享')
