@@ -20,6 +20,7 @@ class IntegratedGamesTests(unittest.TestCase):
         from tkinter import ttk
         from portalproxy.desktop import DesktopApp
         from portalproxy.accelerator_registry import discover
+        from portalproxy.workspace_hub import WorkspaceHub as LegacyWorkspace
         from starpass_xianniu.storage import Store
         self.temp=tempfile.TemporaryDirectory();self.base=Path(self.temp.name)
         self.path=self.base/'config.json'
@@ -28,7 +29,9 @@ class IntegratedGamesTests(unittest.TestCase):
           'preferred_node':'saved-node','accelerator_preferences':{'transport':'host','port':'7890'}}))
         self.original=self.path.read_bytes();self.store=Store(self.base/'game-private')
         inventory=discover({'installations':[],'processes':[]},exists=lambda p:False)
-        self.patches=[patch('starpass_xianniu.storage.Store',return_value=self.store),
+        # Preserve the original workspace's compatibility checks (still used by
+        # non-Windows hosts). Independent Windows services are tested separately.
+        self.patches=[patch('portalproxy.service_workspace.ServiceWorkspace',LegacyWorkspace),patch('starpass_xianniu.storage.Store',return_value=self.store),
             patch('starpass_xianniu.game_grid.IconCache.read',return_value=None),
             patch('xianniu_router.control.call_api',return_value={'pause_state':0,'total_datetime':100}),
             patch('portalproxy.games_hub.discover',return_value=inventory),

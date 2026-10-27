@@ -94,11 +94,21 @@ def download_subscription(url, destination, *, headers_only=False):
             path += '?' + parsed.query
         connection.request('HEAD' if headers_only else 'GET', path, headers={'User-Agent':'clash.meta/1.19.32 PSPortal-OnDemand/0.1', 'Accept-Encoding':'identity'})
         response = connection.getresponse()
-        if response.status != 200:
-            raise CoreError('Subscription requires HTTP 200; redirects are disabled')
         if headers_only:
             from .subscription_info import from_headers
-            return from_headers(response.headers, url)
+            info=from_headers(response.headers,url)
+            if response.status in (405,501) or response.status==200 and not any(k in info for k in ('upload','download','total','expire')):
+                # Some providers expose accounting only on GET. Request just
+                # the headers, retain the same pinned TLS policy and deadline,
+                # and close without downloading/parsing a second profile.
+                response.close();connection.close()
+                connection=PinnedHTTPS(host,port,timeout=5,context=verified_context())
+                connection.request('GET',path,headers={'User-Agent':'clash.meta/1.19.32 PSPortal-OnDemand/0.1','Accept-Encoding':'identity'})
+                response=connection.getresponse()
+            if response.status!=200:raise CoreError('Subscription accounting unavailable')
+            return from_headers(response.headers,url)
+        if response.status != 200:
+            raise CoreError('Subscription requires HTTP 200; redirects are disabled')
         lengths = response.headers.get_all('Content-Length', [])
         transfers = response.headers.get_all('Transfer-Encoding', [])
         if len(lengths) > 1 or len(transfers) > 1 or (lengths and transfers):

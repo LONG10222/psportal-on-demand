@@ -204,7 +204,9 @@ def clash_subscription_source(path=None):
                     name = entry.get('name') if isinstance(entry.get('name'), str) else ''
                     return descriptor(entry.get('url',''), cached, identity='clash:'+current, name=name, linked=True)
     except (OSError, ValueError, TypeError): pass
-    return descriptor(cached=cached, identity='clash-unavailable', linked=True)
+    result=descriptor(cached=cached, identity='clash-unavailable', linked=True)
+    result['unavailable']=True
+    return result
 
 
 class ExistingProxy:

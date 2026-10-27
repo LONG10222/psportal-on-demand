@@ -8,6 +8,22 @@ from portalproxy.existing_proxy import clash_subscription_source
 
 
 class AccountingRefreshTests(unittest.TestCase):
+    def test_returning_to_source_preserves_last_good_values_without_mixing_accounts(self):
+        a=descriptor(cached={'upload':1,'download':2,'total':10,'updated_at':5},identity='a')
+        b=descriptor(cached={'upload':5,'download':3,'total':20,'updated_at':6},identity='b')
+        monitor=AccountingMonitor(lambda url:None)
+        monitor.tick(a);monitor.info['download']=4
+        monitor.tick(b);self.assertEqual(monitor.info['total'],20)
+        monitor.tick(a);self.assertEqual(monitor.info['download'],4)
+        self.assertEqual(monitor.info['total'],10)
+
+    def test_incomplete_refresh_keeps_complete_usage_and_original_time(self):
+        source=descriptor('https://example.invalid/sub',{'upload':1,'download':2,'total':100,'updated_at':5})
+        monitor=AccountingMonitor(lambda url:{'total':200,'updated_at':100})
+        monitor.tick(source);self.settle(monitor,source)
+        self.assertEqual(monitor.info['total'],100);self.assertEqual(monitor.info['updated_at'],5)
+        self.assertIn('保留',monitor.message)
+
     def settle(self,monitor,source):
         deadline=time.monotonic()+3
         while monitor.busy and time.monotonic()<deadline:

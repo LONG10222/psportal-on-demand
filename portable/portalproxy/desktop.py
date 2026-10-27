@@ -395,6 +395,7 @@ class DesktopApp:
         self._workspace_network_allow_subnet = False
         from .subscription_monitor import AccountingMonitor
         self.subscription_monitor = AccountingMonitor()
+        self.source_monitors={'subscription':self.subscription_monitor,'clash':AccountingMonitor()}
         self.clash_subscription = None
         self._usage_source_path = None
         self._usage_cached = None
@@ -542,10 +543,13 @@ class DesktopApp:
             self.backend.log('Appearance preference could not be saved.')
 
     def open_game_accelerator(self):
+        if getattr(getattr(self,'workspace_hub',None),'independent_services',False):self.view.show('Games');return
         if self.product_mode()!='accelerator':self.set_product_mode('accelerator')
         if self.product_mode()=='accelerator':self.view.show('Games')
 
     def open_workspace(self,key):
+        if getattr(self.workspace_hub,'independent_services',False):
+            self.view.show('Workspaces');self.workspace_hub.select(key);return
         hub=self.games_hub
         if self.backend.process is not None or (hub and hub.running):
             if self.workspace_hub:self.workspace_hub.state.set('请先停止当前通道，再切换用途。')
@@ -926,13 +930,17 @@ class DesktopApp:
         try:
             record = self.discovery_events.get_nowait()
             proxy, info = record[:2]
-            if len(record)>2:self.clash_subscription=record[2]
+            if len(record)>2:
+                source=record[2]
+                if source and source.get('unavailable') and self.clash_subscription:
+                    self.clash_subscription=dict(self.clash_subscription,url='',stale=True)
+                elif source:self.clash_subscription=source
         except queue.Empty:
             pass
         else:
             self._discovery_pending = False
             self.existing_proxy, self.clash_info = proxy, info
-            if self.raw.get('existing_proxy_port') and self.raw.get('existing_proxy_provider') != 'xianniu':
+            if not getattr(self.workspace_hub,'independent_services',False) and self.raw.get('existing_proxy_port') and self.raw.get('existing_proxy_provider') != 'xianniu':
                 self.view.subscription_info = info
             self.view.refresh()
         if not self.closing and not self._discovery_pending and time.monotonic() >= self._next_discovery:
@@ -942,10 +950,11 @@ class DesktopApp:
                 from .existing_proxy import detect_system_proxy, read_clash_accounting, clash_subscription_source
                 try:
                     proxy = detect_system_proxy()
-                    info = read_clash_accounting() if proxy else None
+                    info = read_clash_accounting()
                 except Exception:
                     proxy, info = None, None
-                source = clash_subscription_source() if proxy else None
+                try:source = clash_subscription_source()
+                except Exception:source=None
                 self.discovery_events.put((proxy, info, source))
             threading.Thread(target=worker, daemon=True).start()
 
@@ -957,6 +966,18 @@ class DesktopApp:
         monitor=getattr(self,'subscription_monitor',None)
         if monitor is None:return
         home=getattr(self,'workspace_hub',None)
+        if getattr(home,'independent_services',False):
+            from .service_model import owned_values,source_descriptor
+            try:owned=source_descriptor(home.owned_config if home.owned_running() and home.owned_config else owned_values(self),str(self.path))
+            except (ValueError,OSError):owned=descriptor(identity=str(self.path)+':empty')
+            linked=self.clash_subscription or descriptor(cached=self.clash_info,identity='clash-unavailable',linked=True)
+            from .service_workspace import ROUTES
+            chosen=(ROUTES.get(home.game_source.get()) if home.selected=='game' else home.selected) if self.view.page in ('Workspaces','Games') else 'clash' if self.raw.get('existing_proxy_port') else 'subscription'
+            for key,source in (('subscription',owned),('clash',linked)):
+                self.source_monitors[key].tick(source,visible=not self.closing,force=force and chosen==key)
+            self.subscription_monitor=self.source_monitors.get(chosen,self.source_monitors['subscription'])
+            self.view.subscription_info=self.subscription_monitor.info
+            return
         chosen_link=home and self.view.page=='Workspaces' and (home.selected=='clash' or home.selected=='game' and home.game_source.get()=='跟随 Clash')
         linked=chosen_link or self.raw.get('existing_proxy_port') and self.raw.get('existing_proxy_provider')!='xianniu'
         if linked:
@@ -1872,7 +1893,9 @@ class DesktopApp:
                 self.running_controls(False)
         hub=getattr(self,'games_hub',None)
         games_done = not self.closing or hub is None or hub.shutdown_complete()
-        if self.closing and self.backend.process is None and not self.importing and games_done:
+        workspace=getattr(self,'workspace_hub',None)
+        sharing_done=not getattr(workspace,'independent_services',False) or workspace.shutdown_complete()
+        if self.closing and self.backend.process is None and not self.importing and games_done and sharing_done:
             self.root.destroy()
             return
         self.root.after(150, self.poll)
@@ -1884,6 +1907,8 @@ class DesktopApp:
         running = self.backend.process is not None and self.backend.process.poll() is None
         hub=getattr(self,'games_hub',None)
         games_running=bool(hub and hub.running)
+        workspace=getattr(self,'workspace_hub',None)
+        sharing_running=bool(getattr(workspace,'independent_services',False) and workspace.game.active)
         if not running and getattr(self, '_quick_rollback', None):
             # Close can arrive after the child exits but before the next poll.
             # Settle ownership now so destroying Tk cannot lose the rollback.
@@ -1896,15 +1921,16 @@ class DesktopApp:
         question = ('Stop sharing and game acceleration, then close?' if games_running else 'Stop the listener and its core, then close?' if running else
                     'Cancel preparation and close?' if self.importing else
                     'Close and discard unsaved configuration edits?')
-        if (running or games_running or self.dirty or self.importing) and not messagebox.askyesno(self._t('Close StarPass?'), self._t(question), parent=self.root):
+        if (running or games_running or sharing_running or self.dirty or self.importing) and not messagebox.askyesno(self._t('Close StarPass?'), self._t('Stop sharing and game acceleration, then close?' if sharing_running else question), parent=self.root):
             return
         self.closing = True
+        if getattr(workspace,'independent_services',False):workspace.close()
         if hub:hub.close()
         if self.importing:
             self.cancel_preparation()
         if running:
             self.stop()
-        elif not self.importing and hub is None:
+        elif not self.importing and hub is None and not sharing_running:
             self.root.destroy()
 
 

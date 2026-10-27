@@ -721,13 +721,15 @@ class DesktopView:
             application._workspace_network=None
             application._workspace_network_allow_subnet=False
             application._workspace_target=None
-        if page=='Games' and application is not None and application.product_mode()!='accelerator':
+        if page=='Games' and application is not None and application.product_mode()!='accelerator' and not getattr(getattr(application,'workspace_hub',None),'independent_services',False):
             page='Overview'
         if self.page != page:
             self.navigation_generation += 1
         self.page = page
         if page=='Workspaces' and application is not None and getattr(application,'workspace_hub',None) is None:
             from .workspace_hub import WorkspaceHub
+            if sys.platform=='win32':
+                from .service_workspace import ServiceWorkspace as WorkspaceHub
             application.workspace_hub=WorkspaceHub(application,self.scroll_page(self.frames['Workspaces'],'Workspaces'))
         if page=='Workspaces' and application is not None:application.workspace_hub.sync_mode()
         if page=='Games' and application is not None and getattr(application,'games_hub',None) is None:

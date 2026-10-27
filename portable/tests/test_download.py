@@ -40,6 +40,23 @@ class FakeSocket:
 
 
 class DownloadTests(unittest.TestCase):
+    def test_accounting_falls_back_to_get_headers_without_replacing_profile(self):
+        for first in (b'HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\n\r\n',b'HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n'):
+            with self.subTest(first=first):
+                head=FakeSocket(first)
+                get=FakeSocket(self.response(extra=b'subscription-userinfo: upload=10; download=20; total=100\r\n'))
+                context=Mock();context.cert_store_stats.return_value={'x509_ca':1};context.wrap_socket.side_effect=[head,get]
+                with patch('portalproxy.core.socket.getaddrinfo',return_value=[self.answer('8.8.8.8')]) as lookup,patch('portalproxy.core.socket.create_connection',side_effect=[head,get]),patch('portalproxy.core.ssl.create_default_context',return_value=context),patch('http.client.HTTPResponse.read1',side_effect=AssertionError('Profile body must not be downloaded')):
+                    info=download_subscription('https://subscription.example/private',None,headers_only=True)
+                self.assertEqual(info['download'],20);self.assertEqual(self.path.read_bytes(),b'previous cache')
+                lookup.assert_called_once();self.assertTrue(head.closed and get.closed)
+                self.assertIn(b'HEAD /private',b''.join(head.sent));self.assertIn(b'GET /private',b''.join(get.sent))
+
+    def test_accounting_redirect_does_not_fallback_or_follow_location(self):
+        with self.transport(self.response(status='302 Found',extra=b'Location: https://other.example/\r\n')) as (_,_,connect,_,_):
+            with self.assertRaises(CoreError):download_subscription('https://subscription.example/private',None,headers_only=True)
+            connect.assert_called_once()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.path = Path(self.temp.name) / 'provider.yaml'

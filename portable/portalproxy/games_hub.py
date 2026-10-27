@@ -57,12 +57,14 @@ class GamesHub:
 
     def change_mode(self,event=None):
         mode=('game','mixed','clash','accelerator')[self.mode_combo.current()]
+        if getattr(self.host.workspace_hub,'independent_services',False):
+            self.host.open_workspace({'game':'game','mixed':'subscription','clash':'clash','accelerator':'accelerator'}[mode]);return
         self.host.set_product_mode(mode)
         if self.host.product_mode()=='accelerator':self.mode_combo.current(3)
 
     def refresh_mode(self):
         self.mode_combo.configure(values=tuple(self.host.view.tr(product_modes.LABELS[m]) for m in product_modes.MODES))
-        self.mode_combo.current(product_modes.MODES.index(self.host.product_mode()))
+        self.mode_combo.current(3 if getattr(self.host.workspace_hub,'independent_services',False) else product_modes.MODES.index(self.host.product_mode()))
 
     def select(self,key):
         if self.running and key!=self.selected:
