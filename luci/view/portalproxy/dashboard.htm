@@ -62,7 +62,7 @@
 .starpass-app .sp-update small { display:block; margin-top:8px; overflow-wrap:anywhere; }
 .starpass-app .sp-traffic-grid,.starpass-app .sp-sub-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .starpass-app .sp-traffic-grid>div { background:var(--sp-soft); border-radius:9px; padding:14px; }
-.starpass-app .sp-traffic-grid h4 { margin:0 0 8px; }
+.starpass-app .sp-traffic-grid h4 { margin:0 0 8px; padding:0; border:0; background:transparent; color:var(--sp-text); box-shadow:none; }
 .starpass-app .sp-rate { font-variant-numeric:tabular-nums; transition:color .2s; }
 .starpass-app .sp-rate[data-flow="active"] { color:#168452; }
 .starpass-app .sp-subscription { margin:10px 0 16px; border-bottom:1px solid var(--sp-edge); padding-bottom:12px; }
@@ -81,6 +81,7 @@
 @media(prefers-color-scheme:dark) {
  .starpass-app { --sp-text:#eee9fc; --sp-note:#c1b8d8; --sp-card:#20213c; --sp-edge:#484274; --sp-soft:#292843; }
  .starpass-app .starpass-tag { color:#c9bfff; }
+ .starpass-app .sp-rate[data-flow="active"] { color:#73dfb0; }
  .starpass-app .cbi-input-text, .starpass-app select { background:#17192f; color:#eee9fc; border-color:#625b81; }
 }
 </style>
