@@ -1,6 +1,6 @@
 'use strict';
 'require baseclass';
-var root,api,token,timer,busy=false,lastUpdate='',active=false;
+var root,api,token,timer,busy=false,lastUpdate='',active=false,previousTraffic=null;
 function text(id,value) { var node=root.querySelector('[data-sp="'+id+'"]');if(node)node.textContent=value; }
 function bytes(n) {
  if(!Number.isFinite(n)||n<0)return '未提供';
@@ -35,14 +35,29 @@ function renderSubscriptions(rows) {
  });
 }
 function render(data) {
- var entry=data.entries&&data.entries.shared||{},traffic=entry.traffic||{},counts=traffic.bytes||{},speed=traffic.speed||{};
- ['local','external'].forEach(function(kind){
+ var kind=root.dataset.mode==='accelerator'?'accelerator':'shared';
+ var entry=data.entries&&data.entries[kind]||{},traffic=entry.traffic||{},counts=traffic.bytes||{};
+ var now=performance.now(),previous=previousTraffic;
+ var comparable=entry.fresh&&previous&&previous.kind===kind&&previous.session===traffic.session&&now>previous.at;
+ var elapsed=comparable?(now-previous.at)/1000:0;
+ // Average over the visible polling interval so short bursts are not missed.
+ ['local','external'].forEach(function(bucket){
   ['upload','download'].forEach(function(direction){
-   text(kind+'-'+direction,entry.fresh&&traffic.speed?bytes((speed[kind]||{})[direction])+'/s':'—');
-   text(kind+'-'+direction+'-total',entry.fresh&&traffic.bytes?bytes((counts[kind]||{})[direction]):'—');
+   var total=(counts[bucket]||{})[direction],before=previous&&((previous.bytes[bucket]||{})[direction]);
+   var valid=entry.fresh&&Number.isFinite(total)&&total>=0;
+   var rate=valid&&comparable&&Number.isFinite(before)&&total>=before?(total-before)/elapsed:NaN;
+   text(bucket+'-'+direction,valid?(Number.isFinite(rate)?bytes(rate)+'/s':'采样中…'):'—');
+   text(bucket+'-'+direction+'-total',valid?bytes(total):'—');
+   var node=root.querySelector('[data-sp="'+bucket+'-'+direction+'"]');
+   if(node)node.dataset.flow=Number.isFinite(rate)&&rate>0?'active':'idle';
   });
  });
- text('traffic-status',!entry.fresh?'入口状态暂不可用':traffic.bytes?'本次入口启动以来累计；仅统计手动代理流量，包含 HTTP/TLS 数据，不含网络层开销。':'等待新版入口统计');
+ previousTraffic=entry.fresh&&traffic.bytes?{kind:kind,session:traffic.session,at:now,bytes:counts}:null;
+ text('traffic-source',kind==='accelerator'?'加速器入口':root.dataset.mode==='starpass'?'星渡入口':'游戏共享入口');
+ var routes={direct:'直连',socks:'鲜牛加速',game:'游戏共享',starpass:'OpenClash'};
+ text('traffic-route',entry.fresh?'当前出口：'+(routes[entry.route]||'未知'):'入口状态暂不可用');
+ text('traffic-time',entry.fresh?'每 2 秒刷新 · 更新于 '+new Date().toLocaleTimeString():'');
+ text('traffic-status',!entry.fresh?'入口状态暂不可用，正在重试':traffic.bytes?'↑ 设备上传 · ↓ 设备下载；按目的地址区分内外网，仅统计经过此代理入口的数据，不包含绕过代理的游戏 UDP 或设备间直连串流。累计值从入口启动时计算。':'等待入口统计');
  renderSubscriptions(data.subscriptions||[]);
  var u=data.update||{};text('version',u.current||'未知');
  var message=u.message||'点击检查 GitHub 正式路由器版本';
@@ -58,7 +73,7 @@ function render(data) {
 async function refresh() {
  if(active)return;active=true;
  try{render(await call());}
- catch(e){text('traffic-status','状态读取失败，正在重试');text('update-status',e.message);}
+ catch(e){previousTraffic=null;['local','external'].forEach(function(k){['upload','download'].forEach(function(d){text(k+'-'+d,'—');var n=root.querySelector('[data-sp="'+k+'-'+d+'"]');if(n)n.dataset.flow='idle';});});text('traffic-time','');text('traffic-status','状态读取失败，正在重试');text('update-status',e.message);}
  finally{active=false;}
 }
 return baseclass.extend({

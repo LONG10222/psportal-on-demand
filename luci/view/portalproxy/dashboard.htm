@@ -63,6 +63,8 @@
 .starpass-app .sp-traffic-grid,.starpass-app .sp-sub-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .starpass-app .sp-traffic-grid>div { background:var(--sp-soft); border-radius:9px; padding:14px; }
 .starpass-app .sp-traffic-grid h4 { margin:0 0 8px; }
+.starpass-app .sp-rate { font-variant-numeric:tabular-nums; transition:color .2s; }
+.starpass-app .sp-rate[data-flow="active"] { color:#168452; }
 .starpass-app .sp-subscription { margin:10px 0 16px; border-bottom:1px solid var(--sp-edge); padding-bottom:12px; }
 .starpass-app small { color:var(--sp-note); }
 .starpass-app details details > summary { cursor:pointer; }
@@ -95,9 +97,6 @@
    <% action('_mode_game', self.portal_workspace == 'game'); action('_mode_accelerator', self.portal_workspace == 'accelerator'); action('_mode_starpass', self.portal_workspace == 'starpass') %>
   </nav>
   <p>游戏共享：<%=self.portal_running and "运行中" or "未运行"%> · 鲜牛：<%=self.portal_accelerator_running and "运行中" or "未运行"%> · 星渡：<%=self.portal_starpass_enabled and "已开启" or "已关闭"%>。</p>
-  <% if self.portal_workspace == 'accelerator' then %>
-   <section class="starpass-card"><h3>鲜牛游戏加速</h3><p>选择游戏后开始加速，可与游戏共享同时运行；两套服务分别启停。</p><div id="starpass-accelerator">正在加载游戏库…</div></section>
-  <% end %>
   <% if self.portal_workspace == 'starpass' then %>
    <section class="starpass-card"><h3>星渡 · OpenClash</h3>
     <p>局域网设备使用下面的手动代理。与游戏模式共用地址和端口，开启其中一个会关闭另一个。</p>
@@ -109,13 +108,17 @@
     </details>
    </section>
   <% end %>
-  <% if self.portal_workspace ~= 'accelerator' then %>
-  <section class="starpass-card"><h3>实时流量</h3>
+  <section class="starpass-card"><h3>实时流量 · <span data-sp="traffic-source">正在读取</span></h3>
+   <p><span data-sp="traffic-route"></span> <small data-sp="traffic-time"></small></p>
    <div class="sp-traffic-grid">
-    <div><h4>公网</h4><p>↑ 上传 <strong data-sp="external-upload">—</strong>　↓ 下载 <strong data-sp="external-download">—</strong></p><small>累计 ↑ <span data-sp="external-upload-total">—</span> / ↓ <span data-sp="external-download-total">—</span></small></div>
-    <div><h4>局域网</h4><p>↑ 上传 <strong data-sp="local-upload">—</strong>　↓ 下载 <strong data-sp="local-download">—</strong></p><small>累计 ↑ <span data-sp="local-upload-total">—</span> / ↓ <span data-sp="local-download-total">—</span></small></div>
+    <div><h4>外网目的地</h4><p>↑ 上传 <strong class="sp-rate" data-sp="external-upload">—</strong>　↓ 下载 <strong class="sp-rate" data-sp="external-download">—</strong></p><small>累计 ↑ <span data-sp="external-upload-total">—</span> / ↓ <span data-sp="external-download-total">—</span></small></div>
+    <div><h4>局域网目的地</h4><p>↑ 上传 <strong class="sp-rate" data-sp="local-upload">—</strong>　↓ 下载 <strong class="sp-rate" data-sp="local-download">—</strong></p><small>累计 ↑ <span data-sp="local-upload-total">—</span> / ↓ <span data-sp="local-download-total">—</span></small></div>
    </div><p data-sp="traffic-status" role="status">正在读取入口统计…</p>
   </section>
+  <% if self.portal_workspace == 'accelerator' then %>
+   <section class="starpass-card"><h3>鲜牛游戏加速</h3><p>选择游戏后开始加速，可与游戏共享同时运行；两套服务分别启停。</p><div id="starpass-accelerator">正在加载游戏库…</div></section>
+  <% end %>
+  <% if self.portal_workspace ~= 'accelerator' then %>
   <section class="starpass-card"><div class="starpass-brand"><h3>订阅用量</h3><button type="button" class="starpass-action" data-sp="subscriptions-refresh">刷新订阅信息</button></div>
    <div data-sp="subscriptions">正在读取订阅…</div><p data-sp="subscription-status" role="status"></p><small>服务商账户用量与本机入口统计分别计算；页面轮询不会发起订阅请求。</small>
   </section>
@@ -160,7 +163,7 @@
 cbi_init();
 (function () {
  'use strict';
- L.require('starpass.dashboard_v4').then(function(dashboard) {
+ L.require('starpass.dashboard_v5').then(function(dashboard) {
   dashboard.mount(document.getElementById('cbi-portalproxy_ui'), <%=require('luci.jsonc').stringify(url('admin','services','portalproxy','dashboard_api'))%>, <%=require('luci.jsonc').stringify(token)%>);
  });
  var form = document.getElementById('starpass-form');
