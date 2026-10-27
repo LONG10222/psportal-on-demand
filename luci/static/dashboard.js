@@ -1,6 +1,6 @@
 'use strict';
 'require baseclass';
-var root,api,token,timer,busy=false,lastUpdate='',active=false,previousTraffic=null;
+var root,api,token,timer,busy=false,lastUpdate='',active=false,previousTraffic=null,previousNative=null,lastNativeReply=null;
 function text(id,value) { var node=root.querySelector('[data-sp="'+id+'"]');if(node)node.textContent=value; }
 function bytes(n) {
  if(!Number.isFinite(n)||n<0)return '未提供';
@@ -34,10 +34,44 @@ function renderSubscriptions(rows) {
   var status=document.createElement('small');status.textContent=(row.state==='error'?'刷新失败，保留上次数据。':row.state==='unavailable'?'服务商未返回用量或日期。':!row.state?'点击刷新读取服务商信息。':'')+(row.updated_at?' 更新于 '+date(row.updated_at):'');box.append(status);panel.append(box);
  });
 }
+function nativeEvidence(data,entry,now) {
+ var native=data.accelerator||{},c=native.counters||{},p=previousNative;
+ var valid=native.fresh&&native.running&&native.session&&Number.isFinite(native.sample_at)&&Number.isFinite(c.sent)&&Number.isFinite(c.received);
+ var same=valid&&p&&p.session===native.session&&native.sample_at>=p.sampleAt&&c.sent>=p.sent&&c.received>=p.received;
+ if(!same)lastNativeReply=null;
+ var newer=same&&native.sample_at>p.sampleAt,elapsed=newer?native.sample_at-p.sampleAt:0;
+ var upload=newer?(c.sent-p.sent)/elapsed:same?p.upload:NaN;
+ var download=newer?(c.received-p.received)/elapsed:same?p.download:NaN;
+ if(newer&&c.received>p.received)lastNativeReply=now;
+ previousNative=valid?{session:native.session,sampleAt:native.sample_at,sent:c.sent,received:c.received,upload:upload,download:download}:null;
+ var state='unknown',title='正在确认加速状态',detail='正在读取本机通道数据…';
+ if(entry.fresh&&native.fresh) {
+  if(entry.route==='direct'&&!native.running) {state='off';title='加速已关闭 · 当前直连';detail='原代理地址仍可使用，流量经默认网关直接联网。';}
+  else if(entry.route==='socks'&&native.running) {
+   if(!native.healthy) {state='waiting';title='线路状态待确认';detail='服务已启动，正在确认鲜牛线路状态。';}
+   else if(lastNativeReply!==null&&now-lastNativeReply<=8000) {state='active';title='正在加速 · 已确认数据传输';detail='已检测到鲜牛线路返回的数据，当前连接确实经过加速通道。';}
+   else if(upload>0) {state='waiting';title='正在发送 · 等待线路响应';detail='已发送数据，收到线路返回后会自动亮绿。';}
+   else {state='waiting';title='加速已开启 · 等待设备流量';detail='暂时没有新的数据传输；打开商店、下载或联网后会自动确认。';}
+  } else {state='waiting';title='正在切换通道';detail='等待服务与代理入口状态同步。';}
+ } else if(entry.fresh) {title='加速状态暂不可用';detail='本机状态读取暂时中断，正在重试。';}
+ var card=root.querySelector('[data-sp="live-card"]');if(card)card.dataset.state=state;
+ text('live-title',title);text('live-detail',detail);
+ text('live-device',native.device_name||native.device||'未选择设备');
+ text('live-device-ip',native.device_name?native.device:'');
+ text('live-game',[native.game,native.area].filter(Boolean).join(' · ')||'未选择游戏');
+ text('live-exit',state==='off'?'默认网关直连':'鲜牛加速线路');
+ text('live-upload',valid?(Number.isFinite(upload)?bytes(upload)+'/s':'采样中…'):'—');
+ text('live-download',valid?(Number.isFinite(download)?bytes(download)+'/s':'采样中…'):'—');
+ text('live-proof',valid?'本次鲜牛通道已上传 '+bytes(c.sent)+' · 已下载 '+bytes(c.received):state==='off'?'当前直连流量见下方实时流量':'等待鲜牛通道数据');
+ text('live-scope','此状态确认代理通道的数据传输，不表示游戏延迟一定降低。');
+}
 function render(data) {
  var kind=root.dataset.mode==='accelerator'?'accelerator':'shared';
  var entry=data.entries&&data.entries[kind]||{},traffic=entry.traffic||{},counts=traffic.bytes||{};
  var now=performance.now(),previous=previousTraffic;
+ nativeEvidence(data,data.entries&&data.entries.accelerator||{},now);
+ var shared=data.entries&&data.entries.shared||{},accel=data.entries&&data.entries.accelerator||{};
+ text('feature-status','游戏共享：'+(shared.fresh?(shared.route==='game'?'已开启':'未运行'):'读取中')+' · 鲜牛：'+(accel.fresh?(accel.route==='socks'?'运行中':'未运行'):'读取中')+' · 星渡：'+(shared.fresh?(shared.route==='starpass'?'已开启':'已关闭'):'读取中')+'。');
  var comparable=entry.fresh&&previous&&previous.kind===kind&&previous.session===traffic.session&&now>previous.at;
  var elapsed=comparable?(now-previous.at)/1000:0;
  // Average over the visible polling interval so short bursts are not missed.
@@ -73,7 +107,7 @@ function render(data) {
 async function refresh() {
  if(active)return;active=true;
  try{render(await call());}
- catch(e){previousTraffic=null;['local','external'].forEach(function(k){['upload','download'].forEach(function(d){text(k+'-'+d,'—');var n=root.querySelector('[data-sp="'+k+'-'+d+'"]');if(n)n.dataset.flow='idle';});});text('traffic-time','');text('traffic-status','状态读取失败，正在重试');text('update-status',e.message);}
+ catch(e){previousNative=null;lastNativeReply=null;var card=root.querySelector('[data-sp="live-card"]');if(card)card.dataset.state='unknown';text('live-title','状态读取中断');text('live-detail','正在重试，暂时无法确认加速状态。');text('live-upload','—');text('live-download','—');text('feature-status','服务状态暂不可用，正在重试。');previousTraffic=null;['local','external'].forEach(function(k){['upload','download'].forEach(function(d){text(k+'-'+d,'—');var n=root.querySelector('[data-sp="'+k+'-'+d+'"]');if(n)n.dataset.flow='idle';});});text('traffic-time','');text('traffic-status','状态读取失败，正在重试');text('update-status',e.message);}
  finally{active=false;}
 }
 return baseclass.extend({

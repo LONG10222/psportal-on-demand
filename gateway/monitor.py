@@ -1,10 +1,15 @@
 #!/usr/bin/python3
 """Sanitized dashboard snapshots and explicit subscription-account refresh."""
-import hashlib,json,os,re,subprocess,sys,time
+import hashlib,ipaddress,json,os,re,subprocess,sys,time
 from pathlib import Path
 from entry import option
 from net import request
 CACHE=Path('/etc/portalproxy/subscription-usage.json')
+NATIVE_CONFIG=Path('/etc/xianniu-router/session.json')
+NATIVE_STATUS=Path('/var/run/xianniu-router.json')
+NATIVE_PREFERENCES=Path('/etc/xianniu-router/preferences.json')
+NATIVE_CATALOG=Path('/usr/share/xianniu-router/catalog.json')
+PROC=Path('/proc')
 
 def read_json(path,limit=262144):
     try:
@@ -67,6 +72,56 @@ def refresh():
         save(CACHE,cache)
         return {'ok':True}
 
+def clean_title(value):
+    return ''.join(c for c in str(value) if c.isprintable())[:120] if isinstance(value,str) else ''
+
+def accelerator_snapshot():
+    """Read local service evidence only; never probe a node or refresh an account."""
+    config=read_json(NATIVE_CONFIG)
+    path=NATIVE_STATUS;runtime=read_json(path)
+    try:
+        proc=subprocess.run(['ubus','-t','2','call','service','list','{"name":"xianniu-router"}'],capture_output=True,text=True,timeout=3)
+        if proc.returncode:raise ValueError('Service unavailable')
+        instances=json.loads(proc.stdout).get('xianniu-router',{}).get('instances',{})
+        process=next((v for v in instances.values() if v.get('running')),None)
+        known=True
+    except (OSError,ValueError,subprocess.TimeoutExpired,AttributeError):process=None;known=False
+    running=bool(process)
+    try:sample_at=path.stat().st_mtime;recent=-5<=time.time()-sample_at<=15
+    except OSError:sample_at=0;recent=False
+    fresh=known and (not running or recent and runtime.get('running') is True)
+    selected=runtime if running and fresh else config
+    profile=selected.get('profile',{});profile=profile if isinstance(profile,dict) else {}
+    game_id=selected.get('game_id');area_id=profile.get('area_id')
+    game_title=area_title=''
+    try:
+        catalog=NATIVE_CATALOG
+        if catalog.stat().st_size>16*1024*1024:raise ValueError('Catalog too large')
+        games=json.loads(catalog.read_text())
+        if not isinstance(games,list) or len(games)>8192:raise ValueError('Invalid catalog')
+        game=next((g for g in games if isinstance(g,dict) and g.get('id')==game_id),{})
+        game_title=clean_title(game.get('title',''))
+        areas=game.get('areas',[])
+        if isinstance(areas,list):area_title=next((clean_title(a.get('title','')) for a in areas[:256] if isinstance(a,dict) and a.get('id')==area_id),'')
+    except (OSError,ValueError):pass
+    address=config.get('active_device','')
+    try:address=str(ipaddress.IPv4Address(address))
+    except (ValueError,TypeError):address=''
+    preferences=read_json(NATIVE_PREFERENCES)
+    notes=preferences.get('devices',{});mac=config.get('active_device_mac','');mac=mac.lower() if isinstance(mac,str) else ''
+    note=notes.get(mac,{}) if isinstance(notes,dict) else {}
+    device_name=clean_title(note.get('note','')) if isinstance(note,dict) else ''
+    counters=runtime.get('counters',{}) if running and fresh else {}
+    if not isinstance(counters,dict):counters={}
+    safe={k:v for k in ('sent','received','tcp_connections','tcp_errors') if type(v:=counters.get(k)) is int and 0<=v<=9007199254740991}
+    pid=process.get('pid') if process else None
+    session=''
+    if type(pid) is int and pid>0:
+        try:session=str(pid)+':'+(PROC/str(pid)/'stat').read_text().rsplit(')',1)[1].split()[19]
+        except (OSError,IndexError):session=str(pid)
+    return {'running':running,'fresh':fresh,'healthy':running and fresh and runtime.get('refresh_ok') is True,
+        'session':session,'sample_at':sample_at,'counters':safe,'game':game_title,'area':area_title,'device':address,'device_name':device_name}
+
 def snapshot():
     rows=[];cache=read_json(CACHE)
     for row in sources():
@@ -79,7 +134,7 @@ def snapshot():
         fresh=isinstance(stamp,(int,float)) and -5<=time.time()-stamp<=5
         entries[kind]={'fresh':fresh,'route':value.get('route','direct'),'traffic':value.get('traffic',{}) if fresh else {}}
     from updater import status
-    return {'now':int(time.time()),'subscriptions':rows,'entries':entries,'update':status()}
+    return {'now':int(time.time()),'subscriptions':rows,'entries':entries,'accelerator':accelerator_snapshot(),'update':status()}
 
 if __name__=='__main__':
     try:

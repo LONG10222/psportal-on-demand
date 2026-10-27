@@ -68,6 +68,23 @@
 .starpass-app .sp-subscription { margin:10px 0 16px; border-bottom:1px solid var(--sp-edge); padding-bottom:12px; }
 .starpass-app small { color:var(--sp-note); }
 .starpass-app details details > summary { cursor:pointer; }
+.starpass-app .sp-live { --live:#8d92a3; border:2px solid var(--live); border-radius:14px; background:var(--sp-card); padding:22px; margin-bottom:18px; box-shadow:0 3px 18px #0001; }
+.starpass-app .sp-live[data-state="active"] { --live:#168452; }
+.starpass-app .sp-live[data-state="waiting"] { --live:#ad650c; }
+.starpass-app .sp-live-heading { display:flex; align-items:center; gap:10px; color:var(--live); }
+.starpass-app .sp-live-heading>strong { font-size:1.45em; line-height:1.4; }
+.starpass-app .sp-live-dot { flex:none; width:13px; height:13px; border-radius:50%; background:var(--live); }
+.starpass-app .sp-live[data-state="active"] .sp-live-dot { animation:sp-signal 1.4s ease-in-out infinite; }
+.starpass-app .sp-live-tag { margin-left:auto; border:1px solid var(--live); border-radius:20px; padding:3px 9px; font-size:.78em; white-space:nowrap; }
+.starpass-app .sp-live-game { font-weight:600; color:var(--sp-text); }
+.starpass-app .sp-live-path { display:flex; align-items:center; flex-wrap:wrap; gap:10px; background:var(--sp-soft); padding:12px; border-radius:8px; margin:12px 0; }
+.starpass-app .sp-live-path small { display:block; }
+.starpass-app .sp-live-speeds { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.starpass-app .sp-live-speeds span { display:block; color:var(--sp-note); }
+.starpass-app .sp-live-speeds strong { font-size:1.45em; font-variant-numeric:tabular-nums; color:var(--sp-text); }
+@keyframes sp-signal { 50% { box-shadow:0 0 0 6px #16845222; } }
+@media(prefers-reduced-motion:reduce) { .starpass-app .sp-live-dot { animation:none !important; } }
+@media(max-width:700px) { .starpass-app .sp-live { padding:16px; } .starpass-app .sp-live-heading>strong { font-size:1.18em; } .starpass-app .sp-live-tag { display:none; } .starpass-app .sp-live-speeds strong { font-size:1.2em; } }
 @media(max-width:700px) {
  .starpass-app .starpass-card { padding:16px; }
  .starpass-app .starpass-summary { grid-template-columns:1fr; gap:8px; }
@@ -82,6 +99,8 @@
  .starpass-app { --sp-text:#eee9fc; --sp-note:#c1b8d8; --sp-card:#20213c; --sp-edge:#484274; --sp-soft:#292843; }
  .starpass-app .starpass-tag { color:#c9bfff; }
  .starpass-app .sp-rate[data-flow="active"] { color:#73dfb0; }
+ .starpass-app .sp-live[data-state="active"] { --live:#73dfb0; }
+ .starpass-app .sp-live[data-state="waiting"] { --live:#f4bf70; }
  .starpass-app .cbi-input-text, .starpass-app select { background:#17192f; color:#eee9fc; border-color:#625b81; }
 }
 </style>
@@ -97,7 +116,17 @@
   <nav class="starpass-mode-tabs" aria-label="用途模式">
    <% action('_mode_game', self.portal_workspace == 'game'); action('_mode_accelerator', self.portal_workspace == 'accelerator'); action('_mode_starpass', self.portal_workspace == 'starpass') %>
   </nav>
-  <p>游戏共享：<%=self.portal_running and "运行中" or "未运行"%> · 鲜牛：<%=self.portal_accelerator_running and "运行中" or "未运行"%> · 星渡：<%=self.portal_starpass_enabled and "已开启" or "已关闭"%>。</p>
+  <p data-sp="feature-status">游戏共享：<%=self.portal_running and "运行中" or "未运行"%> · 鲜牛：<%=self.portal_accelerator_running and "运行中" or "未运行"%> · 星渡：<%=self.portal_starpass_enabled and "已开启" or "已关闭"%>。</p>
+  <% if self.portal_workspace == 'accelerator' then %>
+  <section class="sp-live" data-sp="live-card" data-state="unknown" aria-label="加速实时状态">
+   <div class="sp-live-heading"><span class="sp-live-dot" aria-hidden="true"></span><strong data-sp="live-title" role="status">正在确认加速状态</strong><span class="sp-live-tag">实时验证</span></div>
+   <p data-sp="live-detail">正在读取本机通道数据…</p>
+   <p class="sp-live-game" data-sp="live-game"></p>
+   <div class="sp-live-path"><span><strong data-sp="live-device">设备</strong><small data-sp="live-device-ip"></small></span><span aria-hidden="true">→</span><strong data-sp="live-exit">鲜牛加速线路</strong><span aria-hidden="true">→</span><span>互联网</span></div>
+   <div class="sp-live-speeds"><div><span>↑ 通道上传</span><strong data-sp="live-upload">—</strong></div><div><span>↓ 通道下载</span><strong data-sp="live-download">—</strong></div></div>
+   <p class="sp-live-proof" data-sp="live-proof"></p><small data-sp="live-scope"></small>
+  </section>
+  <% end %>
   <% if self.portal_workspace == 'starpass' then %>
    <section class="starpass-card"><h3>星渡 · OpenClash</h3>
     <p>局域网设备使用下面的手动代理。与游戏模式共用地址和端口，开启其中一个会关闭另一个。</p>
@@ -164,7 +193,7 @@
 cbi_init();
 (function () {
  'use strict';
- L.require('starpass.dashboard_v5').then(function(dashboard) {
+ L.require('starpass.dashboard_v6').then(function(dashboard) {
   dashboard.mount(document.getElementById('cbi-portalproxy_ui'), <%=require('luci.jsonc').stringify(url('admin','services','portalproxy','dashboard_api'))%>, <%=require('luci.jsonc').stringify(token)%>);
  });
  var form = document.getElementById('starpass-form');

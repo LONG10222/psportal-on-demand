@@ -25,7 +25,7 @@ for path in "$ROOT" "$ROOT/etc/init.d/portalproxy" "$ROOT/etc/init.d/portalproxy
     "$ROOT/usr/lib/lua/luci/controller/portalproxy.lua" "$ROOT/usr/lib/lua/luci/model/cbi/portalproxy.lua" \
     "$ROOT/usr/lib/lua/luci/view/portalproxy/onboarding.htm" "$ROOT/usr/lib/lua/luci/view/portalproxy/dashboard.htm" \
     "$ROOT/etc/config/portalproxy" "$ROOT/etc/portalproxy" \
-    "$ROOT/www/luci-static/resources/starpass/accelerator_v2.js" "$ROOT/www/luci-static/resources/starpass/dashboard_v5.js"; do
+    "$ROOT/www/luci-static/resources/starpass/accelerator_v2.js" "$ROOT/www/luci-static/resources/starpass/dashboard_v6.js"; do
     safe_target "$path"
 done
 mkdir -p "${ROOT:-/tmp}"
@@ -49,7 +49,7 @@ rm -rf "$ROOT/usr/libexec/portalproxy"
 rm -f "$ROOT/usr/lib/lua/luci/controller/portalproxy.lua" "$ROOT/usr/lib/lua/luci/model/cbi/portalproxy.lua"
 rm -f "$ROOT/usr/lib/lua/luci/view/portalproxy/onboarding.htm"
 rm -f "$ROOT/usr/lib/lua/luci/view/portalproxy/dashboard.htm"
-rm -f "$ROOT/www/luci-static/resources/starpass/accelerator_v2.js" "$ROOT/www/luci-static/resources/starpass/dashboard_v5.js"
+rm -f "$ROOT/www/luci-static/resources/starpass/accelerator_v2.js" "$ROOT/www/luci-static/resources/starpass/dashboard_v6.js"
 if [ "$PURGE" = 1 ]; then
     rm -f "$ROOT/etc/config/portalproxy"
     rm -rf "$ROOT/etc/portalproxy"
