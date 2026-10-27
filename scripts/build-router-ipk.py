@@ -63,7 +63,8 @@ def build(destination, version):
                    'view/portalproxy/onboarding.htm', 'view/portalproxy/dashboard.htm'):
         add('luci/' + source, 'usr/lib/lua/luci/' + source, 0o644)
     add('luci/static/accelerator.js', 'www/luci-static/resources/starpass/accelerator_v2.js', 0o644)
-    add('luci/static/dashboard.js', 'www/luci-static/resources/starpass/dashboard_v6.js', 0o644)
+    add('luci/static/dashboard.js', 'www/luci-static/resources/starpass/dashboard_v7.js', 0o644)
+    add('luci/menu.d/zz-starpass-integration.json', 'usr/share/luci/menu.d/zz-starpass-integration.json', 0o644)
     add('LICENSE', 'usr/share/licenses/starpass/LICENSE', 0o644)
     payload = tar_gz(entries)
     installed_size = len(gzip.decompress(payload))
@@ -83,7 +84,7 @@ Description: StarPass on-demand HTTP/TCP device sharing with optional OpenClash 
 [ -n "$IPKG_INSTROOT" ] && exit 0
 set -eu
 set --
-for path in etc/config/portalproxy etc/portalproxy usr/libexec/portalproxy etc/init.d/portalproxy etc/init.d/portalproxy-core etc/init.d/portalproxy-gateway etc/init.d/portalproxy-starpass usr/sbin/portalproxy usr/lib/lua/luci/controller/portalproxy.lua usr/lib/lua/luci/model/cbi/portalproxy.lua usr/lib/lua/luci/view/portalproxy www/luci-static/resources/starpass/accelerator_v2.js www/luci-static/resources/starpass/dashboard_v6.js; do
+for path in etc/config/portalproxy etc/portalproxy usr/libexec/portalproxy etc/init.d/portalproxy etc/init.d/portalproxy-core etc/init.d/portalproxy-gateway etc/init.d/portalproxy-starpass usr/sbin/portalproxy usr/lib/lua/luci/controller/portalproxy.lua usr/lib/lua/luci/model/cbi/portalproxy.lua usr/lib/lua/luci/view/portalproxy www/luci-static/resources/starpass/accelerator_v2.js www/luci-static/resources/starpass/dashboard_v7.js usr/share/luci/menu.d/zz-starpass-integration.json; do
  [ ! -e "/$path" ] || set -- "$@" "$path"
 done
 if [ "$#" -gt 0 ]; then

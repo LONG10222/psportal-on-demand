@@ -17,6 +17,27 @@ PUBLIC_UPSTREAM_CONFIGS = {
 }
 
 class PackagingTests(unittest.TestCase):
+    def test_integrated_menu_is_owned_by_starpass_and_removal_preserves_native_ui(self):
+        import json
+        with tempfile.TemporaryDirectory() as tmp:
+            target=Path(tmp)/'root'
+            (target/'usr/lib/lua/luci').mkdir(parents=True)
+            native=target/'usr/share/luci/menu.d/luci-app-xianniu-router.json'
+            native.parent.mkdir(parents=True)
+            original=b'{"admin/services/xianniu_router":{"title":"Independent accelerator","action":{"type":"view","path":"xianniu_router/overview_v2"}}}\n'
+            native.write_bytes(original)
+            overlay=target/'usr/share/luci/menu.d/zz-starpass-integration.json'
+            for _ in range(2):
+                subprocess.run(['sh',str(ROOT/'install.sh'),'--root',str(target),'--openclash'],check=True,capture_output=True)
+                self.assertEqual(native.read_bytes(),original)
+                dep=json.loads(overlay.read_text())['admin/services/xianniu_router']['depends']['fs']
+                self.assertTrue(all((target/path.lstrip('/')).exists() for path in dep))
+            subprocess.run(['sh',str(ROOT/'uninstall.sh'),'--root',str(target)],check=True,capture_output=True)
+            self.assertFalse(overlay.exists())
+            self.assertFalse((target/'usr/lib/lua/luci/controller/portalproxy.lua').exists())
+            self.assertTrue((target/'etc/config/portalproxy').exists())
+            self.assertEqual(native.read_bytes(),original)
+
     def test_router_scripts_are_lf_even_on_windows_checkout(self):
         for directory in ('src', 'files', 'tests'):
             for path in (ROOT / directory).rglob('*'):

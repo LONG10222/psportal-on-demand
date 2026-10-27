@@ -193,7 +193,7 @@
 cbi_init();
 (function () {
  'use strict';
- L.require('starpass.dashboard_v6').then(function(dashboard) {
+ L.require('starpass.dashboard_v7').then(function(dashboard) {
   dashboard.mount(document.getElementById('cbi-portalproxy_ui'), <%=require('luci.jsonc').stringify(url('admin','services','portalproxy','dashboard_api'))%>, <%=require('luci.jsonc').stringify(token)%>);
  });
  var form = document.getElementById('starpass-form');

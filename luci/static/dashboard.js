@@ -1,6 +1,19 @@
 'use strict';
 'require baseclass';
+'require ui';
+'require session';
 var root,api,token,timer,busy=false,lastUpdate='',active=false,previousTraffic=null,previousNative=null,lastNativeReply=null;
+function refreshIntegratedMenu() {
+ var cached=session.getLocalData('menu');
+ var services=cached&&cached.children&&cached.children.admin&&cached.children.admin.children&&cached.children.admin.children.services;
+ var old=services&&services.children&&services.children.xianniu_router;
+ // LuCI caches menus separately from login cookies. Refresh that cache once.
+ if(old&&old.satisfied&&!session.getLocalData('starpass-unified-menu-refreshed')) {
+  ui.menu.flushCache();
+  if(session.setLocalData('starpass-unified-menu-refreshed',true)) {window.location.reload();return true;}
+ }
+ return false;
+}
 function text(id,value) { var node=root.querySelector('[data-sp="'+id+'"]');if(node)node.textContent=value; }
 function bytes(n) {
  if(!Number.isFinite(n)||n<0)return '未提供';
@@ -112,6 +125,7 @@ async function refresh() {
 }
 return baseclass.extend({
  mount:function(node,url,csrf){
+  if(refreshIntegratedMenu())return;
   root=node;api=url;token=csrf;
   ['check-update','install-update','subscriptions-refresh'].forEach(function(operation){
    var button=root.querySelector('[data-sp="'+operation+'"]');if(!button)return;
