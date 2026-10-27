@@ -17,17 +17,91 @@ PUBLIC_UPSTREAM_CONFIGS = {
 }
 
 class PackagingTests(unittest.TestCase):
-    def test_router_update_guidance_is_read_only_and_preserves_config(self):
+    def test_integrated_menu_is_owned_by_starpass_and_removal_preserves_native_ui(self):
+        import json
+        with tempfile.TemporaryDirectory() as tmp:
+            target=Path(tmp)/'root'
+            (target/'usr/lib/lua/luci').mkdir(parents=True)
+            native=target/'usr/share/luci/menu.d/luci-app-xianniu-router.json'
+            native.parent.mkdir(parents=True)
+            original=b'{"admin/services/xianniu_router":{"title":"Independent accelerator","action":{"type":"view","path":"xianniu_router/overview_v2"}}}\n'
+            native.write_bytes(original)
+            overlay=target/'usr/share/luci/menu.d/zz-starpass-integration.json'
+            for _ in range(2):
+                subprocess.run(['sh',str(ROOT/'install.sh'),'--root',str(target),'--openclash'],check=True,capture_output=True)
+                self.assertEqual(native.read_bytes(),original)
+                dep=json.loads(overlay.read_text())['admin/services/xianniu_router']['depends']['fs']
+                self.assertTrue(all((target/path.lstrip('/')).exists() for path in dep))
+            subprocess.run(['sh',str(ROOT/'uninstall.sh'),'--root',str(target)],check=True,capture_output=True)
+            self.assertFalse(overlay.exists())
+            self.assertFalse((target/'usr/lib/lua/luci/controller/portalproxy.lua').exists())
+            self.assertTrue((target/'etc/config/portalproxy').exists())
+            self.assertEqual(native.read_bytes(),original)
+
+    def test_router_scripts_are_lf_even_on_windows_checkout(self):
+        for directory in ('src', 'files', 'tests'):
+            for path in (ROOT / directory).rglob('*'):
+                if path.is_file() and (path.suffix in ('.lua', '.sh', '.init') or path.name == 'portalproxy'):
+                    self.assertNotIn(b'\r\n', path.read_bytes(), path)
+
+    def test_no_core_install_still_allows_configuration_and_never_starts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / 'root'
+            result = subprocess.run(['sh', str(ROOT / 'install.sh'), '--root', str(target)], check=True, capture_output=True, text=True)
+            self.assertIn('Installed without a core', result.stdout)
+            self.assertFalse((target / 'usr/libexec/portalproxy/mihomo').exists())
+            self.assertIn("option enabled '0'", (target / 'etc/config/portalproxy').read_text())
+            self.assertFalse((target / 'etc/rc.d').exists())
+
+    def test_uninstall_refuses_symlink_ancestors_and_concurrent_install(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target, outside = Path(tmp) / 'root', Path(tmp) / 'outside'
+            target.mkdir(); outside.mkdir()
+            (outside / 'libexec/portalproxy').mkdir(parents=True)
+            sentinel = outside / 'libexec/portalproxy/keep'
+            sentinel.write_text('unrelated file')
+            (target / 'usr').symlink_to(outside, target_is_directory=True)
+            command = ['sh', str(ROOT / 'uninstall.sh'), '--root', str(target), '--purge']
+            self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)
+            self.assertEqual(sentinel.read_text(), 'unrelated file')
+            (target / 'usr').unlink()
+            (target / '.starpass-install.lock').mkdir()
+            self.assertNotEqual(subprocess.run(command, capture_output=True).returncode, 0)
+
+    def test_ipk_is_reproducible_arch_all_core_free_and_preserves_configuration(self):
+        import io
+        with tempfile.TemporaryDirectory() as tmp:
+            outputs = [Path(tmp) / name for name in ('first.ipk', 'second.ipk')]
+            for output in outputs:
+                subprocess.run(['python3', str(ROOT / 'scripts/build-router-ipk.py'), str(output), '--version', '0.1.0+test-1'], check=True, capture_output=True)
+            raw = outputs[0].read_bytes()
+            self.assertEqual(raw, outputs[1].read_bytes())
+            with tarfile.open(fileobj=io.BytesIO(raw)) as archive:
+                members = {m.name.removeprefix('./'): archive.extractfile(m).read() for m in archive if m.isfile()}
+            self.assertEqual(members['debian-binary'], b'2.0\n')
+            with tarfile.open(fileobj=io.BytesIO(members['control.tar.gz'])) as archive:
+                self.assertIn(b'Architecture: all', archive.extractfile('./control').read())
+                self.assertEqual(archive.extractfile('./conffiles').read(), b'/etc/config/portalproxy\n')
+                self.assertIn(b'gateway_enabled', archive.extractfile('./postinst').read())
+                self.assertNotIn(b'xianniu-router start', archive.extractfile('./postinst').read())
+                self.assertNotIn(b'portalproxy enable', archive.extractfile('./postinst').read())
+            with tarfile.open(fileobj=io.BytesIO(members['data.tar.gz'])) as archive:
+                self.assertTrue(archive.getmember('./usr/libexec/portalproxy').isdir())
+                self.assertTrue(archive.getmember('./usr/lib/lua/luci/view/portalproxy').isdir())
+                self.assertIn(b'starpass-form', archive.extractfile('./usr/lib/lua/luci/view/portalproxy/dashboard.htm').read())
+                self.assertFalse(any(m.name.endswith('/mihomo') for m in archive))
+                self.assertEqual(archive.getmember('./etc/config/portalproxy').mode, 0o600)
+                self.assertIn(b"option enabled '0'", archive.extractfile('./etc/config/portalproxy').read())
+
+    def test_router_update_guidance_matches_one_click_package_flow(self):
         template = (ROOT / 'luci/view/portalproxy/onboarding.htm').read_text()
         section = template.split('<details class="starpass-updates">', 1)[1].split('</details>', 1)[0]
-        for expected in ['https://github.com/LONG10222/psportal-on-demand/releases',
-                         'referrerpolicy="no-referrer"', 'rel="noopener noreferrer"',
-                         'does not check online versions', 'firmware and CPU architecture',
-                         'OpenClash manages its own core', 'Backups may contain credentials',
-                         'does not guarantee power-loss recovery', 'Do not purge configuration']:
+        for expected in ['检查更新','一键安装更新','opkg','备份','暂停计时','核心由 OpenClash 更新']:
             self.assertIn(expected, section)
-        for forbidden in ['<script', '<form', 'onclick=', 'fetch(', 'XMLHttpRequest', '<%=', 'os.execute']:
-            self.assertNotIn(forbidden, section)
+        dashboard = (ROOT / 'luci/view/portalproxy/dashboard.htm').read_text()
+        self.assertIn('data-sp="check-update"', dashboard)
+        self.assertIn('data-sp="install-update"', dashboard)
+        self.assertNotIn('本页不执行在线更新检查', section)
 
     def test_shell_syntax(self):
         files = [ROOT / 'install.sh', ROOT / 'uninstall.sh', ROOT / 'files/portalproxy']
@@ -67,6 +141,8 @@ class PackagingTests(unittest.TestCase):
             subprocess.run(command, check=True, capture_output=True)
             private = target / 'etc/portalproxy/providers/private.yml'
             private.write_text('fixture-only-secret')
+            dashboard = target / 'usr/lib/lua/luci/view/portalproxy/dashboard.htm'
+            self.assertEqual(dashboard.read_bytes(), (ROOT / 'luci/view/portalproxy/dashboard.htm').read_bytes())
             old_init = (target / 'etc/init.d/portalproxy').read_bytes()
             subprocess.run(command, check=True, capture_output=True)
             archives = list((target / 'etc/portalproxy-backups').glob('*.tar.gz'))
@@ -210,7 +286,8 @@ class PackagingTests(unittest.TestCase):
                     self.assertEqual(hashlib.sha256(archive.extractfile('starpass-router-source/' + name).read()).hexdigest(), expected)
 
     def test_optional_luci_sources_and_commands(self):
-        for relative in ('controller/portalproxy.lua', 'model/cbi/portalproxy.lua', 'view/portalproxy/onboarding.htm'):
+        for relative in ('controller/portalproxy.lua', 'model/cbi/portalproxy.lua',
+                         'view/portalproxy/onboarding.htm', 'view/portalproxy/dashboard.htm'):
             self.assertTrue((ROOT / 'luci' / relative).is_file())
             self.assertIn(relative, (ROOT / 'install.sh').read_text())
             self.assertIn(relative, (ROOT / 'uninstall.sh').read_text())
@@ -221,9 +298,10 @@ class PackagingTests(unittest.TestCase):
 
     def test_luci_onboarding_installs_and_stays_read_only(self):
         template = (ROOT / 'luci/view/portalproxy/onboarding.htm').read_text()
-        self.assertIn('class="starpass-guide"', template)
-        self.assertIn('prefers-color-scheme:dark', template)
-        self.assertIn('max-width:480px', template)
+        self.assertIn('class="starpass-help-brand"', template)
+        dashboard = (ROOT / 'luci/view/portalproxy/dashboard.htm').read_text()
+        self.assertIn('prefers-color-scheme:dark', dashboard)
+        self.assertIn('max-width:700px', dashboard)
         for forbidden in ('<script', '<form', 'onclick=', 'fetch(', '<%=', '<%--', 'subscription_url'):
             self.assertNotIn(forbidden, template)
         with tempfile.TemporaryDirectory() as tmp:
@@ -233,9 +311,13 @@ class PackagingTests(unittest.TestCase):
             installed = target / 'usr/lib/lua/luci/view/portalproxy/onboarding.htm'
             self.assertEqual(installed.read_text(), template)
             self.assertEqual(installed.stat().st_mode & 0o777, 0o644)
+            workspace = target / 'www/luci-static/resources/starpass/accelerator_v2.js'
+            self.assertEqual(workspace.read_bytes(), (ROOT / 'luci/static/accelerator.js').read_bytes())
             self.assertFalse((target / 'etc/rc.d').exists())
             subprocess.run(['sh', str(ROOT / 'uninstall.sh'), '--root', str(target)], check=True, stdout=subprocess.PIPE)
             self.assertFalse(installed.exists())
+            self.assertFalse(workspace.exists())
+            self.assertFalse((target / 'usr/lib/lua/luci/view/portalproxy/dashboard.htm').exists())
             self.assertTrue((target / 'etc/config/portalproxy').exists())
 
     def assert_no_runtime_payload(self, path, root):

@@ -1,0 +1,250 @@
+<%
+ local fields = self.portal_fields or {}
+ local field_index = 0
+ local function field(name)
+  if fields[name] then
+   field_index = field_index + 1
+   fields[name].index = field_index
+   fields[name]:render(1, scope or {})
+  end
+ end
+ local function action(name, primary)
+  local value = fields[name]
+  if not value then return end
+%><button type="submit" class="btn cbi-button starpass-action<%=primary and ' starpass-primary' or ''%>" name="cbid.portalproxy_ui.1.<%=name%>" value="1"<% if name ~= '_save' then %> formnovalidate<% end %>><%=pcdata(value.inputtitle)%></button><%
+ end
+%>
+<style>
+.starpass-app { --sp-text:#29223f; --sp-note:#605978; --sp-card:#fff; --sp-edge:#ded8ec; --sp-soft:#f4f1fb; color:var(--sp-text); max-width:1120px; margin:40px auto 0; background:var(--sp-soft); padding:18px; border-radius:12px; }
+.starpass-app * { box-sizing:border-box; }
+.starpass-app .starpass-card { background:var(--sp-card); border:1px solid var(--sp-edge); border-radius:12px; padding:20px; margin:0 0 16px; min-width:0; }
+.starpass-app .starpass-card h3 { color:var(--sp-text); background:transparent; padding:0; border:0; box-shadow:none; margin:0 0 14px; font-size:1.15em; }
+.starpass-app p { color:var(--sp-note); margin:8px 0; line-height:1.65; }
+.starpass-app .starpass-brand { display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom:18px; }
+.starpass-app .starpass-brand h2 { margin:0; padding:0; border:0; background:transparent; color:var(--sp-text); box-shadow:none; }
+.starpass-app .starpass-tag { padding:5px 10px; border-radius:20px; background:var(--sp-soft); color:#6250b9; font-size:.9em; white-space:nowrap; }
+.starpass-app .starpass-summary { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.starpass-app .starpass-summary > div { min-width:0; }
+.starpass-app .starpass-endpoint { font-size:1.35em; font-weight:600; color:var(--sp-text); overflow-wrap:anywhere; margin:8px 0; }
+.starpass-app .starpass-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin:14px 0 8px; }
+.starpass-app .starpass-action { margin:0; border:1px solid var(--sp-edge); border-radius:7px; padding:8px 16px; color:var(--sp-text); background:var(--sp-soft); box-shadow:none; min-height:36px; }
+.starpass-app .starpass-primary { color:#fff; border-color:#6250b9; background:#6250b9; }
+.starpass-app .xn-game, .starpass-app .xn-device { background:var(--sp-card); color:var(--sp-text); }
+.starpass-app .starpass-mode-tabs { display:flex; gap:10px; margin:0 0 18px; }
+.starpass-app .starpass-mode-tabs .starpass-action { flex:1; }
+.starpass-app .starpass-main-action { margin:22px 0; }
+.starpass-app .starpass-main-action .starpass-action { width:100%; font-size:1.12em; padding:13px 18px; }
+.starpass-app .starpass-connection { padding:12px 16px; background:var(--sp-soft); border-radius:9px; }
+.starpass-app .starpass-action:disabled { opacity:.45; cursor:not-allowed; }
+.starpass-app .starpass-dirty { color:#9c5b08; background:#fff5dd; border-radius:7px; padding:10px; }
+.starpass-app [hidden] { display:none !important; }
+.starpass-app .starpass-card > summary { cursor:pointer; font-size:1.08em; font-weight:600; color:var(--sp-text); }
+.starpass-app .starpass-card[open] > summary { margin-bottom:18px; }
+.starpass-app .cbi-value { padding:8px 0; margin:0; border:0; }
+.starpass-app .cbi-value-title { color:var(--sp-note); width:190px; padding-top:5px; text-align:left; }
+.starpass-app .cbi-value-field { color:var(--sp-text); margin-left:200px; padding:0; min-width:0; overflow-wrap:anywhere; }
+.starpass-app .cbi-value-field input:not([type=button]):not([type=submit]), .starpass-app .cbi-value-field select { max-width:100%; }
+.starpass-app .starpass-summary .cbi-value-title { display:block; float:none; width:auto; padding:0; }
+.starpass-app .starpass-summary .cbi-value-field { margin:5px 0 0; font-size:1.08em; }
+.starpass-app .starpass-advanced { margin:16px 0; padding:14px; background:var(--sp-soft); border-radius:8px; }
+.starpass-app .starpass-advanced > summary { cursor:pointer; color:var(--sp-note); }
+.starpass-app .starpass-table { max-height:360px; overflow:auto; margin-top:12px; border:1px solid var(--sp-edge); border-radius:8px; }
+.starpass-app .starpass-table .cbi-section { margin:0; padding:12px; border:0; }
+.starpass-app .starpass-table table { margin:0; }
+.starpass-app .starpass-search { display:block; margin:16px 0 8px; }
+.starpass-app .starpass-search input { display:block; margin-top:6px; max-width:100%; width:320px; }
+.starpass-app .starpass-help-brand { display:flex; gap:12px; align-items:center; margin-bottom:16px; }
+.starpass-app .starpass-portrait { width:48px; height:48px; border-radius:50%; }
+.starpass-app .starpass-help-brand p { margin:4px 0 0; }
+.starpass-app .starpass-steps { padding-left:24px; }
+.starpass-app .starpass-steps li { margin:14px 0; }
+.starpass-app .sp-update { text-align:right; max-width:50%; }
+.starpass-app .sp-update small { display:block; margin-top:8px; overflow-wrap:anywhere; }
+.starpass-app .sp-traffic-grid,.starpass-app .sp-sub-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.starpass-app .sp-traffic-grid>div { background:var(--sp-soft); border-radius:9px; padding:14px; }
+.starpass-app .sp-traffic-grid h4 { margin:0 0 8px; padding:0; border:0; background:transparent; color:var(--sp-text); box-shadow:none; }
+.starpass-app .sp-rate { font-variant-numeric:tabular-nums; transition:color .2s; }
+.starpass-app .sp-rate[data-flow="active"] { color:#168452; }
+.starpass-app .sp-subscription { margin:10px 0 16px; border-bottom:1px solid var(--sp-edge); padding-bottom:12px; }
+.starpass-app small { color:var(--sp-note); }
+.starpass-app details details > summary { cursor:pointer; }
+.starpass-app .sp-live { --live:#8d92a3; border:2px solid var(--live); border-radius:14px; background:var(--sp-card); padding:22px; margin-bottom:18px; box-shadow:0 3px 18px #0001; }
+.starpass-app .sp-live[data-state="active"] { --live:#168452; }
+.starpass-app .sp-live[data-state="waiting"] { --live:#ad650c; }
+.starpass-app .sp-live-heading { display:flex; align-items:center; gap:10px; color:var(--live); }
+.starpass-app .sp-live-heading>strong { font-size:1.45em; line-height:1.4; }
+.starpass-app .sp-live-dot { flex:none; width:13px; height:13px; border-radius:50%; background:var(--live); }
+.starpass-app .sp-live[data-state="active"] .sp-live-dot { animation:sp-signal 1.4s ease-in-out infinite; }
+.starpass-app .sp-live-tag { margin-left:auto; border:1px solid var(--live); border-radius:20px; padding:3px 9px; font-size:.78em; white-space:nowrap; }
+.starpass-app .sp-live-game { font-weight:600; color:var(--sp-text); }
+.starpass-app .sp-live-path { display:flex; align-items:center; flex-wrap:wrap; gap:10px; background:var(--sp-soft); padding:12px; border-radius:8px; margin:12px 0; }
+.starpass-app .sp-live-path small { display:block; }
+.starpass-app .sp-live-speeds { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.starpass-app .sp-live-speeds span { display:block; color:var(--sp-note); }
+.starpass-app .sp-live-speeds strong { font-size:1.45em; font-variant-numeric:tabular-nums; color:var(--sp-text); }
+@keyframes sp-signal { 50% { box-shadow:0 0 0 6px #16845222; } }
+@media(prefers-reduced-motion:reduce) { .starpass-app .sp-live-dot { animation:none !important; } }
+@media(max-width:700px) { .starpass-app .sp-live { padding:16px; } .starpass-app .sp-live-heading>strong { font-size:1.18em; } .starpass-app .sp-live-tag { display:none; } .starpass-app .sp-live-speeds strong { font-size:1.2em; } }
+@media(max-width:700px) {
+ .starpass-app .starpass-card { padding:16px; }
+ .starpass-app .starpass-summary { grid-template-columns:1fr; gap:8px; }
+ .starpass-app .cbi-value-title { display:block; float:none; width:auto; }
+ .starpass-app .cbi-value-field { margin:6px 0 0; }
+ .starpass-app .starpass-brand { align-items:flex-start; }
+ .starpass-app .starpass-tag { font-size:.8em; }
+ .starpass-app .sp-traffic-grid,.starpass-app .sp-sub-grid { grid-template-columns:1fr; }
+ .starpass-app .sp-update { max-width:55%; }
+}
+@media(prefers-color-scheme:dark) {
+ .starpass-app { --sp-text:#eee9fc; --sp-note:#c1b8d8; --sp-card:#20213c; --sp-edge:#484274; --sp-soft:#292843; }
+ .starpass-app .starpass-tag { color:#c9bfff; }
+ .starpass-app .sp-rate[data-flow="active"] { color:#73dfb0; }
+ .starpass-app .sp-live[data-state="active"] { --live:#73dfb0; }
+ .starpass-app .sp-live[data-state="waiting"] { --live:#f4bf70; }
+ .starpass-app .cbi-input-text, .starpass-app select { background:#17192f; color:#eee9fc; border-color:#625b81; }
+}
+</style>
+<form method="post" enctype="multipart/form-data" action="<%=pcdata(REQUEST_URI)%>" id="starpass-form">
+ <input type="hidden" name="token" value="<%=pcdata(token)%>" />
+ <input type="hidden" name="cbi.submit" value="1" />
+ <!-- Enter in a field saves; it must never implicitly start sharing. -->
+ <button type="submit" name="cbid.portalproxy_ui.1._save" value="1" hidden tabindex="-1" aria-hidden="true">保存配置</button>
+ <div class="cbi-map starpass-app" id="cbi-portalproxy_ui" data-mode="<%=pcdata(self.portal_workspace)%>">
+  <div class="starpass-brand"><div><h2>星渡 StarPass</h2><p>游戏设备，按需联网。</p></div><div class="sp-update"><span>v<span data-sp="version">…</span></span> <button type="button" class="starpass-action" data-sp="check-update">检查更新</button><button type="button" class="starpass-action starpass-primary" data-sp="install-update" hidden>一键安装更新</button><small data-sp="update-status" role="status"></small></div></div>
+  <% if self.message then %><div class="alert-message notice" role="status"><%=pcdata(self.message)%></div><% end %>
+  <% if self.errmessage then %><div class="alert-message warning" role="alert"><%=pcdata(self.errmessage)%></div><% end %>
+  <nav class="starpass-mode-tabs" aria-label="用途模式">
+   <% action('_mode_game', self.portal_workspace == 'game'); action('_mode_accelerator', self.portal_workspace == 'accelerator'); action('_mode_starpass', self.portal_workspace == 'starpass') %>
+  </nav>
+  <p data-sp="feature-status">游戏共享：<%=self.portal_running and "运行中" or "未运行"%> · 鲜牛：<%=self.portal_accelerator_running and "运行中" or "未运行"%> · 星渡：<%=self.portal_starpass_enabled and "已开启" or "已关闭"%>。</p>
+  <% if self.portal_workspace == 'accelerator' then %>
+  <section class="sp-live" data-sp="live-card" data-state="unknown" aria-label="加速实时状态">
+   <div class="sp-live-heading"><span class="sp-live-dot" aria-hidden="true"></span><strong data-sp="live-title" role="status">正在确认加速状态</strong><span class="sp-live-tag">实时验证</span></div>
+   <p data-sp="live-detail">正在读取本机通道数据…</p>
+   <p class="sp-live-game" data-sp="live-game"></p>
+   <div class="sp-live-path"><span><strong data-sp="live-device">设备</strong><small data-sp="live-device-ip"></small></span><span aria-hidden="true">→</span><strong data-sp="live-exit">鲜牛加速线路</strong><span aria-hidden="true">→</span><span>互联网</span></div>
+   <div class="sp-live-speeds"><div><span>↑ 通道上传</span><strong data-sp="live-upload">—</strong></div><div><span>↓ 通道下载</span><strong data-sp="live-download">—</strong></div></div>
+   <p class="sp-live-proof" data-sp="live-proof"></p><small data-sp="live-scope"></small>
+  </section>
+  <% end %>
+  <% if self.portal_workspace == 'starpass' then %>
+   <section class="starpass-card"><h3>星渡 · OpenClash</h3>
+    <p>局域网设备使用下面的手动代理。与游戏模式共用地址和端口，开启其中一个会关闭另一个。</p>
+    <div class="starpass-main-action"><% if self.portal_starpass_enabled then action('_starpass_off',true) else action('_starpass_on',true) end %></div>
+    <div class="starpass-endpoint"><%=pcdata(self.portal_address .. ':' .. self.portal_port)%></div>
+    <p>关闭后入口继续直连，恢复普通网络的可达范围。无需换 Wi-Fi 或修改 IP。</p>
+    <details><summary>OpenClash 原管理界面</summary><p><a href="<%=url('admin','services','openclash')%>" target="_blank" rel="noopener">单独打开 OpenClash</a></p>
+     <iframe title="OpenClash 原管理界面" loading="lazy" src="<%=url('admin','services','openclash')%>" style="width:100%;height:780px;border:0"></iframe>
+    </details>
+   </section>
+  <% end %>
+  <section class="starpass-card"><h3>实时流量 · <span data-sp="traffic-source">正在读取</span></h3>
+   <p><span data-sp="traffic-route"></span> <small data-sp="traffic-time"></small></p>
+   <div class="sp-traffic-grid">
+    <div><h4>外网目的地</h4><p>↑ 上传 <strong class="sp-rate" data-sp="external-upload">—</strong>　↓ 下载 <strong class="sp-rate" data-sp="external-download">—</strong></p><small>累计 ↑ <span data-sp="external-upload-total">—</span> / ↓ <span data-sp="external-download-total">—</span></small></div>
+    <div><h4>局域网目的地</h4><p>↑ 上传 <strong class="sp-rate" data-sp="local-upload">—</strong>　↓ 下载 <strong class="sp-rate" data-sp="local-download">—</strong></p><small>累计 ↑ <span data-sp="local-upload-total">—</span> / ↓ <span data-sp="local-download-total">—</span></small></div>
+   </div><p data-sp="traffic-status" role="status">正在读取入口统计…</p>
+  </section>
+  <% if self.portal_workspace == 'accelerator' then %>
+   <section class="starpass-card"><h3>鲜牛游戏加速</h3><p>选择游戏后开始加速，可与游戏共享同时运行；两套服务分别启停。</p><div id="starpass-accelerator">正在加载游戏库…</div></section>
+  <% end %>
+  <% if self.portal_workspace ~= 'accelerator' then %>
+  <section class="starpass-card"><div class="starpass-brand"><h3>订阅用量</h3><button type="button" class="starpass-action" data-sp="subscriptions-refresh">刷新订阅信息</button></div>
+   <div data-sp="subscriptions">正在读取订阅…</div><p data-sp="subscription-status" role="status"></p><small>服务商账户用量与本机入口统计分别计算；页面轮询不会发起订阅请求。</small>
+  </section>
+  <% end %>
+  <div<% if self.portal_workspace ~= 'game' then %> hidden<% end %>>
+   <section class="starpass-card starpass-game-home" aria-labelledby="starpass-overview-title">
+    <h3 id="starpass-overview-title">游戏共享<% if self.portal_running then %> · 已开启<% else %> · 已关闭<% end %></h3>
+    <p><%=self.portal_running and '让 Portal 使用下面的代理即可，OpenClash 不用开启。' or '使用现有订阅和核心，为你的游戏设备按需联网。'%></p>
+    <div class="starpass-main-action"><% if self.portal_running or self.portal_enabled then action('_stop', true) else action('_start', true) end %></div>
+    <div class="starpass-connection"><p>在 Portal 的 Wi-Fi 手动代理中填写</p>
+     <div class="starpass-endpoint"><%=pcdata(self.portal_configured and (self.portal_address .. ':' .. self.portal_port) or '请先展开高级设置，选择接入设备')%></div>
+     <p>只需设置一次。开启后空闲 60 秒休眠；关闭后同一入口直连，不影响普通网络访问。</p>
+    </div>
+    <p id="starpass-dirty" class="starpass-dirty" role="status" hidden>有未保存的修改。请先保存，再开启；关闭共享仍可使用。</p>
+   </section>
+   <details class="starpass-card" id="starpass-expert"<% if self.errmessage or not self.portal_configured then %> open<% end %>>
+    <summary>高级设置</summary>
+    <div id="starpass-settings">
+     <p>日常使用无需修改。更改后先保存，再应用。</p>
+     <% field('core_mode'); field('source_mode'); field('openclash_source'); field('client_ip'); field('listen_ip'); field('listen_port'); field('local_dns') %>
+     <details class="starpass-advanced" id="starpass-advanced"><summary>连接参数</summary><% field('idle_seconds'); field('bootstrap_dns') %></details>
+     <div id="starpass-standalone-fields"><% field('subscription_url'); field('selection_mode'); field('preferred_node') %></div>
+     <div class="starpass-actions"><% action('_save', true); action('_apply'); action('_update') %></div>
+    </div>
+    <details class="starpass-advanced" id="starpass-nodes">
+     <summary>节点与运行详情</summary>
+     <% field('_listener'); field('_connections'); field('_traffic'); field('_openclash') %>
+     <% if self.portal_linked then %><p><a href="<%=url('admin', 'services', 'openclash')%>">打开 OpenClash →</a></p><% end %>
+     <% field('_status'); field('_updated'); field('_routing'); field('_current'); field('_path'); field('_saved') %>
+     <div class="starpass-actions"><% action('_refresh') %></div>
+     <% if self.portal_groups then %><div class="starpass-table"><% self.portal_groups:render() %></div><% end %>
+     <label class="starpass-search" for="starpass-node-search">筛选节点<input type="search" id="starpass-node-search" placeholder="输入节点名称" autocomplete="off" /></label>
+     <div class="starpass-table" id="starpass-node-list"><% if self.portal_nodes then self.portal_nodes:render() end %></div>
+     <p id="starpass-node-count" aria-live="polite"></p>
+    </details>
+   </details>
+   <details class="starpass-card" id="starpass-help"><summary>使用帮助</summary><% field('_game_mode') %></details>
+  </div>
+ </div>
+</form>
+<script>
+cbi_init();
+(function () {
+ 'use strict';
+ L.require('starpass.dashboard_v7').then(function(dashboard) {
+  dashboard.mount(document.getElementById('cbi-portalproxy_ui'), <%=require('luci.jsonc').stringify(url('admin','services','portalproxy','dashboard_api'))%>, <%=require('luci.jsonc').stringify(token)%>);
+ });
+ var form = document.getElementById('starpass-form');
+ var settings = document.getElementById('starpass-settings');
+ var accelerator = document.getElementById('starpass-accelerator');
+ if (accelerator) L.require('starpass.accelerator_v2').then(function(workspace) {
+  return workspace.render();
+ }).then(function(node) { accelerator.replaceChildren(node); }).catch(function() {
+  accelerator.textContent = '加速器工作区加载失败，请确认鲜牛模块已安装并刷新页面。';
+ });
+ function settingsValues() {
+  var values = {};
+  Array.prototype.forEach.call(settings.querySelectorAll('input[name], select[name]'), function (input) {
+   if (input.name.indexOf('cbid.portalproxy_ui.1.') === 0) values[input.name] = input.value;
+  });
+  return values;
+ }
+ // LuCI replaces widget placeholders asynchronously. Capture the baseline
+ // after its first completed dependency pass, not before inputs exist.
+ var initial = null;
+ var protectedActions = ['_start', '_apply', '_update', '_refresh', '_switch_mode', '_mode_game', '_mode_accelerator', '_mode_starpass', '_starpass_on'];
+ function dirtyState() {
+  if (initial === null) return;
+  var current = settingsValues();
+  var dirty = Object.keys(current).some(function (name) { return current[name] !== initial[name]; });
+  document.getElementById('starpass-dirty').hidden = !dirty;
+  protectedActions.forEach(function (action) {
+   var button = form.querySelector('button[name="cbid.portalproxy_ui.1.' + action + '"]');
+   if (button) button.disabled = dirty;
+  });
+ }
+ settings.addEventListener('input', dirtyState);
+ settings.addEventListener('change', dirtyState);
+ settings.addEventListener('cbi-dropdown-change', dirtyState);
+ settings.addEventListener('widget-change', dirtyState);
+ settings.addEventListener('dependency-update', function () {
+  if (initial === null) initial = settingsValues();
+  dirtyState();
+ });
+ var search = document.getElementById('starpass-node-search');
+ var rows = Array.prototype.slice.call(document.querySelectorAll('#starpass-node-list tr')).filter(function (row) { return row.querySelector('td'); });
+ function filterNodes() {
+  var term = search.value.trim().toLocaleLowerCase(), count = 0;
+  rows.forEach(function (row) {
+   var match = row.textContent.toLocaleLowerCase().indexOf(term) !== -1;
+   row.hidden = !match;
+   if (match) count++;
+  });
+  document.getElementById('starpass-node-count').textContent = rows.length ? '显示 ' + count + ' / ' + rows.length + ' 项' : '暂无节点快照，请在核心就绪时刷新。';
+ }
+ search.addEventListener('input', filterNodes);
+ filterNodes();
+})();
+</script>

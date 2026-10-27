@@ -1,0 +1,12 @@
+{
+  "admin/services/xianniu_router": {
+    "depends": {
+      "acl": [
+        "luci-app-xianniu-router"
+      ],
+      "fs": {
+        "/usr/lib/lua/luci/controller/portalproxy.lua": "absent"
+      }
+    }
+  }
+}

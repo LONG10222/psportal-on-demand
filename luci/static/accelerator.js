@@ -1,13 +1,14 @@
 'use strict';
-'require view';
+'require baseclass';
 'require form';
 'require poll';
 'require rpc';
 'require ui';
+'require xianniu_router.member_clock as memberClock';
 
 var api = {}, schemas = { status: [], devices: [], catalog: ['query', 'platform', 'offset', 'limit'],
     lines: ['game_id', 'area_id'], launch: ['device', 'game_id', 'area_id', 'line_id'],
-    start: [], stop: [], member: [], member_pause: [], member_resume: [], wechat_create: [],
+    set_device_note: ['mac', 'note'], start: [], stop: [], finish: [], member: [], member_pause: [], member_resume: [], wechat_create: [],
     wechat_image: ['id', 'part'], wechat_poll: ['id'], login_password: ['mobile', 'password'] };
 Object.keys(schemas).forEach(function(name) {
     var call = rpc.declare({ object: 'xianniu', method: name, params: schemas[name], expect: { '': {} } });
@@ -20,9 +21,9 @@ Object.keys(schemas).forEach(function(name) {
 });
 
 function accelerator() {
-    var state = {}, inventory = {}, device = '', selected = null, platform = '', offset = 0;
+    var state = {}, inventory = {}, device = '', deviceMac = '', selected = null, platform = '', offset = 0;
     var qrId = null, qrBusy = false, qrTimer = null, actionBusy = false, searchSequence = 0, lineSequence = 0, timer;
-    var memberTimer = null, memberBusy = false;
+    var memberTimer = null, memberBusy = false, clock = memberClock.create(), clockLabel = null;
     var account = E('div'), membership = E('div'), runtime = E('div'), message = E('p', { role: 'status', 'aria-live': 'polite' });
     var devices = E('div', { 'class': 'xn-cards' }), library = E('div', { 'class': 'xn-library' });
     var search = E('input', { type: 'search', placeholder: '搜索游戏名、简称，例如 PS5港服、暗黑4', 'aria-label': '搜索游戏' });
@@ -51,11 +52,20 @@ function accelerator() {
         });
     }, 'cbi-button-positive');
     function updateLaunch() {
-        launch.textContent = (state.runtime || {}).running ? '切换并加速' :
+        launch.textContent = (state.runtime || {}).running ? '切换并加速' : selected && selected.is_free === true ? '免费加速' :
             ((state.member || {}).pause_state === 0 ? '恢复计时并加速' : '开始加速');
         launch.disabled = actionBusy || !device || !selected || !areas.value || !lines.value;
     }
+    function tickMembership() {
+        var value = clock.read();
+        if (!clockLabel || !value) return;
+        var seconds = value.seconds;
+        clockLabel.textContent = '剩余可用时长' + (value.estimated ? '（倒计时估算）：' : '（官方）：') +
+            Math.floor(seconds / 3600).toLocaleString('zh-CN') + ' 小时 ' +
+            Math.floor(seconds % 3600 / 60) + ' 分 ' + seconds % 60 + ' 秒';
+    }
     function showMembership(value) {
+        clock.accept(value);
         var pieces = [];
         if (value.package_title) pieces.push(String(value.package_title));
         if (value.pause_state !== undefined) pieces.push(Number(value.pause_state) === 0 ? '官方计时：已暂停' : '官方计时：未暂停');
@@ -65,13 +75,15 @@ function accelerator() {
             return Math.floor(seconds / 3600).toLocaleString('zh-CN') + ' 小时 ' +
                 Math.floor(seconds % 3600 / 60) + ' 分 ' + seconds % 60 + ' 秒';
         }
-        var rows = [E('p', {}, [E('strong', {}, '剩余可用时长（官方）：' + duration(value.remaining_seconds))])];
+        clockLabel = E('strong', {}, '剩余可用时长（官方）：' + duration(value.remaining_seconds));
+        var rows = [E('p', {}, [clockLabel])];
         if (value.trial_seconds !== null && value.trial_seconds !== undefined)
             rows.push(E('p', {}, '试用时长（单列）：' + duration(value.trial_seconds)));
         rows.push(E('p', {}, pieces.join(' · ') || '可刷新官方会员状态，暂停计时以官方返回结果为准'));
         if (value.updated_at) rows.push(E('small', {}, '官方数据更新于 ' + new Date(value.updated_at * 1000).toLocaleString('zh-CN',
-            { timeZone: 'Asia/Shanghai', hour12: false }) + ' · 每 60 秒自动刷新，以官方返回为准'));
+            { timeZone: 'Asia/Shanghai', hour12: false }) + ' · 每 60 秒官方校准，计时中每秒更新估算'));
         membership.replaceChildren.apply(membership, rows);
+        tickMembership();
     }
     function refreshMember(automatic) {
         if (memberBusy) return Promise.resolve();
@@ -100,6 +112,7 @@ function accelerator() {
                 (value.login_method === 'wechat' ? '微信官方登录' : '官方密码登录') : '';
             if (authenticated && value.login_at) detail += ' · 登录时间 ' + new Date(value.login_at * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
             account.replaceChildren(E('strong', { style: authenticated ? 'color:#198754' : '' }, label), E('p', {}, detail));
+            if (!authenticated) clock.reset();
             showMembership(value.member || {});
             scheduleMember();
             var current = value.runtime || {}, text;
@@ -118,7 +131,7 @@ function accelerator() {
             var card = E('button', { type: 'button', 'class': 'xn-device' + (device === row.ip ? ' xn-selected' : ''),
                 'aria-pressed': device === row.ip ? 'true' : 'false', click: function() {
                     if (actionBusy) return;
-                    device = row.ip; drawDevices();
+                    device = row.ip; deviceMac = row.mac || ''; drawDevices();
                     var preset = row.preset;
                     if (preset) api.catalog(String(preset.game_id), '', 0, 1).then(function(value) {
                         if (device === row.ip && value.games.length) return selectGame(value.games[0], preset);
@@ -126,7 +139,16 @@ function accelerator() {
                     updateLaunch();
                 } }, [E('strong', {}, row.name), E('small', {}, row.ip + ' · ' + (row.seen ? '近期有通信' : '已发现/已保存')),
                     E('small', {}, row.preset ? '已记住游戏与线路，点击恢复' : '点击为此设备选择游戏')]);
-            devices.appendChild(card);
+            var note = E('input', { type: 'text', maxlength: 64, value: row.note || '',
+                style: 'width:100%;box-sizing:border-box', placeholder: '设备备注，例如 PS5 / PS Portal', 'aria-label': '设备备注 ' + (row.mac || row.ip) });
+            var save = button('保存备注', function() {
+                return api.set_device_note(row.mac, note.value).then(function() {
+                    message.textContent = '备注已按 MAC 保存，IP 改变后仍保留';
+                    return refreshDevices(false);
+                });
+            }, '');
+            save.disabled = !row.mac;
+            devices.appendChild(E('div', { style: 'min-width:0' }, [card, E('details', {}, [E('summary', {}, '备注'), E('small', {}, row.mac ? 'MAC ' + row.mac : '暂未发现 MAC，无法保存备注'), note, save])]));
         });
         if (!(inventory.devices || []).length) devices.appendChild(E('p', {}, '暂未发现设备，请让设备联网后刷新；高级设置可添加离线设备。'));
         proxyHelp.textContent = '设备的手动 HTTP 代理填写：' + inventory.host + '，端口 ' + inventory.port + '。仅首次接入需要设置。';
@@ -135,9 +157,10 @@ function accelerator() {
         return api.devices().then(function(value) {
             inventory = value;
             if (choose || !value.devices.some(function(row) { return row.ip === device; })) {
-                var preferred = value.devices.find(function(row) { return row.ip === state.active_device; }) ||
+                var preferred = value.devices.find(function(row) { return row.mac && row.mac === (deviceMac || state.active_device_mac); }) ||
+                    value.devices.find(function(row) { return row.ip === state.active_device; }) ||
                     value.devices.find(function(row) { return row.name.indexOf('PS5') >= 0; }) || value.devices[0];
-                device = preferred ? preferred.ip : '';
+                device = preferred ? preferred.ip : ''; deviceMac = preferred ? preferred.mac || '' : '';
             }
             drawDevices(); updateLaunch();
         });
@@ -268,25 +291,26 @@ function accelerator() {
         E('div', { 'class': 'xn-section' }, [E('h3', {}, '2. 选择游戏'), tabs, search, ' ', result, library, pager]),
         E('div', { 'class': 'xn-section' }, [E('h3', {}, '3. 一键加速'), gameTitle,
             E('div', {}, ['区服 ', areas, ' 线路 ', lines]),
-            E('div', { 'class': 'xn-actions' }, [launch, button('停止加速', function() { return api.stop().then(function() {
-                message.textContent = '加速已停止；停止加速与暂停会员计时是两个官方操作'; return refresh();
+            E('div', { 'class': 'xn-actions' }, [launch, button('停止加速', function() { return api.finish().then(function(value) {
+                message.textContent = value.time_paused ? '加速已停止，官方计时已暂停' : '加速已停止；免费项目不会操作会员计时'; return refresh();
             }); }, 'cbi-button-negative')]), runtime, message,
-            E('p', { 'class': 'xn-note' }, '每台设备记住独立选择；当前一次运行一个设备/游戏会话。切换会停止上一个会话。Steam 商店域名默认直连；这不表示其余游戏协议均可经 HTTP 代理加速。'),
+            E('p', { 'class': 'xn-note' }, '每台设备记住独立选择；当前一次运行一个设备/游戏会话。免费标记按官方目录处理；Steam 商店加速时不使用直连例外。'),
             E('details', {}, [E('summary', {}, '查看官方全部线路和节点'), nodeList])])
     ]);
-    return refresh().then(function() { return refreshDevices(true); }).then(function() {
+    return refresh().then(function() { return refreshMember(true); }).then(function() { return refreshDevices(true); }).then(function() {
         var row = (inventory.devices || []).find(function(r) { return r.ip === device; });
         var preset = row && row.preset ? row.preset : { game_id: state.game_id, area_id: (state.profile || {}).area_id, line_id: (state.profile || {}).line_id };
         return Promise.all([findGames(true), api.catalog(String(preset.game_id || 797), '', 0, 1).then(function(value) {
             if (value.games.length) return selectGame(value.games[0], preset);
         })]);
     }).catch(fail).then(function() {
+        poll.add(function() { tickMembership(); return Promise.resolve(); }, 1);
         poll.add(function() { return refresh().catch(fail); }, 5);
         return panel;
     });
 }
 
-return view.extend({
+return baseclass.extend({
     handleSaveApply: null, handleSave: null, handleReset: null,
     render: function() {
         var map = new form.Map('xianniu-router', '高级设置', '仅修改本插件的代理入口和设备名单。保存后需停止并重新开始加速。');

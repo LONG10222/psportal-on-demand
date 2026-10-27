@@ -1,6 +1,7 @@
 config service 'main'
     option enabled '0'
     option interface 'br-lan'
+    option transparent_enabled '0'
     option http_enabled '0'
     option http_host '127.0.0.1'
     option http_port '10082'

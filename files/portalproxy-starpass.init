@@ -1,0 +1,14 @@
+#!/bin/sh /etc/rc.common
+START=99
+STOP=12
+start() {
+    [ "$(uci -q get portalproxy.main.gateway_enabled)" = 1 ] || return 0
+    [ "$(uci -q get portalproxy.main.starpass_enabled)" = 1 ] || return 0
+    local attempt=0
+    while [ "$attempt" -lt 5 ]; do
+        /usr/bin/python3 /usr/libexec/portalproxy/gateway/control.py starpass-on && return 0
+        attempt=$((attempt + 1)); sleep 1
+    done
+    return 1
+}
+stop() { :; }

@@ -7,7 +7,7 @@ local json = require 'luci.jsonc'
 local config = require 'config'
 n.umask('077')
 local options = {}
-local keys = {'core_mode','listen_ip','client_ip','local_dns','listen_port','backend_port','api_port','dns_port','idle_seconds',
+local keys = {'core_mode','source_mode','openclash_source','listen_ip','client_ip','local_dns','listen_port','backend_port','api_port','dns_port','idle_seconds',
     'wakeup_timeout','health_interval','health_timeout','routing_mark','core_path',
     'selection_mode','preferred_node','subscription_url','subscription_user_agent','bootstrap_dns','health_url','doh_url'}
 for _,key in ipairs(keys) do
@@ -16,7 +16,17 @@ for _,key in ipairs(keys) do
     if value ~= '' then options[key] = value end
 end
 local ok,err = pcall(function()
+    options = require('openclash_source').apply(options)
     local validated = config.validate(options)
+    if validated.core_mode == 'standalone' then
+        if validated.core_path == '/usr/libexec/portalproxy/mihomo' and not fs.access(validated.core_path,'x') then
+            for _,candidate in ipairs({'/usr/bin/mihomo','/etc/openclash/core/clash_meta'}) do
+                if fs.access(candidate,'x') then options.core_path=candidate; break end
+            end
+        end
+        assert(fs.access(options.core_path or validated.core_path,'x'),
+            'Standalone core missing. Link existing OpenClash or install a compatible Mihomo; no service started')
+    end
     local linked
     if validated.core_mode == 'openclash' then
         linked = require('openclash').discover(); config.render(options,nil,nil,linked)
@@ -41,6 +51,12 @@ local ok,err = pcall(function()
     end
     assert(fs.chmod('/etc/portalproxy/api-secret','600'))
     local core,policy = config.render(options,secret)
+    local cursor=require('uci').cursor()
+    if cursor:get('portalproxy','main','gateway_enabled')=='1' then
+        policy.bind='127.0.0.1';policy.allowed_ip='127.0.0.1'
+        policy.port=tonumber(cursor:get('portalproxy','main','entry_backend_port') or '18880')
+        assert(policy.port and policy.port>=1024 and policy.port<=65535 and policy.port~=policy.backend_port and policy.port~=policy.api_port and policy.port~=validated.listen_port and policy.port~=validated.dns_port,'Invalid entry backend port')
+    end
     local core_yaml = config.to_yaml(core,json.stringify)
     for name,value in pairs({['config.yaml']=core_yaml,['policy.json']=json.stringify(policy),['api-header']='Authorization: Bearer '..secret..'\n'}) do
         local path = '/etc/portalproxy/'..name

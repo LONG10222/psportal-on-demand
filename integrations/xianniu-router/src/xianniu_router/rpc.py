@@ -5,8 +5,8 @@ import sys
 from .control import APIError
 from .manager import Manager
 
-METHODS={'status':{},'devices':{},'catalog':{'query':'','platform':'','offset':32,'limit':32},'lines':{'game_id':32,'area_id':32},
-         'select':{'game_id':32,'area_id':32,'line_id':32},'start':{},'stop':{},
+METHODS={'set_device_note':{'mac':'','note':''},'status':{},'devices':{},'catalog':{'query':'','platform':'','offset':32,'limit':32},'lines':{'game_id':32,'area_id':32},
+         'select':{'game_id':32,'area_id':32,'line_id':32},'start':{},'stop':{},'finish':{},
          'launch':{'device':'','game_id':32,'area_id':32,'line_id':32},
          'member':{},'member_pause':{},'member_resume':{},
          'wechat_create':{},'wechat_image':{'id':'','part':32},'wechat_poll':{'id':''},

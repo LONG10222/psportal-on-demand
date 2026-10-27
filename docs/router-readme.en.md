@@ -1,127 +1,147 @@
-# StarPass router / PS Portal On-Demand
+# StarPass · Router
 
-[![CI](https://github.com/LONG10222/psportal-on-demand/actions/workflows/check.yml/badge.svg)](https://github.com/LONG10222/psportal-on-demand/actions/workflows/check.yml)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
+[Game and accelerator workspaces](router-workspaces.en.md)
 
-[简体中文](../README.zh-CN.md) | English
+On-demand HTTP proxy sharing for compatible devices on OpenWrt / iStoreOS.
 
-An on-demand proxy for PlayStation Portal on OpenWrt / iStoreOS. Starts Mihomo for external requests and stops it after 60 seconds of inactivity.
+[简体中文](router-readme.zh-CN.md) · English · [Project home](README.en.md) · [Acceptance record](router-validation-2026-10-23.zh-CN.md)
 
-- **On-demand core**: the listener starts at boot; external requests wake the proxy core.
-- **Automatic fallback**: uses your own subscription, preferring Hong Kong → Japan → other regions.
-- **Single client**: an IP allowlist and the Portal's manual HTTP proxy setting handle access.
-- **Independent service**: separate core and configuration, with direct LAN connections. OpenClash can remain stopped.
+## Choose a mode
 
-> Node preferences and the optional authenticated legacy LuCI page require target-version OpenWrt/Mihomo/LuCI acceptance. Local mocks do not establish core compatibility. See [operations and acceptance notes (Chinese)](../docs/node-preferences.zh-CN.md).
+| Mode | Core and nodes | When idle |
+| --- | --- | --- |
+| Standalone | StarPass manages its own Mihomo, HTTPS subscription and selection policy | Its core stops; an external request wakes it again |
+| OpenClash linked | Reuses the running proxy; subscriptions, nodes, rules and latency tests stay in OpenClash | Only StarPass sessions close; OpenClash keeps running |
 
-## Desktop and mobile development builds
+Both modes allow one device IPv4. Defaults are port `10081` and a `60`-second idle timeout. Installation and Save prepare settings; Start explicitly enables sharing and boot startup.
 
-The router retains standalone mode and adds explicit read-only OpenClash linking. For Linux, Windows and macOS, use the [desktop app](../portable/docs/desktop.md); the optional shared native engine and mobile hosts are documented in [native/README.md](../native/README.md). Do not run the router install script on a desktop.
+## Download
 
-The default desktop engine launches a separate Mihomo. Experimental embedded mode uses the same UI and a restricted shared Go/Mihomo engine. Android hosts that engine in a foreground service; iOS defaults to foreground hosting; its iOS 26+ time-limited background experiment still needs actual OS authorization and physical-device acceptance. See [current validation and platform gates](../docs/portable-status.zh-CN.md). Native engine code is GPL-3.0; the original router/wrapper remains MIT. Complete corresponding source must accompany native binaries.
+- [Validated code 5da0753 build](https://github.com/LONG10222/psportal-on-demand/actions/runs/39958952749): download the `starpass-router-source-5da075302716ec1199bdefcb110d6ae43aff1d46` artifact and unpack its outer ZIP.
+- [Current branch builds](https://github.com/LONG10222/psportal-on-demand/actions/workflows/check.yml?query=branch%3Afix%2Frouter-install-validation-20261023): check the exact commit's successful checks. Documentation updates do not repeat device acceptance.
+- [Complete matching source](https://github.com/LONG10222/psportal-on-demand/archive/5da075302716ec1199bdefcb110d6ae43aff1d46.zip) · [Draft PR #27](https://github.com/LONG10222/psportal-on-demand/pull/27).
 
-## Link an existing OpenClash installation
+Actions downloads may require login and expire after their retention period. Rebuild the corresponding commit using the instructions below when needed. Older Releases do not contain this router update.
 
-Use the exact draft-PR commit or its `starpass-router-source-…` Actions artifact. The older main archive does not contain this change. Run `sh install.sh --openclash`, then `portalproxy setup` and select `openclash`. No second core or subscription is copied. Existing installations keep their settings until you explicitly choose and apply the mode.
+| File | Purpose |
+| --- | --- |
+| `luci-app-starpass.ipk` / `.sha256` | Core-free opkg LuCI package and checksum |
+| `starpass-router-source.tar.gz` / `.sha256` | Source installer, tests, documentation and checksum |
 
-Start/configure OpenClash in its own interface first. StarPass reads effective UCI HTTP/mixed/controller ports and uses only literal loopback GET requests. It validates the authenticated runtime port and proxy-auth loopback exemption. Node/group snapshots are optional, sanitized and observational. StarPass never starts/stops/reloads OpenClash, selects its nodes, updates its subscriptions or changes DNS/firewall/routes. Idle closes only StarPass sessions.
+The IPK declares Lua/LuCI dependencies and contains no Mihomo binary. Firmware using apk uses the source installer; no native OpenWrt APK or iStore listing is supplied.
 
-OpenClash controls final DNS/rules, including DIRECT; source-IP rules see the router rather than the original client. This cannot inherit standalone backend rebinding protections. Default fake-IP DNS answers are forwarded by their original public hostname, never dialed; forbidden literals and local-name answers stay rejected. HTTP/CONNECT is TCP only, not arbitrary game UDP. Controller availability is not proof of Internet or game success.
+## Install
 
-The package is a reproducible, core-free source installer with SHA256SUMS, not an IPK/APK or iStore release. Mocks and staging tests do not establish real-router compatibility. See [the complete linked-mode guide](openclash-linked.zh-CN.md).
+### opkg firmware
 
-## Standalone quick start
-
-### 1. Requirements
-
-- An OpenWrt / iStoreOS router with Lua 5.1, LuCI, and procd.
-- A [Mihomo binary](https://github.com/MetaCubeX/mihomo/releases) for the router's architecture. An existing OpenClash core can be reused.
-- Your own HTTPS Clash/Mihomo YAML subscription.
-- A DHCP reservation for the Portal on your main router.
-
-### 2. Install
-
-SSH into the OpenWrt router and run as root:
+Copy the IPK and its checksum file to `/tmp` on the router, then run as root over SSH:
 
 ```sh
 cd /tmp
-curl -fL https://github.com/LONG10222/psportal-on-demand/archive/refs/heads/main.tar.gz -o portal-source.tar.gz
-tar -xzf portal-source.tar.gz
-cd psportal-on-demand-main
-sh install.sh
-portalproxy setup
+sha256sum -c luci-app-starpass.sha256
+opkg install ./luci-app-starpass.ipk
 ```
 
-The installer looks for an existing project binary, `/etc/openclash/core/clash_meta`, then `/usr/bin/mihomo`. To use another binary, replace the install command with:
+Use the firmware's matching feeds for dependencies. Open **Services → StarPass / 星渡**. The legacy CBI page requires `luci-compat`; installation checks the existing environment and does not start sharing.
 
-```sh
-sh install.sh --core /path/to/mihomo
-```
+### Source-managed installation
 
-If Lua dependencies are missing:
+For source-managed installations or apk firmware, first prepare the firmware's Lua, LuCI/procd, nixio, jsonc, UCI Lua, curl and CA dependencies. Do not mix package managers or feeds. The opkg dependency names are:
 
 ```sh
 opkg update
-opkg install lua luci-lib-nixio luci-lib-jsonc luci-lib-base libuci-lua curl ca-bundle
+opkg install lua luci-compat luci-lib-nixio luci-lib-jsonc luci-lib-base libuci-lua curl ca-bundle
 ```
 
-### 3. Configure
+Copy the source tar and checksum file to `/tmp`, then run:
 
-Run `portalproxy setup` and follow the prompts. Replace the example addresses with your own:
+```sh
+cd /tmp
+sha256sum -c starpass-router-source.sha256
+tar -xzf starpass-router-source.tar.gz
+cd starpass-router-source
+sh install.sh --openclash
+```
 
-| Prompt | Example |
+For a new standalone installation use `sh install.sh`, optionally with `--core /trusted/path/mihomo`. A missing core still permits installation and configuration, but standalone startup checks for an executable core. Known installed paths `/usr/bin/mihomo` and `/etc/openclash/core/clash_meta` can be discovered. Linked mode reuses the running OpenClash endpoint.
+
+Use IPKs to upgrade an opkg-managed installation; the source installer refuses to overwrite package-managed files. Existing mode settings are retained rather than changed by an installer flag.
+
+## Connect a device
+
+1. Prepare the upstream: configure and start OpenClash in its own interface, or prepare a trusted matching Mihomo and your HTTPS subscription for standalone mode.
+2. Expand **接入设置** (Connection settings), choose the mode and enter addresses. Reserve a stable DHCP address for the allowed device. These are examples only:
+
+   | Field | Example |
+   | --- | --- |
+   | Allowed device IPv4 | `192.168.50.30` |
+   | Router IPv4 | `192.168.50.2` |
+   | Proxy port | `10081` |
+   | LAN DNS | A working LAN resolver, e.g. `192.168.50.1` |
+
+3. Select **保存配置** (Save). In standalone mode, enter the hidden subscription field, save, then explicitly **更新订阅** (Update subscription). Blank input preserves the saved URL; local seed import remains available through the CLI.
+4. Select **启动共享** (Start sharing). Configure the device's manual HTTP proxy as `192.168.50.2:10081`, preserving its existing IP, gateway and DNS settings.
+5. Check a webpage before testing the intended game/streaming feature. Finish with **停止共享** (Stop sharing) and turn off the device's manual proxy.
+
+Overview keeps status, the saved endpoint and Start/Stop visible. Settings, historical node/group snapshots and Help are collapsed; long lists scroll and node names can be filtered locally. Advanced settings contain idle timeout/bootstrap DNS.
+
+| Action | Behavior |
 | --- | --- |
-| OpenWrt LAN IPv4 address | Router address `192.168.50.2` |
-| Portal reserved IPv4 address | Portal reservation `192.168.50.30` |
-| LAN DNS server | Main router `192.168.50.1` |
-| Working bootstrap DNS | `192.168.50.1` |
-| HTTP proxy port | `10081` |
-| External idle timeout | `60` |
-| HTTPS subscription URL | Your subscription; input is hidden |
-| Optional local Clash/Mihomo YAML seed file | Leave empty or enter an existing configuration path |
-| Outbound routing mark | `0` without OpenClash; see [coexistence settings](../docs/guide.md#openclash) |
+| Save | Validate and save; no download or service action |
+| Apply saved settings | Restart an enabled listener; a stopped listener stays stopped |
+| Start / Stop | Start and enable boot startup / Stop and disable boot startup |
+| Refresh snapshot | Read a ready core; never wake it or run latency probes |
+| Update subscription | Explicit standalone download; a running core may reload nodes and interrupt connections |
 
-Setup starts the listener and enables it at boot.
+Unsaved edits request Save first; Stop remains usable. Standalone supports regional fallback, preferred-with-fallback and fixed-node selection using exact names. A missing/unavailable fixed node rejects traffic forwarded by StarPass. Linked node selection and latency tests stay in OpenClash.
 
-On the **Portal → Wi-Fi → current network → advanced settings**:
+## Validation and limits
 
-- Keep IP, gateway, and DNS on automatic.
-- Enable the manual HTTP proxy, using the OpenWrt address and the port set above.
-- For this example, use `192.168.50.2:10081`.
+N1 / iStoreOS 24.10.8 ARM64 was exercised with actual LuCI actions, opkg install/upgrade, real HTTP/HTTPS, concurrency, idle reactivation and procd recovery. All 28 static files in the installed `5da0753` package matched; its CI/local packages were identical.
 
-If no seed was imported, run `portalproxy subscription-update` before connecting. Updates are explicit, and a running core may reload the file immediately and switch routes. Viewing cached status never wakes the core.
+A temporary Android 15 application on MuMu used the system proxy for HTTP 200/HTTPS 204 and recovered after sharing restarted. With sharing stopped, that client fell back to direct connections. Manual proxy settings are not a kill switch. Each round restored the original emulator proxy settings and removed the test application.
 
-## Commands
+HTTP/HTTPS CONNECT carries TCP. Physical PS Portal/Quest game or streaming behavior, physical Wi-Fi quality, target N1 whole-device reboot, long-duration operation and standalone live-subscription recovery remain unverified. Listener readiness, connections and snapshots do not prove Internet/game success. [Full evidence](router-validation-2026-10-23.zh-CN.md).
 
-```sh
-portalproxy status     # Show service status
-portalproxy setup      # Edit configuration
-portalproxy check      # Validate configuration
-portalproxy restart    # Restart the service
-portalproxy stop       # Stop the service
-portalproxy disable    # Stop and disable at boot
-portalproxy enable     # Start and enable at boot
-```
+## Update, rollback and uninstall
 
-Configuration: `/etc/config/portalproxy`. After editing, run `portalproxy check` and `portalproxy restart`.
+Stop sharing and retain the old package/source and configuration before updating. Upgrade opkg installations with `opkg install /tmp/new.ipk`, source installations with the matching `sh install.sh`. Both retain configuration and private local upgrade backups in `/etc/portalproxy-backups/`; backups can contain subscription credentials and must stay private.
 
-## Update and uninstall
-
-Download the new source, run `sh install.sh`, then `portalproxy restart`. Existing configuration is retained; upgrade backups are stored in `/etc/portalproxy-backups/`.
+Upgrades never start sharing automatically. An opkg `portalproxy-opkg` file is a separate new default; do not replace your configuration with it. For rollback, stop sharing and verify the backup and old package before restoring matching versions. The source installer attempts recovery from caught write failures; its backup is not a system snapshot or power-loss guarantee.
 
 ```sh
-sh uninstall.sh          # Uninstall, keep configuration
-sh uninstall.sh --purge  # Uninstall and remove configuration
+opkg remove luci-app-starpass  # opkg: retain configuration/provider/private backups
+sh uninstall.sh               # source: retain configuration
 ```
 
-Disable the Portal's manual proxy setting after uninstalling.
+To explicitly delete retained configuration, remove the opkg package first, then use matching source `sh uninstall.sh --purge`; independent backups remain. Disable the device's manual proxy afterward. External OpenClash remains independently managed.
 
-## Documentation
+## Commands and troubleshooting
 
-- [Configuration, OpenClash, troubleshooting, and tests](../docs/guide.md)
-- [Changelog](../CHANGELOG.md)
-- [Security and diagnostics](../SECURITY.md)
+```sh
+portalproxy setup                  # Interactive configuration; save only
+portalproxy check                  # Validate configuration/dependencies
+portalproxy enable                 # Start and enable boot startup
+portalproxy disable                # Stop and disable boot startup
+portalproxy apply                  # Apply saved settings
+portalproxy status                 # Status, not an Internet test
+portalproxy nodes                  # Local node snapshot
+portalproxy nodes-refresh          # Explicit refresh; never wake
+portalproxy prefer preferred 'JP A' # Save an exact preference
+portalproxy subscription-update    # Standalone subscription update
+portalproxy logs                   # Sanitized application events
+portalproxy diagnose               # Configuration check, status and logs
+```
 
-## License
+After editing `/etc/config/portalproxy`, use `portalproxy check`, then explicitly `portalproxy apply`. Keep subscriptions, authentication headers, private keys and backups out of logs/screenshots submitted to Issues.
 
-[MIT](../LICENSE). The proxy core is provided by [Mihomo](https://github.com/MetaCubeX/mihomo) under its upstream license.
+## Build matching source
+
+From the complete repository source root, using Python 3:
+
+```sh
+python3 scripts/build-router-ipk.py luci-app-starpass.ipk --version 0.1.0+git5da075302716-1
+python3 scripts/build-router-source.py starpass-router-source.tar.gz
+```
+
+Check the SHA-256 printed by the builders. [Advanced configuration/tests](guide.md) · [OpenClash details](openclash-linked.zh-CN.md) · [Changelog](../CHANGELOG.md) · [Security](../SECURITY.md). Router wrapper: [MIT](../LICENSE); Mihomo retains its [upstream license](https://github.com/MetaCubeX/mihomo).

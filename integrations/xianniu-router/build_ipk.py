@@ -6,7 +6,7 @@ import tarfile
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parent
-VERSION = '0.4.4'
+VERSION = '0.5.1'
 
 
 def archive(files, sort=True):
@@ -39,7 +39,7 @@ def main():
     size = sum(len(data) for data, _ in files.values()) // 1024
     control = (f'Package: xianniu-router\nVersion: {VERSION}\nArchitecture: all\n'
                f'Installed-Size: {size}\nSection: net\nPriority: optional\n'
-               'Depends: python3-base, python3-light, python3-asyncio, python3-urllib, python3-openssl, python3-codecs, python3-logging, luci-base, nftables\n'
+               'Depends: python3-base, python3-light, python3-asyncio, python3-urllib, python3-openssl, python3-codecs, python3-logging, luci-base\n'
                'Maintainer: Local interoperability experiment\n'
                'Description: Experimental Xianniu IPv4 relay and HTTP proxy for N1/iStoreOS\n').encode()
     postinst = b'''#!/bin/sh
@@ -47,7 +47,8 @@ def main():
  mkdir -p /etc/xianniu-router
  chmod 700 /etc/xianniu-router
  /usr/bin/python3 -c 'from pathlib import Path; root=Path("/usr/lib/xianniu-router").resolve(); [p.unlink() for name in ("xianniu_router","starpass_http") for p in (root/name/"__pycache__").glob("*.pyc") if p.is_file() and p.parent.resolve()==root/name/"__pycache__"]'
- /etc/init.d/xianniu-router enable
+ [ ! -x /etc/init.d/rpcd ] || /etc/init.d/rpcd reload
+ if [ -f /etc/config/portalproxy ]; then /etc/init.d/xianniu-router disable; else /etc/init.d/xianniu-router enable; fi
 }
 exit 0
 '''

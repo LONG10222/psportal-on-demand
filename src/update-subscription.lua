@@ -88,7 +88,10 @@ local function main()
     assert(uci:get('portalproxy','main','core_mode')~='openclash','Manage linked subscriptions in OpenClash')
     stage='configuration validation'
     local options={subscription_url=uci:get('portalproxy','main','subscription_url'),
-        subscription_user_agent=uci:get('portalproxy','main','subscription_user_agent')}
+        subscription_user_agent=uci:get('portalproxy','main','subscription_user_agent'),
+        source_mode=uci:get('portalproxy','main','source_mode'),
+        openclash_source=uci:get('portalproxy','main','openclash_source')}
+    options=require('openclash_source').apply(options,uci)
     subscription.validate_url(options.subscription_url)
     subscription.validate_user_agent(options.subscription_user_agent)
     assert(fs.access('/usr/bin/curl','x'), 'curl is required')

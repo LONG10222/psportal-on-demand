@@ -116,6 +116,8 @@ local function wait_socket(socket,event,b)
     if b.steps>MAX_STEPS or n.sysinfo().uptime>=b.deadline then return nil,'API timeout' end
     local p={{fd=socket,events=event}}
     local count,err=n.poll(p,10)
+    -- nixio reports a poll timeout as false; nil is an actual syscall error.
+    if count==false then return false end
     if not count then
         if err==n.const.EINTR then return false end
         return nil,'API poll failed'
