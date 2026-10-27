@@ -170,22 +170,27 @@ class GameGrid(ttk.Frame):
         for column in range(6):self.grid_frame.columnconfigure(column,weight=1 if column<self.columns else 0,uniform='games' if column<self.columns else '')
         for index,game in enumerate(self.filtered):self.make_tile(game,index)
         if not self.filtered:
-            tk.Label(self.grid_frame,text='还没有收藏的游戏，点击游戏卡片的 ☆ 即可添加' if self.category.get()=='mine' else '没有匹配游戏，试试简称、英文或部分名称',background='white',foreground='#64748b',pady=50).grid(column=0,row=0,columnspan=self.columns)
+            c=getattr(self.app,'palette',{'card':'white','note':'#64748b'})
+            tk.Label(self.grid_frame,text='暂无收藏' if self.category.get()=='mine' else '没有匹配游戏',background=c['card'],foreground=c['note'],pady=50).grid(column=0,row=0,columnspan=self.columns)
         self.canvas.yview_moveto(0)
 
     def make_tile(self,game,index):
         identity=game['id'];selected=identity==self.model.selected_id
-        color='#edf3ff' if selected else 'white'
-        tile=tk.Frame(self.grid_frame,background=color,highlightthickness=1,highlightbackground='#4777e6' if selected else '#edf0f5',cursor='hand2')
-        tile.grid(row=index//self.columns,column=index%self.columns,sticky='nsew',padx=4,pady=4)
+        c=getattr(self.app,'palette',dict(card='white',accent='#3266e3',accent_text='white',text='#334155',edge='#edf0f5',disabled='#edf0f5',disabled_text='#94a3b8',status='#2455ca'))
+        blocked=bool(self.app.busy or self.app.provider) and not selected
+        color=c['disabled'] if blocked else c['accent'] if selected else c['card']
+        ink=c['disabled_text'] if blocked else c['accent_text'] if selected else c['text']
+        tile=tk.Frame(self.grid_frame,background=color,highlightthickness=2 if selected else 1,highlightbackground=c['accent'] if selected else c['edge'],cursor='arrow' if blocked else 'hand2')
+        tile.grid(row=index//self.columns,column=index%self.columns,sticky='nsew',padx=9 if blocked else 3 if selected else 6,pady=9 if blocked else 3 if selected else 6)
+        tile.blocked=blocked;tile.selected=selected
         tile.columnconfigure(0,weight=1)
         top=tk.Frame(tile,background=color);top.grid(row=0,column=0,sticky='ew');top.columnconfigure(0,weight=1)
-        if game.get('is_free') is True:tk.Label(top,text='免费',background=color,foreground='#23875c',font=('Microsoft YaHei UI',8)).grid(row=0,column=0,sticky='w',padx=5)
+        if game.get('is_free') is True:tk.Label(top,text='免费',background=color,foreground=ink if selected or blocked else c['status'],font=('Microsoft YaHei UI',8)).grid(row=0,column=0,sticky='w',padx=5)
         favorite=identity in self.app.config.get('favorite_games',[])
         tk.Button(top,text='★' if favorite else '☆',font=('Segoe UI',10),background=color,foreground='#c68d24' if favorite else '#94a3b8',borderwidth=0,padx=4,pady=0,cursor='hand2',command=lambda:self.favorite(identity)).grid(row=0,column=1,sticky='e')
-        icon=tk.Label(tile,text=game['title'][:2],font=('Microsoft YaHei UI',15,'bold'),foreground='#4970aa',background=color,width=4,height=2)
+        icon=tk.Label(tile,text=game['title'][:2],font=('Microsoft YaHei UI',12 if blocked else 18 if selected else 15,'bold'),foreground=ink,background=color,width=4,height=2)
         icon.grid(row=1,column=0,pady=(0,4))
-        label=tk.Label(tile,text=game['title'],font=('Microsoft YaHei UI',9),background=color,foreground='#2455ca' if selected else '#334155',wraplength=110,height=2,anchor='n')
+        label=tk.Label(tile,text=game['title'],font=('Microsoft YaHei UI',8 if blocked else 10 if selected else 9,'bold' if selected else 'normal'),background=color,foreground=ink,wraplength=110,height=2,anchor='n')
         label.grid(row=2,column=0,sticky='ew',padx=4,pady=(0,8))
         for widget in (tile,top,icon,label):
             widget.bind('<Button-1>',lambda _,g=game:self.choose(g))
@@ -224,6 +229,11 @@ class GameGrid(ttk.Frame):
 
     def show_icon(self,label,bitmap,generation,identity):
         if generation!=self.generation or not label.winfo_exists():return
+        tile=self.tiles.get(identity)
+        blocked=bool(tile and getattr(tile,'blocked',False));selected=bool(tile and getattr(tile,'selected',False))
+        size=44 if blocked else 64 if selected else 56
+        bitmap=bitmap.resize((size,size),Image.Resampling.LANCZOS)
+        if blocked:bitmap=ImageOps.grayscale(bitmap).convert('RGBA')
         photo=ImageTk.PhotoImage(bitmap,master=label)
         self.images[identity]=photo
-        label.configure(image=photo,text='',width=56,height=56)
+        label.configure(image=photo,text='',width=size,height=size)

@@ -65,6 +65,7 @@ class DesktopView:
         self.language = i18n.load_language(app.path)
         self.bindings = []
         self.theme = i18n.load_theme(app.path)
+        self.theme_color = i18n.load_theme_color(app.path)
         self._preview_rendered = None
         self.page = 'Overview'
         self.navigation_generation = 0
@@ -111,9 +112,9 @@ class DesktopView:
         self.advanced_button = ttk.Button(sidebar, textvariable=self.advanced_var,
             command=lambda: self.set_advanced(not self.advanced), style='Portal.Nav.TButton')
         self.advanced_button.pack(fill='x', pady=(15, 4))
+        self.appearance_button=ttk.Button(sidebar,text='显示设置',command=self.show_appearance,style='Portal.Nav.TButton')
+        self.appearance_button.pack(fill='x',pady=3)
         ttk.Frame(sidebar, style='Portal.Side.TFrame').pack(fill='y', expand=True)
-        self.label(sidebar, 'No system proxy, DNS, VPN or firewall settings are changed.',
-                   style='Portal.SideNote.TLabel', wraplength=170, justify='left').pack(anchor='w', pady=(30, 0))
         from .version import PREVIEW_VERSION
         ttk.Label(sidebar,text='v'+PREVIEW_VERSION,style='Portal.SideNote.TLabel').pack(anchor='w',pady=(8,0))
 
@@ -268,7 +269,8 @@ class DesktopView:
         self.theme_combo = ttk.Combobox(settings, textvariable=self.theme_var, state='readonly', width=18)
         self.theme_combo.grid(row=11, column=1, sticky='w', pady=(18, 0))
         self.theme_combo.bind('<<ComboboxSelected>>', lambda _: app.set_theme(
-            'dark' if self.theme_combo.current() == 0 else 'light'))
+            ('system','dark','light','custom')[self.theme_combo.current()]))
+        ttk.Button(settings,text='自选底色…',command=self.choose_theme_color).grid(row=11,column=2,sticky='w',pady=(18,0))
 
         self.button(settings, 'Application updates', command=app.show_app_updates).grid(row=12, column=0, columnspan=3, sticky='w', pady=(18, 0))
 
@@ -307,24 +309,11 @@ class DesktopView:
         self.refresh()
         self.set_advanced(False)
         self.show('Overview')
+        root.after(3000,self.poll_system_theme)
 
     def _styles(self):
-        dark = self.theme == 'dark'
-        self.palette = c = dict(
-            page='#111326' if dark else '#f4f2fc',
-            side='#191a32' if dark else '#ece8f8',
-            card='#20213c' if dark else '#ffffff',
-            text='#f1f5fa' if dark else '#172b43',
-            note='#b9bdd8' if dark else '#585a78',
-            entry='#111c2a' if dark else '#f5f8fc',
-            edge='#35485f' if dark else '#d7e1ed',
-            selected='#39345f' if dark else '#e2dbf8',
-            hover='#39375f' if dark else '#e5def8',
-            button='#303050' if dark else '#eeeaf8',
-            accent='#6250b9',
-            status='#b4a9ff' if dark else '#57429d',
-            accent_hover='#51409f',
-            scroll='#657d9b' if dark else '#7d8da2')
+        from .appearance import palette
+        self.palette = c = palette(self.theme,getattr(self,'theme_color','#182333'))
         families = set(tkfont.families(self.root))
         self.font_family = next((name for name in ('Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', 'Segoe UI', 'Helvetica Neue', 'DejaVu Sans') if name in families), 'TkDefaultFont')
         face = self.font_family
@@ -345,13 +334,16 @@ class DesktopView:
         for name, bg, fg in (('Nav', 'side', 'note'), ('Selected', 'selected', 'text')):
             style.configure('Portal.' + name + '.TButton', background=c[bg], foreground=c[fg], borderwidth=0, anchor='w', padding=(14, 9))
             style.map('Portal.' + name + '.TButton', background=[('active', c['hover'])])
+        style.configure('Portal.Selected.TButton',font=(face,12,'bold'),padding=(16,12),foreground=c['selected_text'])
         style.configure('TButton', background=c['button'], foreground=c['text'], borderwidth=0, padding=(12, 9))
-        style.map('TButton', background=[('active', c['hover'])], foreground=[('disabled', c['note'])])
+        style.map('TButton', background=[('disabled',c['disabled']),('active', c['hover'])], foreground=[('disabled', c['disabled_text'])],font=[('disabled',(face,10))],padding=[('disabled',(9,6))])
+        for name,bg,fg,size,pad in (('ModeIdle',c['button'],c['text'],11,(14,10)),('ModeSelected',c['accent'],c['accent_text'],12,(20,14)),('ModeBlocked',c['disabled'],c['disabled_text'],10,(9,6))):
+            style.configure('Portal.'+name+'.TButton',background=bg,foreground=fg,font=(face,size,'bold' if name=='ModeSelected' else 'normal'),padding=pad,borderwidth=2 if name=='ModeSelected' else 0,bordercolor=c['accent'])
+            style.map('Portal.'+name+'.TButton',background=[('disabled',c['disabled']),('active',c['accent_hover'] if name=='ModeSelected' else c['hover'])],foreground=[('disabled',c['disabled_text'])])
         style.configure('Portal.Mode.TRadiobutton', background=c['card'], foreground=c['text'], padding=(0, 6))
-        style.map('Portal.Mode.TRadiobutton', foreground=[('disabled', 'selected', c['text']), ('disabled', '#777b89')],
-            background=[('active', c['card']), ('disabled', c['card'])])
-        style.configure('Portal.Accent.TButton', background=c['accent'], foreground='white', padding=(22, 12), font=(face, 11, 'bold'))
-        style.map('Portal.Accent.TButton', background=[('active', c['accent_hover']), ('disabled', c['button'])], foreground=[('disabled', c['note'])])
+        style.map('Portal.Mode.TRadiobutton', foreground=[('disabled',c['disabled_text']),('selected',c['status'])],font=[('selected',(face,12,'bold')),('disabled',(face,10))],background=[('active', c['card']), ('disabled', c['card'])])
+        style.configure('Portal.Accent.TButton', background=c['accent'], foreground=c['accent_text'], padding=(22, 12), font=(face, 11, 'bold'))
+        style.map('Portal.Accent.TButton', background=[('disabled', c['disabled']),('active', c['accent_hover'])], foreground=[('disabled', c['disabled_text'])])
         style.configure('Vertical.TScrollbar', background=c['scroll'], troughcolor=c['page'], arrowcolor=c['note'], borderwidth=0, arrowsize=11, lightcolor=c['page'], darkcolor=c['page'])
         style.map('Vertical.TScrollbar', background=[('active', c['note'])])
         style.configure('Portal.Divider.TFrame', background=c['edge'])
@@ -359,25 +351,59 @@ class DesktopView:
         style.configure('TEntry', padding=(9, 7), fieldbackground=c['entry'], foreground=c['text'], insertcolor=c['text'], bordercolor=c['edge'], lightcolor=c['edge'], darkcolor=c['edge'])
         style.map('TEntry', fieldbackground=[('disabled', c['card'])], foreground=[('disabled', c['note'])])
         style.configure('TCombobox', padding=(7, 6), background=c['button'], fieldbackground=c['entry'], foreground=c['text'], arrowcolor=c['text'], bordercolor=c['edge'], lightcolor=c['edge'], darkcolor=c['edge'])
-        style.map('TCombobox', fieldbackground=[('readonly', c['entry']), ('disabled', c['card'])], foreground=[('disabled', c['note']), ('readonly', c['text'])], selectbackground=[('readonly', c['selected'])], selectforeground=[('readonly', c['text'])])
+        style.map('TCombobox', fieldbackground=[('disabled',c['disabled']),('readonly', c['entry'])], foreground=[('disabled', c['disabled_text']), ('readonly', c['text'])], selectbackground=[('readonly', c['selected'])], selectforeground=[('readonly', c['selected_text'])])
         style.configure('Treeview', background=c['entry'], fieldbackground=c['entry'], foreground=c['text'], borderwidth=0, rowheight=27)
         style.configure('Treeview.Heading', background=c['button'], foreground=c['note'], relief='flat', padding=7)
-        style.map('Treeview', background=[('selected', c['selected'])], foreground=[('selected', c['text'])])
+        style.map('Treeview', background=[('selected', c['selected'])], foreground=[('selected', c['selected_text'])])
         style.configure('Portal.Horizontal.TProgressbar', background=c['accent'], troughcolor=c['button'],
                         lightcolor=c['accent'], darkcolor=c['accent'], borderwidth=0)
         self.root.option_add('*TCombobox*Listbox.background', c['card'])
         self.root.option_add('*TCombobox*Listbox.foreground', c['text'])
         self.root.option_add('*TCombobox*Listbox.selectBackground', c['selected'])
 
-    def set_theme(self, theme):
-        if theme not in ('dark', 'light'):
+    def set_theme(self, theme, color=None):
+        from .appearance import THEMES, valid_color
+        if theme not in THEMES or color is not None and not valid_color(color):
             raise ValueError('unsupported theme')
+        if color is not None:self.theme_color=color
         self.theme = theme
         self._styles()
         self.root.configure(background=self.palette['page'])
         for canvas in self.scroll_canvases:
             canvas.configure(background=self.palette['page'])
+        if hasattr(self.app,'log_widget'):
+            self.app.log_widget.configure(background=self.palette['entry'],foreground=self.palette['text'],insertbackground=self.palette['text'])
+        hub=getattr(self.app,'games_hub',None)
+        if hub and hasattr(hub,'apply_theme'):hub.apply_theme()
+        if getattr(self,'appearance_window',None) and self.appearance_window.winfo_exists():
+            self.appearance_window.configure(background=self.palette['card'])
+            self.appearance_combo.current(THEMES.index(theme))
         self.refresh()
+
+    def choose_theme_color(self):
+        from tkinter import colorchooser
+        color=colorchooser.askcolor(self.palette['page'],parent=getattr(self,'appearance_window',None) or self.root,title='选择底色')[1]
+        if color:self.app.set_theme('custom',color)
+
+    def show_appearance(self):
+        window=getattr(self,'appearance_window',None)
+        if window and window.winfo_exists():window.lift();return
+        window=self.appearance_window=tk.Toplevel(self.root);window.title('显示设置');window.transient(self.root)
+        window.configure(background=self.palette['card']);window.resizable(False,False)
+        body=ttk.Frame(window,style='Portal.Card.TFrame',padding=22);body.pack(fill='both',expand=True)
+        ttk.Label(body,text='主题底色',style='Portal.CardTitle.TLabel').pack(anchor='w',pady=(0,12))
+        combo=ttk.Combobox(body,state='readonly',values=('跟随系统','深色','浅色','自选底色'),width=24)
+        self.appearance_combo=combo
+        combo.current(('system','dark','light','custom').index(self.theme));combo.pack(fill='x')
+        combo.bind('<<ComboboxSelected>>',lambda _:self.app.set_theme(('system','dark','light','custom')[combo.current()]))
+        ttk.Button(body,text='选择底色…',command=self.choose_theme_color).pack(fill='x',pady=(12,0))
+        ttk.Button(body,text='完成',command=window.destroy,style='Portal.Accent.TButton').pack(fill='x',pady=(18,0))
+
+    def poll_system_theme(self):
+        if self.theme=='system':
+            from .appearance import palette
+            if palette('system')!=self.palette:self.set_theme('system')
+        self.root.after(3000,self.poll_system_theme)
 
     def scroll_page(self, parent, name):
         """Keep live controls reachable on compact windows and translated UIs."""
@@ -641,11 +667,7 @@ class DesktopView:
             return
         canvas = self.navigator_canvas
         width = max(1, canvas.winfo_width())
-        dark = self.theme == 'dark'
-        bg = '#17192f' if dark else '#eee9fa'
-        ink = '#f5f2ff' if dark else '#29223f'
-        muted = '#c5bfdf' if dark else '#5f527b'
-        orbit = '#484274' if dark else '#c6b8e8'
+        bg,ink,muted,orbit=(self.palette[k] for k in ('card','text','note','edge'))
         canvas.configure(background=bg)
         canvas.delete('all')
         # Right-aligned illustration leaves a bounded text area at every size.
@@ -907,8 +929,8 @@ class DesktopView:
         if not hasattr(self, 'metric_vars') or not hasattr(self.app, 'status_var'):
             return
         if hasattr(self, 'theme_combo'):
-            self.theme_combo.configure(values=(self.tr('Dark'), self.tr('Light')))
-            self.theme_combo.current(0 if self.theme == 'dark' else 1)
+            self.theme_combo.configure(values=('跟随系统',self.tr('Dark'),self.tr('Light'),'自选底色'))
+            self.theme_combo.current(('system','dark','light','custom').index(self.theme))
         for table in (self.node_table, self.rule_table, self.client_table):
             for key in table['columns']:
                 table.heading(key, text=self.tr(key))

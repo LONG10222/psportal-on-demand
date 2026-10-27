@@ -533,11 +533,11 @@ class DesktopApp:
         except (OSError, ValueError):
             self.backend.log(self._t('Preferences could not be saved. Language changed for this session.'))
 
-    def set_theme(self, theme):
+    def set_theme(self, theme, color=None):
         from .i18n import save_theme
-        self.view.set_theme(theme)
+        self.view.set_theme(theme, color)
         try:
-            save_theme(self.path, theme)
+            save_theme(self.path, theme, color)
         except (OSError, ValueError):
             self.backend.log('Appearance preference could not be saved.')
 
@@ -784,7 +784,8 @@ class DesktopApp:
         self.path_var.set(str(self.path))
         from .i18n import load_language
         self.view.set_language(load_language(self.path))
-        from .i18n import load_theme
+        from .i18n import load_theme, load_theme_color
+        self.view.theme_color=load_theme_color(self.path)
         self.view.set_theme(load_theme(self.path))
         self.engine_controls()
         self.view.refresh()

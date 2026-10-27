@@ -593,6 +593,10 @@ class App:
                     # A failed image/widget update must not stop the event pump.
                     self.status_var.set(error_text(error))
         locked=self.busy or self.provider is not None
+        if getattr(self,'_grid_locked',False)!=bool(locked):
+            self._grid_locked=bool(locked)
+            position=self.library_grid.canvas.yview()[0]
+            self.library_grid.refresh();self.library_grid.canvas.yview_moveto(position)
         if self.pending_catalog is not None and not locked and not self.quick_pending:
             games,self.pending_catalog=self.pending_catalog,None
             self.apply_catalog(games)

@@ -41,7 +41,7 @@ class LanguagePreferencesTests(unittest.TestCase):
     def test_appearance_and_language_preferences_preserve_each_other(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'config.json'
-            self.assertEqual(i18n.load_theme(path), 'dark')
+            self.assertEqual(i18n.load_theme(path), 'system')
             i18n.save_language(path, 'zh')
             i18n.save_theme(path, 'light')
             self.assertEqual(i18n.load_language(path), 'zh')
@@ -94,7 +94,12 @@ class HotLanguageWindowTests(unittest.TestCase):
                 self.assertEqual({key:id(var) for key,var in app.vars.items()}, variables)
                 self.assertTrue(app.log_widget.get('1.0', 'end').startswith(log))
                 app.set_language('en'); root.update()
-                app.set_theme('light'); app.set_theme('dark'); root.update()
+                app.set_theme('light');app.view.show_appearance()
+                app.set_theme('custom','#134e4a');root.update()
+                self.assertEqual(app.view.palette['page'],'#134e4a')
+                self.assertEqual(app.view.appearance_combo.current(),3)
+                app.view.appearance_window.destroy()
+                app.set_theme('dark'); root.update()
                 self.assertIs(app.backend.process, process)
                 self.assertIsNone(process.poll())
                 self.assertEqual(app.collect(), before)

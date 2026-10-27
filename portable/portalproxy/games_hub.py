@@ -84,6 +84,7 @@ class GamesHub:
                     from starpass_xianniu.app import App
                     store=Store();store.lock()
                     self.xianniu=App(self.native_frame,store,embedded=True)
+                    self.apply_theme()
                 except Exception:
                     if store:store.unlock()
                     ttk.Label(self.native_frame,text='内置鲜牛暂不可用。请关闭独立预览后重试，并确认使用了完整星渡集成包。',wraplength=650).pack(padx=20,pady=20)
@@ -98,6 +99,13 @@ class GamesHub:
     def detect(self):
         def work():self.events.put(discover())
         threading.Thread(target=work,daemon=True).start()
+
+    def apply_theme(self):
+        colors=self.host.view.palette
+        self.body.configure(background=colors['page']);self.native_frame.configure(background=colors['page'])
+        if self.xianniu:
+            from starpass_xianniu.ui_style import apply_palette
+            apply_palette(self.xianniu,colors,self.host.view.font_family)
 
     def poll(self):
         if self.closed:return

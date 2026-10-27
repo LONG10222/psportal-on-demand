@@ -72,7 +72,7 @@ class IntegratedGamesTests(unittest.TestCase):
         self.assertIs(hub.xianniu.root.winfo_toplevel(),self.root)
         self.assertEqual(self.root.title(),title);self.assertEqual(self.root.protocol('WM_DELETE_WINDOW'),protocol)
         self.assertEqual(self.style.lookup('TButton','background'),background);self.assertEqual(self.style.theme_use(),theme)
-        self.assertEqual(self.style.lookup('SPGame.CardTitle.TLabel','foreground'),'#17243b')
+        self.assertEqual(self.style.lookup('SPGame.CardTitle.TLabel','foreground'),self.app.view.palette['text'])
         self.assertFalse(self.app.view.main_footer.winfo_ismapped())
         count=len(hub.native_frame.winfo_children())
         for _ in range(3):self.app.view.show('Overview');self.app.view.show('Games')
@@ -367,6 +367,10 @@ class IntegratedGamesTests(unittest.TestCase):
         home.refresh()
         self.assertIn('剩余',home.usage_text.get())
         self.assertIn('局域网',home.traffic_text.get());self.assertIn('外网',home.traffic_text.get())
+        self.assertEqual(float(home.usage_progress['value']),30)
+        self.assertIn('30.0%',home.usage_percent.get())
+        self.app.view.subscription_info={'total':0};home.refresh()
+        self.assertFalse(home.usage_progress.winfo_manager())
 
 
 class InitialPageTests(unittest.TestCase):

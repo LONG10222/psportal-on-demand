@@ -385,7 +385,11 @@ def load_language(config_path: Path) -> str:
 
 
 def load_theme(config_path: Path) -> str:
-    return _preferences(config_path).get('theme', 'dark')
+    return _preferences(config_path).get('theme', 'system')
+
+
+def load_theme_color(config_path: Path) -> str:
+    return _preferences(config_path).get('theme_color', '#182333')
 
 
 def _preferences(config_path: Path) -> dict:
@@ -395,9 +399,12 @@ def _preferences(config_path: Path) -> dict:
         if len(raw) <= 4096:
             value = json.loads(raw)
             if isinstance(value, dict):
-                return {key: value[key] for key, choices in
-                        (('language', ('en', 'zh')), ('theme', ('dark', 'light')))
+                result = {key: value[key] for key, choices in
+                        (('language', ('en', 'zh')), ('theme', ('system','dark', 'light','custom')))
                         if value.get(key) in choices}
+                from .appearance import valid_color
+                if valid_color(value.get('theme_color')):result['theme_color']=value['theme_color']
+                return result
     except (OSError, ValueError, TypeError):
         pass
     return {}
@@ -409,15 +416,17 @@ def save_language(config_path: Path, language: str) -> None:
     _save_preference(config_path, 'language', language)
 
 
-def save_theme(config_path: Path, theme: str) -> None:
-    if theme not in ('dark', 'light'):
+def save_theme(config_path: Path, theme: str, color=None) -> None:
+    from .appearance import THEMES, valid_color
+    if theme not in THEMES or color is not None and not valid_color(color):
         raise ValueError('unsupported theme')
-    _save_preference(config_path, 'theme', theme)
+    _save_preference(config_path, 'theme', theme, {'theme_color':color} if color is not None else None)
 
 
-def _save_preference(config_path: Path, key: str, value: str) -> None:
+def _save_preference(config_path: Path, key: str, value: str, extra=None) -> None:
     preferences = _preferences(config_path)
     preferences[key] = value
+    preferences.update(extra or {})
     path = preference_path(config_path)
     if path.is_symlink():
         raise ValueError('invalid preferences path')
