@@ -112,7 +112,11 @@ async def serve(config, desktop_child=False):
                 core = ExistingProxy(config)
             else:
                 core = CoreManager(config)
-        proxy = ProxyServer(config, core)
+        if config.get('shared_core'):
+            from .shared_proxy import SharedProxy
+            proxy = SharedProxy(config, core)
+        else:
+            proxy = ProxyServer(config, core)
         await proxy.start()
         core.start_monitor()
         if desktop_child:

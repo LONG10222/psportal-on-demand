@@ -6,6 +6,12 @@ from pathlib import Path
 import tempfile
 
 ZH = {
+    'Linked proxy supports Game and Mixed modes. Nodes remain managed in the existing client.':'联动支持设备专用或设备与本机共享；节点仍在原客户端管理。',
+    'Workspaces':'工作台',
+    'Choose a purpose, connect a device, then start sharing.':'选择用途，确认接入网络，再启动共享。',
+    'Games':'游戏',
+    'Choose a game accelerator without changing other StarPass modes.':'选择加速器、游戏和设备。其他星渡模式及订阅保持独立。',
+    'Stop sharing and game acceleration, then close?':'停止本程序的共享和游戏加速后退出？',
     'Package saved, not installed. See instructions below.': '安装包已保存，尚未安装。请查看下方说明。',
     'Saved package: ': '安装包保存位置：',
     'Update failed. See details below.': '更新失败，请查看下方详情。',
@@ -379,7 +385,11 @@ def load_language(config_path: Path) -> str:
 
 
 def load_theme(config_path: Path) -> str:
-    return _preferences(config_path).get('theme', 'dark')
+    return _preferences(config_path).get('theme', 'system')
+
+
+def load_theme_color(config_path: Path) -> str:
+    return _preferences(config_path).get('theme_color', '#182333')
 
 
 def _preferences(config_path: Path) -> dict:
@@ -389,9 +399,12 @@ def _preferences(config_path: Path) -> dict:
         if len(raw) <= 4096:
             value = json.loads(raw)
             if isinstance(value, dict):
-                return {key: value[key] for key, choices in
-                        (('language', ('en', 'zh')), ('theme', ('dark', 'light')))
+                result = {key: value[key] for key, choices in
+                        (('language', ('en', 'zh')), ('theme', ('system','dark', 'light','custom')))
                         if value.get(key) in choices}
+                from .appearance import valid_color
+                if valid_color(value.get('theme_color')):result['theme_color']=value['theme_color']
+                return result
     except (OSError, ValueError, TypeError):
         pass
     return {}
@@ -403,15 +416,17 @@ def save_language(config_path: Path, language: str) -> None:
     _save_preference(config_path, 'language', language)
 
 
-def save_theme(config_path: Path, theme: str) -> None:
-    if theme not in ('dark', 'light'):
+def save_theme(config_path: Path, theme: str, color=None) -> None:
+    from .appearance import THEMES, valid_color
+    if theme not in THEMES or color is not None and not valid_color(color):
         raise ValueError('unsupported theme')
-    _save_preference(config_path, 'theme', theme)
+    _save_preference(config_path, 'theme', theme, {'theme_color':color} if color is not None else None)
 
 
-def _save_preference(config_path: Path, key: str, value: str) -> None:
+def _save_preference(config_path: Path, key: str, value: str, extra=None) -> None:
     preferences = _preferences(config_path)
     preferences[key] = value
+    preferences.update(extra or {})
     path = preference_path(config_path)
     if path.is_symlink():
         raise ValueError('invalid preferences path')

@@ -274,7 +274,7 @@ print('PASS: compact four-page navigation, deferred help and readiness-only shar
 
 # Installer revalidation failures must restore a download action on the UI thread.
 # This is a wiring guard; UpdateInstrumentation exercises the actual button/state.
-updater = (root/'app/src/main/java/org/psportal/host/UpdateActivity.java').read_text()
+updater = (root/'app/src/main/java/org/psportal/host/UpdateActivity.java').read_text(encoding="utf-8")
 reset = updater.split('private void downloadRequired() {', 1)[1].split('private boolean running()', 1)[0]
 assert 'ready = null;' in reset
 assert 'action.setText(t("下载更新", "Download update"));' in reset

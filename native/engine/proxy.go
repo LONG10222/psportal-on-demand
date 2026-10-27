@@ -306,6 +306,7 @@ type Proxy struct {
 	clients     map[string]*clientRecord
 	stats       map[string]uint64
 	lastError   string
+	traffic     TrafficMeter
 	resolver    ipResolver
 	dial        func(context.Context, string, string) (net.Conn, error)
 }
@@ -413,6 +414,7 @@ func (p *Proxy) Status() map[string]any {
 	}
 	out["client_ips"], out["connected_clients"], out["active_connections"] = activeIPs, activeDevices, p.stats["active"]
 	out["error"] = p.lastError
+	out["traffic"] = p.traffic.Snapshot()
 	return out
 }
 func (p *Proxy) increment(key string) { p.mu.Lock(); p.stats[key]++; p.mu.Unlock() }
@@ -748,6 +750,8 @@ func (p *Proxy) handle(ctx context.Context, raw net.Conn) {
 	p.writeError(client, status)
 }
 func (p *Proxy) serve(ctx context.Context, client *timedConn, responded *atomic.Bool) error {
+	metered := &trafficConn{Conn: client.Conn, meter: &p.traffic}
+	client.Conn = metered
 	reader := bufio.NewReaderSize(client, MaxLineBytes+2)
 	client.readLimit = time.Now().Add(p.timeout)
 	header, err := readHeader(reader)
@@ -810,6 +814,7 @@ func (p *Proxy) serve(ctx context.Context, client *timedConn, responded *atomic.
 		return errors.New("upstream did not return a connection")
 	}
 	defer rawUpstream.Close()
+	metered.setScope(route.Kind)
 	p.mu.Lock()
 	if p.closing {
 		p.mu.Unlock()

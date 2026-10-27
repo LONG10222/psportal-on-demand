@@ -388,6 +388,18 @@ class DesktopApp:
         self.inputs = []
         self.engine_inputs = {}
         self.profile_selection_inputs = []
+        self.games_hub = None
+        self.workspace_hub = None
+        self._workspace_network = None
+        self._workspace_target = None
+        self._workspace_network_allow_subnet = False
+        from .subscription_monitor import AccountingMonitor
+        self.subscription_monitor = AccountingMonitor()
+        self.source_monitors={'subscription':self.subscription_monitor,'clash':AccountingMonitor()}
+        self.clash_subscription = None
+        self._usage_source_path = None
+        self._usage_cached = None
+        self._shared_local_port = None
         from .existing_proxy import detect_system_proxy, read_clash_accounting
         self.existing_proxy = detect_system_proxy()
         self.clash_info = read_clash_accounting() if self.existing_proxy else None
@@ -522,16 +534,39 @@ class DesktopApp:
         except (OSError, ValueError):
             self.backend.log(self._t('Preferences could not be saved. Language changed for this session.'))
 
-    def set_theme(self, theme):
+    def set_theme(self, theme, color=None):
         from .i18n import save_theme
-        self.view.set_theme(theme)
+        self.view.set_theme(theme, color)
         try:
-            save_theme(self.path, theme)
+            save_theme(self.path, theme, color)
         except (OSError, ValueError):
             self.backend.log('Appearance preference could not be saved.')
 
+    def open_game_accelerator(self):
+        if getattr(getattr(self,'workspace_hub',None),'independent_services',False):self.view.show('Games');return
+        if self.product_mode()!='accelerator':self.set_product_mode('accelerator')
+        if self.product_mode()=='accelerator':self.view.show('Games')
+
+    def open_workspace(self,key):
+        if getattr(self.workspace_hub,'independent_services',False):
+            self.view.show('Workspaces');self.workspace_hub.select(key);return
+        hub=self.games_hub
+        if self.backend.process is not None or (hub and hub.running):
+            if self.workspace_hub:self.workspace_hub.state.set('请先停止当前通道，再切换用途。')
+            return
+        self.view.show('Workspaces')
+        self.workspace_hub.select(key)
+
+    def show_connection_result(self):
+        self.view.show('Workspaces' if getattr(self,'workspace_hub',None) and getattr(self.view,'page',None)=='Workspaces' else 'Overview' if self.product_mode()=='clash' else 'LAN sharing')
+
     def set_product_mode(self, mode):
         previous = getattr(self, '_selected_product_mode', self.raw.get('product_mode', 'game'))
+        hub=getattr(self,'games_hub',None)
+        if mode!=previous and hub and hub.running:
+            self.vars['product_mode'].set(previous)
+            self.view.subtitle.set('请先停止鲜牛加速，再切换模式')
+            return
         if (mode not in product_modes.MODES or self.closing or self.importing
                 or getattr(self, 'setting_up', False) or getattr(self, 'xianniu_checking', False)
                 or self.backend.process is not None):
@@ -545,12 +580,14 @@ class DesktopApp:
             self._enter_accelerator(previous)
         elif previous == 'accelerator' and mode != 'accelerator':
             self._leave_accelerator()
-        if mode != 'accelerator' and self.raw.get('existing_proxy_port') and mode != 'game':
+        if mode != 'accelerator' and self.raw.get('existing_proxy_port') and mode not in ('game','mixed'):
             mode = 'game'
         self.vars['product_mode'].set(mode)
         self._selected_product_mode = mode
         self.dirty = True
         self.engine_controls()
+        if mode!='accelerator' and getattr(self.view,'page',None)=='Games':
+            self.view.show('Overview')
         self.view.refresh()
 
     def _accelerator_preferences(self):
@@ -649,7 +686,7 @@ class DesktopApp:
                 if key == 'product_mode' and value not in product_modes.MODES:
                     continue
                 self.vars[key].set(value)
-            for key in ('source_provenance', 'node_policies', 'host_profile_overlay'):
+            for key in ('source_provenance', 'node_policies', 'host_profile_overlay', 'workspace_target', 'shared_core', 'local_proxy_port'):
                 if key in previous:
                     self.raw[key] = copy.deepcopy(previous[key])
             self.raw['product_mode'] = self.product_mode()
@@ -751,7 +788,8 @@ class DesktopApp:
         self.path_var.set(str(self.path))
         from .i18n import load_language
         self.view.set_language(load_language(self.path))
-        from .i18n import load_theme
+        from .i18n import load_theme, load_theme_color
+        self.view.theme_color=load_theme_color(self.path)
         self.view.set_theme(load_theme(self.path))
         self.engine_controls()
         self.view.refresh()
@@ -850,7 +888,9 @@ class DesktopApp:
         action = getattr(self, '_start_after_setup', False)
         self._start_after_setup = False
         if action and not self.closing:
-            self.start() if action == 'manual' else self.quick_start()
+            if action=='workspace':
+                if self.view.page=='Workspaces' and self.workspace_hub:self.workspace_hub.toggle()
+            else:self.start() if action == 'manual' else self.quick_start()
 
 
     def open_clash(self):
@@ -888,27 +928,75 @@ class DesktopApp:
     def _poll_discovery(self):
         """Refresh cached Clash accounting off the Tk thread; never call its controller."""
         try:
-            proxy, info = self.discovery_events.get_nowait()
+            record = self.discovery_events.get_nowait()
+            proxy, info = record[:2]
+            if len(record)>2:
+                source=record[2]
+                if source and source.get('unavailable') and self.clash_subscription:
+                    self.clash_subscription=dict(self.clash_subscription,url='',stale=True)
+                elif source:self.clash_subscription=source
         except queue.Empty:
             pass
         else:
             self._discovery_pending = False
             self.existing_proxy, self.clash_info = proxy, info
-            if self.raw.get('existing_proxy_port') and self.raw.get('existing_proxy_provider') != 'xianniu':
+            if not getattr(self.workspace_hub,'independent_services',False) and self.raw.get('existing_proxy_port') and self.raw.get('existing_proxy_provider') != 'xianniu':
                 self.view.subscription_info = info
             self.view.refresh()
         if not self.closing and not self._discovery_pending and time.monotonic() >= self._next_discovery:
             self._discovery_pending = True
             self._next_discovery = time.monotonic() + 10
             def worker():
-                from .existing_proxy import detect_system_proxy, read_clash_accounting
+                from .existing_proxy import detect_system_proxy, read_clash_accounting, clash_subscription_source
                 try:
                     proxy = detect_system_proxy()
-                    info = read_clash_accounting() if proxy else None
+                    info = read_clash_accounting()
                 except Exception:
                     proxy, info = None, None
-                self.discovery_events.put((proxy, info))
+                try:source = clash_subscription_source()
+                except Exception:source=None
+                self.discovery_events.put((proxy, info, source))
             threading.Thread(target=worker, daemon=True).start()
+
+    def refresh_subscription_usage(self):
+        self._poll_subscription_usage(force=True)
+
+    def _poll_subscription_usage(self, force=False):
+        from .subscription_monitor import descriptor
+        monitor=getattr(self,'subscription_monitor',None)
+        if monitor is None:return
+        home=getattr(self,'workspace_hub',None)
+        if getattr(home,'independent_services',False):
+            from .service_model import owned_values,source_descriptor
+            try:owned=source_descriptor(home.owned_config if home.owned_running() and home.owned_config else owned_values(self),str(self.path))
+            except (ValueError,OSError):owned=descriptor(identity=str(self.path)+':empty')
+            linked=self.clash_subscription or descriptor(cached=self.clash_info,identity='clash-unavailable',linked=True)
+            from .service_workspace import ROUTES
+            chosen=(ROUTES.get(home.game_source.get()) if home.selected=='game' else home.selected) if self.view.page in ('Workspaces','Games') else 'clash' if self.raw.get('existing_proxy_port') else 'subscription'
+            for key,source in (('subscription',owned),('clash',linked)):
+                self.source_monitors[key].tick(source,visible=not self.closing,force=force and chosen==key)
+            self.subscription_monitor=self.source_monitors.get(chosen,self.source_monitors['subscription'])
+            self.view.subscription_info=self.subscription_monitor.info
+            return
+        chosen_link=home and self.view.page=='Workspaces' and (home.selected=='clash' or home.selected=='game' and home.game_source.get()=='跟随 Clash')
+        linked=chosen_link or self.raw.get('existing_proxy_port') and self.raw.get('existing_proxy_provider')!='xianniu'
+        if linked:
+            source=self.clash_subscription or descriptor(cached=self.clash_info,identity='clash-unavailable',linked=True)
+        else:
+            path=next((self.vars[k].get().strip() for k in ('profile_file','subscription_file') if self.vars.get(k) and self.vars[k].get().strip()),'')
+            ready=self.subscription_ready()
+            if path!=self._usage_source_path:
+                self._usage_source_path=path;self._usage_cached=None
+                try:
+                    sidecar=Path(path).with_suffix(Path(path).suffix+'.info.json')
+                    if path and sidecar.is_file() and sidecar.stat().st_size<=8192:self._usage_cached=read_config(sidecar)
+                except (OSError,ValueError):pass
+            origin=self.raw.get('source_provenance',{})
+            url=origin.get('url','') if ready and isinstance(origin,dict) and origin.get('kind')=='subscription' else ''
+            source=descriptor(url,self._usage_cached if ready else None,identity=str(self.path)+':'+path)
+        visible=self.view.page!='Games' and self.product_mode()!='accelerator'
+        monitor.tick(source,visible=visible,force=force)
+        if visible:self.view.subscription_info=monitor.info
 
 
     def choose_config(self):
@@ -963,6 +1051,7 @@ class DesktopApp:
                 self.vars['profile_file'].set('')
                 self.vars['subscription_file'].set(str(path.absolute()))
             self.view.preview = info
+            self.raw['shared_core'] = True
             if str(path.absolute()) != (self.raw.get('profile_file') or self.raw.get('subscription_file')):
                 self.raw.pop('node_policies', None)
             self.raw.pop('existing_proxy_port', None)
@@ -1021,7 +1110,7 @@ class DesktopApp:
             self.view.refresh()
             return
         if self.vars['engine_mode'].get() == 'external' and not Path(self.vars['core_path'].get()).is_file():
-            self.setup_core(start_after='quick')
+            self.setup_core(start_after='workspace' if getattr(self,'_workspace_target',None) else 'quick')
             return
         plan = self._configure_lan(commit=False)
         if not plan:
@@ -1052,7 +1141,7 @@ class DesktopApp:
             if self.start() is False:
                 self._rollback_quick_start()
                 return
-            self.view.show('Overview' if self.product_mode() == 'clash' else 'LAN sharing')
+            self.show_connection_result()
             return
 
     def _configure_lan(self, reserved=(), *, commit=True):
@@ -1065,11 +1154,16 @@ class DesktopApp:
             else:
                 # Quick setup follows the currently active physical network.
                 # Advanced Start still uses the manually configured bind host.
-                network = discover_lan()
+                network = getattr(self,'_workspace_network',None) or discover_lan()
                 if mode:
                     clients = [part.strip() for part in self.vars['allowed_clients'].get().split(',') if part.strip()]
                     automatic = (not clients or getattr(self, '_lan_automatic', product_modes.infer_automatic(self.raw)))
+                    if getattr(self,'_workspace_network',None) and getattr(self,'_workspace_network_allow_subnet',False):automatic=True
                     if clients and not automatic:
+                        if getattr(self,'_workspace_network',None):
+                            import ipaddress
+                            if any(ipaddress.ip_address(c) not in ipaddress.ip_network(network['subnet']) for c in clients):
+                                raise ValueError('原设备名单不属于这个网络；请更新设备名单，或明确勾选允许所选网络中的设备。')
                         network = dict(network, clients=clients)
             if mode:
                 product_modes.listener_policy(mode, network['host'], network['clients'])
@@ -1087,6 +1181,9 @@ class DesktopApp:
                 selected = available_port(host, preferred, excluded)
                 chosen.add(selected)
                 values[key] = str(selected)
+            if self.raw.get('shared_core') and mode in ('game','mixed') and not self.raw.get('existing_proxy_port'):
+                candidate=available_port('127.0.0.1',self.raw.get('local_proxy_port',10080),chosen)
+                self._shared_local_port=(self.path,candidate)
             if mode != 'clash':
                 values.update(listen_host=network['host'], allowed_clients=', '.join(network['clients']))
             plan = (values, network['subnet'])
@@ -1115,7 +1212,7 @@ class DesktopApp:
         self.view.setup_network = subnet
         self.view.refresh()
 
-    def use_existing_proxy(self):
+    def use_existing_proxy(self, mode=None):
         if self.importing or getattr(self, 'setting_up', False) or self.backend.process is not None: return
         if getattr(self, 'xianniu_checking', False): return
         from .existing_proxy import detect_system_proxy
@@ -1124,7 +1221,8 @@ class DesktopApp:
             from tkinter import messagebox
             messagebox.showinfo(self._t('Existing proxy'), self._t('No active loopback HTTP system proxy was detected.'), parent=self.root)
             return
-        self._link_existing_proxy(self.existing_proxy)
+        if mode is None:self._link_existing_proxy(self.existing_proxy)
+        else:self._link_existing_proxy(self.existing_proxy,mode=mode)
 
     def use_steam_host(self):
         if hasattr(self.view, 'accelerator_source_var'):
@@ -1248,7 +1346,7 @@ class DesktopApp:
         finally:
             self._xianniu_starting = False
 
-    def _link_existing_proxy(self, endpoint, provider='system'):
+    def _link_existing_proxy(self, endpoint, provider='system', mode=None):
         from .existing_proxy import read_clash_accounting
         port = endpoint['port']
         try:
@@ -1260,7 +1358,7 @@ class DesktopApp:
         self._quick_rollback = snapshot
         previous_mode = self.vars['product_mode'].get() if 'product_mode' in self.vars else None
         if previous_mode is not None:
-            target_mode = 'accelerator' if provider == 'xianniu' else 'game'
+            target_mode = 'accelerator' if provider == 'xianniu' else 'mixed' if mode=='mixed' else 'game'
             if self.product_mode() != target_mode and hasattr(self, '_selected_product_mode'):
                 self.set_product_mode(target_mode)
             else:
@@ -1276,7 +1374,7 @@ class DesktopApp:
                         if key in ('profile_file', 'subscription_file', 'subscription_url', 'engine_mode')}
             previous['product_mode'] = previous_mode or 'game'
             previous.update({key: copy.deepcopy(self.raw[key]) for key in
-                             ('source_provenance', 'node_policies', 'host_profile_overlay') if key in self.raw})
+                             ('source_provenance', 'node_policies', 'host_profile_overlay', 'workspace_target', 'shared_core', 'local_proxy_port') if key in self.raw})
             self.raw['linked_previous_source'] = previous
         self.vars['engine_mode'].set('external')
         self.vars['profile_file'].set('')
@@ -1297,7 +1395,7 @@ class DesktopApp:
         if self.start() is False:
             self._rollback_quick_start()
             return
-        self.view.show('Overview' if self.product_mode() == 'clash' else 'LAN sharing')
+        self.show_connection_result()
 
     def inspect_provider(self):
         from tkinter import messagebox
@@ -1556,6 +1654,13 @@ class DesktopApp:
 
     def collect(self) -> dict:
         values = dict(self.raw)
+        if self.raw.get('shared_core'):
+            values['shared_core']=(self.product_mode() in ('game','mixed') and self.vars['engine_mode'].get()=='external'
+                and not (self.raw.get('existing_proxy_port') or self.raw.get('host_relay') or self.raw.get('accelerator_proxy')))
+            selected=getattr(self,'_shared_local_port',None)
+            if values['shared_core'] and selected and selected[0]==self.path:values['local_proxy_port']=selected[1]
+        if getattr(self,'_workspace_target',None) in ('lan','hotspot','local'):
+            values['workspace_target']=self._workspace_target
         for key, variable in self.vars.items():
             value = variable.get().strip()
             if key in INTEGER_FIELDS:
@@ -1595,9 +1700,9 @@ class DesktopApp:
             values['live_node_controls'] = True
         if 'product_mode' in self.vars:
             allowed_modes = ('game', 'accelerator') if (values.get('host_relay') == 'steam'
-                or values.get('existing_proxy_provider') == 'xianniu') else ('game',)
+                or values.get('existing_proxy_provider') == 'xianniu') else ('game','mixed')
             if (values.get('existing_proxy_port') or values.get('host_relay') == 'steam') and values.get('product_mode') not in allowed_modes:
-                raise ValueError('Linked proxy supports game mode only. Other modes remain in the existing Clash client.')
+                raise ValueError('Linked proxy supports Game and Mixed modes. Nodes remain managed in the existing client.')
             values['product_lan_automatic'] = getattr(self, '_lan_automatic', product_modes.infer_automatic(self.raw))
             values = product_modes.effective_config(values)
         return values
@@ -1751,6 +1856,7 @@ class DesktopApp:
         self._poll_setup()
         self._poll_xianniu()
         self._poll_discovery()
+        self._poll_subscription_usage()
         self._poll_import()
         self._poll_updates()
         self._poll_runtime()
@@ -1785,7 +1891,11 @@ class DesktopApp:
                 self._poll_runtime()
                 self.backend.log('Listener exited.' if result == 0 else f'Listener exited with code {result}.')
                 self.running_controls(False)
-        if self.closing and self.backend.process is None and not self.importing:
+        hub=getattr(self,'games_hub',None)
+        games_done = not self.closing or hub is None or hub.shutdown_complete()
+        workspace=getattr(self,'workspace_hub',None)
+        sharing_done=not getattr(workspace,'independent_services',False) or workspace.shutdown_complete()
+        if self.closing and self.backend.process is None and not self.importing and games_done and sharing_done:
             self.root.destroy()
             return
         self.root.after(150, self.poll)
@@ -1795,6 +1905,10 @@ class DesktopApp:
         if self.closing:
             return
         running = self.backend.process is not None and self.backend.process.poll() is None
+        hub=getattr(self,'games_hub',None)
+        games_running=bool(hub and hub.running)
+        workspace=getattr(self,'workspace_hub',None)
+        sharing_running=bool(getattr(workspace,'independent_services',False) and workspace.game.active)
         if not running and getattr(self, '_quick_rollback', None):
             # Close can arrive after the child exits but before the next poll.
             # Settle ownership now so destroying Tk cannot lose the rollback.
@@ -1804,23 +1918,26 @@ class DesktopApp:
                 self._rollback_quick_start()
             if self.backend.process is not None:
                 self.backend.poll()
-        question = ('Stop the listener and its core, then close?' if running else
+        question = ('Stop sharing and game acceleration, then close?' if games_running else 'Stop the listener and its core, then close?' if running else
                     'Cancel preparation and close?' if self.importing else
                     'Close and discard unsaved configuration edits?')
-        if (running or self.dirty or self.importing) and not messagebox.askyesno(self._t('Close StarPass?'), self._t(question), parent=self.root):
+        if (running or games_running or sharing_running or self.dirty or self.importing) and not messagebox.askyesno(self._t('Close StarPass?'), self._t('Stop sharing and game acceleration, then close?' if sharing_running else question), parent=self.root):
             return
         self.closing = True
+        if getattr(workspace,'independent_services',False):workspace.close()
+        if hub:hub.close()
         if self.importing:
             self.cancel_preparation()
         if running:
             self.stop()
-        elif not self.importing:
+        elif not self.importing and hub is None and not sharing_running:
             self.root.destroy()
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description='StarPass desktop application')
     parser.add_argument('--config', type=Path, default=default_config_path())
+    parser.add_argument('--page',choices=('home','overview','games'),default='home')
     args = parser.parse_args(argv)
     try:
         import tkinter as tk
@@ -1834,7 +1951,10 @@ def main(argv=None) -> int:
             raise
         print('Desktop UI could not open a display. Use the CLI on headless systems.', file=sys.stderr)
         return 2
-    DesktopApp(root, args.config)
+    application=DesktopApp(root, args.config)
+    if args.page=='games':application.open_game_accelerator()
+    elif args.page=='home' and sys.platform=='win32':application.view.show('Workspaces')
+    elif args.page=='home' and application.product_mode()=='accelerator':application.view.show('Games')
     root.mainloop()
     return 0
 

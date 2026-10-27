@@ -343,7 +343,7 @@ class ProductModeDesktopTests(unittest.TestCase):
                 if failure == 'spawn':
                     app.backend.start.side_effect = OSError('controlled failure')
                 with patch('portalproxy.setup.discover_lan', return_value=dict(host='192.168.60.2', clients=['192.168.60.3'], subnet='192.168.60.0/24')), \
-                     patch('portalproxy.setup.available_port', side_effect=[10101, 10102, 10103]), \
+                     patch('portalproxy.setup.available_port', side_effect=[10101, 10102, 10103, 10104]), \
                      patch('tkinter.messagebox.showerror'):
                     app.quick_start()
                 if failure == 'before-ready':
@@ -497,6 +497,8 @@ class ProductModeWindowTests(unittest.TestCase):
                 self.assertTrue(app.view.quick_button.winfo_viewable())
                 for _ in range(3):
                     for index, mode in enumerate(product_modes.MODES):
+                        # Accelerator now opens the separately tested game workspace.
+                        if mode == 'accelerator':continue
                         app.view.product_mode_buttons[mode].invoke()
                         root.update()
                         self.assertEqual(app.product_mode(), mode)

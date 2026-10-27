@@ -28,6 +28,11 @@ class SubscriptionWorkflowTests(unittest.TestCase):
         self.app.set_language('zh')
         self.addCleanup(self.close_window)
         self.url = 'https://fixture.example/subscription?token=never-log-this'
+        # These checks count full configuration downloads. Accounting HEAD
+        # refresh has its own fixtures and must not enter the import mock.
+        self.app.subscription_monitor.loader = lambda url: {
+            'upload': 1, 'download': 2, 'total': 100, 'expire': 2000000000,
+            'updated_at': int(time.time())}
         self.download = Mock(side_effect=self.seed)
         self.patch_fetch = patch('portalproxy.core.download_subscription', self.download)
         self.patch_fetch.start(); self.addCleanup(self.patch_fetch.stop)
@@ -317,7 +322,10 @@ class SubscriptionWorkflowTests(unittest.TestCase):
         self.app.raw['existing_proxy_port'] = 17897
         self.app.vars['product_mode'].set('game')
         self.app.view.refresh(); self.root.update()
-        for mode in ('mixed', 'clash'):
+        self.app.set_product_mode('mixed')
+        self.assertEqual(self.app.product_mode(),'mixed')
+        self.app.set_product_mode('game')
+        for mode in ('clash',):
             button = self.app.view.product_mode_buttons[mode]
             self.assertTrue(button.instate(['disabled']))
             button.invoke()
@@ -325,7 +333,7 @@ class SubscriptionWorkflowTests(unittest.TestCase):
             self.app.set_product_mode(mode)
             self.assertEqual(self.app.product_mode(), 'game')
         self.app.vars['product_mode'].set('clash')
-        with self.assertRaisesRegex(ValueError, 'game mode only'):
+        with self.assertRaisesRegex(ValueError, 'Game and Mixed'):
             self.app.collect()
         self.app.vars['product_mode'].set('game')
         self.app.unlink_proxy()

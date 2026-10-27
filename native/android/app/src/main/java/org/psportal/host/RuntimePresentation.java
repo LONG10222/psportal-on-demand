@@ -34,7 +34,7 @@ public final class RuntimePresentation {
     static String profileError(String code, boolean english) {
         if (code == null) return "";
         switch (code) {
-            case "profile_unsupported": return english ? "This subscription uses required features the app does not support. Nothing is silently replaced with direct routing." : "订阅包含本应用不支持的必要功能，未静默改为直连。";
+            case "profile_unsupported": return english ? "This subscription requires unsupported features. For inline nodes with GEOIP rules, stop and explicitly choose Global routing; Rule mode needs a supported inline rule profile." : "订阅含暂不支持的功能。若是带 GEOIP 规则的内联节点订阅，可停止后明确选择“全局”；规则模式需使用受支持的内联规则。";
             case "profile_selection_required": return english ? "This subscription owns its policy groups. Stop, choose Auto node selection, then retry." : "订阅自带策略组。请停止，将节点策略改为“自动”后重试。";
             case "profile_invalid": return english ? "The subscription profile is invalid or incomplete. Check its supported inline nodes, groups and rules." : "订阅配置无效或不完整，请检查内联节点、策略组与规则。";
             case "download_failed": return english ? "Subscription download failed. Check the HTTPS link and connection; the link is never shown in errors." : "订阅下载失败，请检查 HTTPS 链接和网络。错误信息不会显示订阅链接。";

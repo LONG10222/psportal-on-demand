@@ -29,25 +29,26 @@ var owner *Engine
 
 // Engine exclusively owns upstream Mihomo's global executor for one session.
 type Engine struct {
-	lifeMu           sync.Mutex
-	mu               sync.Mutex
-	cfg              Config
-	ctx              context.Context
-	cancel           context.CancelFunc
-	current          *MC.Config
-	profile          profile
-	source           []byte
-	proxy            *engine.Proxy
-	active           int
-	state, lastError string
-	errorCode        string
-	lastUsed         time.Time
-	running, closed  bool
-	loading          chan struct{}
-	loadError        error
-	wg               sync.WaitGroup
-	loader           func(context.Context, string) ([]byte, error)
-	groupSelections  map[string]string // Session-local; retained across idle unload, never persisted.
+	lifeMu                                 sync.Mutex
+	mu                                     sync.Mutex
+	cfg                                    Config
+	ctx                                    context.Context
+	cancel                                 context.CancelFunc
+	current                                *MC.Config
+	profile                                profile
+	source                                 []byte
+	proxy                                  *engine.Proxy
+	active                                 int
+	state, lastError                       string
+	errorCode                              string
+	lastUsed                               time.Time
+	running, closed                        bool
+	loading                                chan struct{}
+	loadError                              error
+	wg                                     sync.WaitGroup
+	loader                                 func(context.Context, string) ([]byte, error)
+	groupSelections                        map[string]string // Session-local; retained across idle unload, never persisted.
+	trafficBaselineUp, trafficBaselineDown int64
 }
 
 func New(cfg Config) (*Engine, error) {
@@ -85,6 +86,7 @@ func (e *Engine) Start() error {
 	}
 	owner = e
 	e.running = true
+	e.trafficBaselineUp, e.trafficBaselineDown = statistic.DefaultManager.Total()
 	e.lastUsed = time.Now()
 	e.wg.Add(1)
 	go e.maintain()
@@ -503,12 +505,20 @@ func (e *Engine) Status() string {
 		status["selected_group"] = generatedGroup
 	}
 	up, down := statistic.DefaultManager.Total()
+	up, down = max(0, up-e.trafficBaselineUp), max(0, down-e.trafficBaselineDown)
 	status["upload_bytes"] = up
 	status["download_bytes"] = down
+	status["traffic"] = map[string]any{"local": map[string]any{"upload_bytes": uint64(0), "download_bytes": uint64(0)},
+		"external": map[string]any{"upload_bytes": up, "download_bytes": down}}
 	status["nodes"] = nodes
 	if e.proxy != nil {
 		status["address"] = net.JoinHostPort(e.cfg.ListenHost, strconv.Itoa(e.cfg.ListenPort))
 		stats := e.proxy.Status()
+		if traffic, ok := stats["traffic"].(map[string]any); ok {
+			// Mihomo totals include phone VPN and external LAN traffic once.
+			// Local LAN traffic bypasses Mihomo and comes from the owned input.
+			status["traffic"].(map[string]any)["local"] = traffic["local"]
+		}
 		status["stats"] = stats
 		for _, key := range []string{"active_connections", "connected_clients", "client_ips"} {
 			status[key] = stats[key]

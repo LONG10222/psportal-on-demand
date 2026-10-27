@@ -1,0 +1,170 @@
+{
+  "platform": "Windows",
+  "session_mode": "managed",
+  "game_id": 797,
+  "profile": {
+    "area_id": 933,
+    "line_id": 122,
+    "isp_type": 3
+  },
+  "initial_timing_paused": true,
+  "network_configuration_changed": true,
+  "n1_service_changed": false,
+  "official_driver_independence": "not_verified",
+  "actual_console_game": "not_verified",
+  "installed_exe": true,
+  "lan_firewall_rules_applied": true,
+  "startup_result": {
+    "running": true,
+    "startup_stage": "ready",
+    "error_message_received": null
+  },
+  "frozen_exe_ready": true,
+  "local_first": {
+    "sony_https": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 302 Moved Temporarily",
+      "elapsed_ms": 391
+    },
+    "second_https": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 200 OK",
+      "elapsed_ms": 500
+    },
+    "literal_ip_https": {
+      "error_type": "ValueError"
+    },
+    "socks_tcp": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 302 Moved Temporarily"
+    },
+    "socks_udp_stun": {
+      "udp_stun_verified": true,
+      "transaction_checked": true,
+      "response_bytes": 32
+    }
+  },
+  "external_lan_first": {
+    "sony_https": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 302 Moved Temporarily",
+      "elapsed_ms": 615
+    },
+    "second_https": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 200 OK",
+      "elapsed_ms": 931
+    },
+    "literal_ip_https": {
+      "error_type": "ValueError"
+    },
+    "socks_tcp": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 302 Moved Temporarily"
+    },
+    "socks_udp_stun": {
+      "udp_stun_verified": true,
+      "transaction_checked": true,
+      "response_bytes": 32
+    }
+  },
+  "local_after_renewal": {
+    "sony_https": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 302 Moved Temporarily",
+      "elapsed_ms": 437
+    },
+    "second_https": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 200 OK",
+      "elapsed_ms": 500
+    },
+    "literal_ip_https": {
+      "error_type": "ValueError"
+    },
+    "socks_tcp": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 302 Moved Temporarily"
+    },
+    "socks_udp_stun": {
+      "udp_stun_verified": true,
+      "transaction_checked": true,
+      "response_bytes": 32
+    }
+  },
+  "external_lan_after_renewal": {
+    "sony_https": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 302 Moved Temporarily",
+      "elapsed_ms": 620
+    },
+    "second_https": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 200 OK",
+      "elapsed_ms": 932
+    },
+    "literal_ip_https": {
+      "error_type": "ValueError"
+    },
+    "socks_tcp": {
+      "tls_verified": true,
+      "status": "HTTP/1.1 302 Moved Temporarily"
+    },
+    "socks_udp_stun": {
+      "udp_stun_verified": true,
+      "transaction_checked": true,
+      "response_bytes": 32
+    }
+  },
+  "exit_code": 0,
+  "final_status": {
+    "running": false,
+    "renewals": 1,
+    "refresh_ok": true,
+    "counters": {
+      "sent": 14496,
+      "received": 69241,
+      "tcp_connections": 12,
+      "tcp_errors": 5,
+      "udp_packets": 4,
+      "udp_errors": 0,
+      "rejected": 0
+    },
+    "official_stop_ok": true,
+    "console_udp_captured": false
+  },
+  "external_source_seen_in_socks": true,
+  "external_source_seen_in_http": true,
+  "n1_remained_stopped": true,
+  "ownership_journal_clear": true,
+  "listeners_closed": true,
+  "original_pause_restored": true,
+  "provider_controlled_tests": {
+    "passed": 17,
+    "failed": 0
+  },
+  "adjacent_router_regression": {
+    "passed": 50,
+    "failed": 0
+  },
+  "starpass_portable_regression": {
+    "run": 594,
+    "passed": 510,
+    "skipped": 84,
+    "failed": 0
+  },
+  "installed_independent_copy": true,
+  "installed_frozen_smoke_passed": true,
+  "gui_visual_acceptance": true,
+  "windows_inbound_rules_added": true,
+  "routes_dns_gateway_dhcp_changed": false,
+  "transport_code_unchanged_by_ui_update": true,
+  "prior_lan_without_rules_timed_out": true,
+  "notes": [
+    "First frozen build failed before official start: omitted public SSL runtime policy file; fixed without disabling TLS.",
+    "Original first-build pre-recovery journal was cleared after confirming timing stayed paused; no unknown official stop called.",
+    "After user-approved elevation, scoped Private inbound rules were confirmed and external LAN TCP/UDP passed before and after renewal.",
+    "Simple two-column UI was visually checked; the transport provider code is unchanged by the UI update.",
+    "No actual game, console UDP capture, NAT, multi-game concurrency or independence from the installed official driver has been verified."
+  ]
+}

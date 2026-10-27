@@ -23,7 +23,8 @@ def server_datetime(config):
 
 def common_fields(config):
     return {'hardware':config['hardware'],'os_type':0,'client_type':0,
-            'client_version':'5.2.8.2','os_info':'PC_N1_iStoreOS','os_version':'Linux',
+            'client_version':'5.2.8.2','os_info':config.get('client_os_info','PC_N1_iStoreOS'),
+            'os_version':config.get('client_os_version','Linux'),
             'channel':'guanwang','datetime':server_datetime(config)}
 
 
